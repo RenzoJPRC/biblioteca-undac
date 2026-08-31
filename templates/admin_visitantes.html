@@ -1,0 +1,292 @@
+{% extends "layout_admin.html" %}
+
+{% block content %}
+<header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shrink-0">
+    <h2 class="text-lg font-bold text-slate-700">Gestión de Visitantes</h2>
+
+    <div class="flex gap-2">
+        {% if session.get('admin_rol') != 'Consultor' %}
+        <button onclick="document.getElementById('modal-upload-vis').classList.remove('hidden')"
+            class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow flex items-center gap-2">
+            <i class="ph ph-file-csv"></i> Importar Excel
+        </button>
+        <button onclick="document.getElementById('modal-nuevo-visitante').classList.remove('hidden')"
+            class="bg-orange-600 hover:bg-orange-500 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md shadow-orange-600/20 flex items-center gap-2 transition-all">
+            <i class="ph ph-plus-circle text-lg"></i>
+            <span>Nuevo Visitante</span>
+        </button>
+        {% endif %}
+    </div>
+</header>
+
+<div class="p-8 max-w-7xl mx-auto flex flex-col gap-6">
+
+    <!-- BARRA BÚSQUEDA Y ACCIONES GLOBALES -->
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 shrink-0 z-20 relative">
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+
+            <div class="w-full md:w-[28rem]">
+                {% with
+                search_title="Buscar Visitante",
+                search_placeholder="Busca por DNI, Nombre o Institución...",
+                base_color="orange"
+                %}
+                {% include "partials/_search_bar.html" %}
+                {% endwith %}
+            </div>
+
+            <!-- ACCIONES GLOBALES -->
+            {% if session.get('admin_rol') != 'Consultor' %}
+            <div class="relative group shrink-0">
+                <button
+                    class="bg-white border text-sm border-slate-200 text-slate-600 hover:bg-slate-50 px-4 py-2.5 rounded-lg font-bold shadow-sm flex items-center gap-2 transition-all h-full">
+                    <i class="ph ph-globe"></i>
+                    <span>Acciones Globales</span>
+                    <i class="ph ph-caret-down text-slate-400"></i>
+                </button>
+                <!-- Dropdown Content -->
+                <div
+                    class="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 transform origin-top-right scale-95 group-hover:scale-100">
+                    <div class="p-2">
+                        <button onclick="vaciarBdVisitantes()"
+                            class="w-full text-left px-4 py-2 text-sm text-rose-600 hover:bg-rose-50 rounded-lg font-bold flex items-center gap-3 transition-colors">
+                            <div class="w-8 h-8 rounded-full bg-rose-100 flex items-center justify-center shrink-0">
+                                <i class="ph ph-trash text-rose-600 text-lg"></i>
+                            </div>
+                            Vaciar BD Visitantes
+                        </button>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+        </div>
+    </div>
+
+    <!-- TABLA DE RESULTADOS -->
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex-1 flex flex-col min-h-0">
+        <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+            <h3 class="font-bold text-slate-700">Directorio de Visitantes</h3>
+            <span
+                class="text-[11px] font-bold text-slate-400 uppercase tracking-widest bg-white px-3 py-1.5 rounded-full border border-slate-200 shadow-sm hidden md:inline-block">MOSTRANDO
+                {{ visitantes|length }} REGISTRADOS</span>
+        </div>
+
+        <div class="flex-1 overflow-x-auto overflow-y-auto">
+            <table class="w-full text-left text-sm text-slate-600">
+                <thead class="bg-slate-50 text-slate-700 uppercase font-bold text-xs">
+                    <tr>
+                        <th class="px-6 py-3 w-1/4">Nombre</th>
+                        <th class="px-6 py-3 w-1/6">DNI</th>
+                        <th class="px-6 py-3 w-1/4">Institución</th>
+                        <th class="px-6 py-3 w-1/4">Correo</th>
+                        {% if session.get('admin_rol') != 'Consultor' %}
+                        <th class="px-6 py-3 text-right w-24">Acciones</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    {% for v in visitantes %}
+                    <tr id="fila-{{v[0]}}" class="hover:bg-slate-50 transition-colors h-16">
+
+                        <td class="px-6 py-3">
+                            <span id="ver-nom-{{v[0]}}" class="font-medium text-slate-900 block truncate">{{ v[1]
+                                }}</span>
+                            <input id="edit-nom-{{v[0]}}" type="text" value="{{ v[1] }}"
+                                class="hidden w-full border border-blue-400 rounded px-2 py-1 text-slate-900 outline-none bg-blue-50 focus:ring-2 focus:ring-blue-200">
+                        </td>
+
+                        <td class="px-6 py-3">
+                            <span id="ver-dni-{{v[0]}}" class="font-mono text-orange-600 block">
+                                {% if v[2].startswith('INV-') %}-{% else %}{{ v[2] }}{% endif %}
+                            </span>
+                            <input id="edit-dni-{{v[0]}}" type="text"
+                                value="{% if not v[2].startswith('INV-') %}{{ v[2] }}{% endif %}"
+                                class="hidden w-full border border-blue-400 rounded px-2 py-1 font-mono text-slate-900 outline-none bg-blue-50 focus:ring-2 focus:ring-blue-200">
+                        </td>
+
+                        <td class="px-6 py-3">
+                            <span id="ver-inst-{{v[0]}}" class="block truncate">
+                                {% if v[3] == 'Sin Institución' %}<em class="text-slate-400">{{v[3]}}</em>{% else
+                                %}{{v[3]}}{% endif %}
+                            </span>
+                            <input id="edit-inst-{{v[0]}}" type="text" value="{{ v[3] }}"
+                                class="hidden w-full border border-blue-400 rounded px-2 py-1 text-slate-900 outline-none bg-blue-50 focus:ring-2 focus:ring-blue-200">
+                        </td>
+
+                        <td class="px-6 py-3">
+                            <span id="ver-correo-{{v[0]}}" class="text-slate-500 block truncate">{{ v[4] }}</span>
+                            <input id="edit-correo-{{v[0]}}" type="email" value="{{ v[4] }}"
+                                class="hidden w-full border border-blue-400 rounded px-2 py-1 text-slate-900 outline-none bg-blue-50 focus:ring-2 focus:ring-blue-200">
+                        </td>
+
+                        {% if session.get('admin_rol') != 'Consultor' %}
+                        <td class="px-6 py-3 text-right flex justify-end gap-1">
+                            <button id="btn-editar-{{v[0]}}" onclick="activarEdicion('{{v[0]}}')"
+                                class="text-slate-400 hover:text-blue-600 bg-white border border-slate-200 hover:border-blue-300 px-3 py-1 rounded shadow-sm transition-all text-xs font-bold inline-flex items-center gap-1">
+                                <i class="ph ph-pencil-simple"></i> Editar
+                            </button>
+
+                            <button id="btn-eliminar-{{v[0]}}" onclick="eliminarVisitante('{{v[0]}}', '{{v[1]}}')"
+                                class="text-slate-400 hover:text-red-600 bg-white border border-slate-200 hover:border-red-300 px-2 py-1 rounded shadow-sm transition-all text-xs font-bold inline-flex items-center"
+                                title="Eliminar Visitante">
+                                <i class="ph ph-trash text-base"></i>
+                            </button>
+
+                            <div id="btns-guardar-{{v[0]}}" class="hidden flex justify-end gap-1">
+                                <button onclick="guardarFila('{{v[0]}}')"
+                                    class="bg-green-500 hover:bg-green-600 text-white p-1.5 rounded shadow text-xs"
+                                    title="Guardar">
+                                    <i class="ph ph-check font-bold"></i>
+                                </button>
+                                <button onclick="cancelarEdicion('{{v[0]}}')"
+                                    class="bg-red-500 hover:bg-red-600 text-white p-1.5 rounded shadow text-xs"
+                                    title="Cancelar">
+                                    <i class="ph ph-x font-bold"></i>
+                                </button>
+                            </div>
+                        </td>
+                        {% endif %}
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="p-8 text-center text-slate-400">Sin registros</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL REGISTRO VISITANTE -->
+<div id="modal-nuevo-visitante"
+    class="fixed inset-0 bg-black/60 hidden backdrop-blur-sm flex items-center justify-center z-50">
+    <div class="bg-white p-8 rounded-xl w-full max-w-2xl shadow-2xl animate-scale-up max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center gap-3 mb-6 border-b border-slate-100 pb-4">
+            <div class="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-600">
+                <i class="ph ph-user-plus text-xl"></i>
+            </div>
+            <div>
+                <h3 class="text-lg font-bold text-slate-800 flex justify-between items-center w-full">
+                    <span>Registrar Nuevo Visitante</span>
+                    <button type="button"
+                        onclick="document.getElementById('modal-nuevo-visitante').classList.add('hidden')"
+                        class="text-slate-400 hover:text-slate-600 transition-colors ml-auto mr-0">
+                        <i class="ph ph-x text-xl"></i>
+                    </button>
+                </h3>
+                <p class="text-sm text-slate-500">Ingresa los datos del externo manualmente.</p>
+            </div>
+        </div>
+
+        <form id="form-visitante">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1 uppercase">DNI *</label>
+                    <div class="flex gap-2">
+                        <input id="vis-dni" type="text" maxlength="8" placeholder="DNI (8 dígitos)"
+                            class="w-full border border-slate-300 p-2.5 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none"
+                            required>
+                        <button type="button" onclick="consultarDniApiExterna()"
+                            class="bg-sky-600 hover:bg-sky-700 text-white px-3 py-2 rounded-lg text-xs font-bold shrink-0 flex items-center gap-1 shadow-sm transition-colors" title="Buscar en RENIEC vía API REST">
+                            <i class="ph ph-magnifying-glass"></i> API DNI
+                        </button>
+                    </div>
+                    <span id="vis-dni-status" class="text-[11px] text-sky-600 font-semibold block mt-1"></span>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1 uppercase">Nombre Completo *</label>
+                    <input id="vis-nombre" type="text" placeholder="Nombres y Apellidos"
+                        class="w-full border border-slate-300 p-2.5 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none"
+                        required>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1 uppercase">Institución</label>
+                    <input id="vis-inst" type="text" placeholder="Origen"
+                        class="w-full border border-slate-300 p-2.5 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1 uppercase">Correo</label>
+                    <input id="vis-correo" type="email" placeholder="@"
+                        class="w-full border border-slate-300 p-2.5 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none">
+                </div>
+            </div>
+            <div class="mt-6 pt-4 border-t border-slate-100 flex justify-end gap-3">
+                <button type="button" onclick="document.getElementById('modal-nuevo-visitante').classList.add('hidden')"
+                    class="px-5 py-2 text-slate-500 hover:bg-slate-100 rounded-lg font-bold transition-colors">Cancelar</button>
+                <button type="submit"
+                    class="bg-orange-600 hover:bg-orange-700 text-white px-6 py-2 rounded-lg font-bold shadow-md transition-colors flex items-center gap-2">
+                    <i class="ph ph-check-circle"></i> Guardar Nuevo
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/visitantes.js') }}?v=3.1"></script>
+<script>
+    function consultarDniApiExterna() {
+        const dniInput = document.getElementById('vis-dni');
+        const nombreInput = document.getElementById('vis-nombre');
+        const statusSpan = document.getElementById('vis-dni-status');
+        const dni = dniInput ? dniInput.value.trim() : '';
+
+        if (!dni || dni.length !== 8) {
+            if (statusSpan) statusSpan.innerText = '⚠️ Ingrese un DNI válido de 8 dígitos.';
+            return;
+        }
+
+        if (statusSpan) statusSpan.innerText = '🔍 Consultando API REST RENIEC...';
+
+        fetch(`/api/consultar_dni/${dni}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    if (nombreInput) nombreInput.value = data.nombre_completo;
+                    if (statusSpan) statusSpan.innerText = `✅ Autocompletado vía ${data.fuente}`;
+                } else {
+                    if (statusSpan) statusSpan.innerText = `⚠️ ${data.msg || 'No se halló en RENIEC, ingrese manualmente.'}`;
+                }
+            })
+            .catch(err => {
+                console.error("Error API DNI:", err);
+                if (statusSpan) statusSpan.innerText = '⚠️ Error conectando con API DNI.';
+            });
+    }
+
+    document.addEventListener("DOMContentLoaded", function () {
+        inicializarFormularioVisitante();
+
+        // Autocompletado automático al escribir 8 dígitos
+        const dniElem = document.getElementById('vis-dni');
+        if (dniElem) {
+            dniElem.addEventListener('input', function() {
+                if (this.value.trim().length === 8) {
+                    consultarDniApiExterna();
+                }
+            });
+        }
+
+        // Polling silencioso
+        setInterval(() => {
+            fetch(window.location.href)
+                .then(res => res.text())
+                .then(html => {
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(html, "text/html");
+
+                    const tbodyActual = document.querySelector('tbody');
+                    const tbodyNuevo = doc.querySelector('tbody');
+                    if (tbodyActual && tbodyNuevo) {
+                        tbodyActual.innerHTML = tbodyNuevo.innerHTML;
+                    }
+                })
+                .catch(err => console.error("Error en polling de visitantes:", err));
+        }, 60000);
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,114 @@
+{% extends 'layout_admin.html' %}
+{% block title %}Auditoría Global | Panel Admin{% endblock %}
+
+{% block content %}
+<header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shrink-0">
+    <div class="flex flex-col">
+        <h2 class="text-lg font-bold text-slate-700">El Gran Ojo</h2>
+        <span class="text-xs text-indigo-500 font-bold uppercase tracking-wide">Trazabilidad Total</span>
+    </div>
+</header>
+
+<main class="flex-1 overflow-y-auto p-6">
+    <div class="max-w-7xl mx-auto space-y-6">
+
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-800 tracking-tight">Registro de Auditoría</h1>
+                <p class="text-sm text-slate-500 mt-1 uppercase font-semibold tracking-wider flex items-center gap-2">
+                    <i class="ph ph-eye text-sky-500"></i> EL GRAN OJO ({{ total }} EVENTOS)
+                </p>
+            </div>
+        </div>
+
+        <!-- Tarjetas de Resumen -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+                <h3 class="text-xs font-bold text-slate-500 uppercase mb-4">Top Operadores Destructivos</h3>
+                <div class="space-y-3">
+                    {% for tu in tops %}
+                    <div class="flex justify-between items-center text-sm">
+                        <span class="font-medium text-slate-700 capitalize"><i
+                                class="ph ph-user text-slate-400 mr-2"></i>{{ tu[0] }}</span>
+                        <span class="bg-slate-100 text-slate-600 px-2 py-1 rounded-md text-xs font-bold">{{
+                            tu[1] }} acciones</span>
+                    </div>
+                    {% endfor %}
+                    {% if not tops %}
+                    <p class="text-slate-400 text-sm italic">No hay actividad registrada aún.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div
+                class="bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl shadow-sm border border-slate-700 p-5 text-white relative overflow-hidden">
+                <div class="absolute -right-6 -bottom-6 opacity-10"><i class="ph ph-shield-check text-9xl"></i>
+                </div>
+                <h3 class="text-xs font-bold text-sky-400 uppercase mb-2">Estado del Escudo</h3>
+                <p class="text-sm text-slate-300 mb-4">Todos los envíos POST y cargas masivas desde cuentas de
+                    Sub-Administrador están asegurados criptográficamente y auditados.</p>
+                <div
+                    class="inline-flex items-center gap-2 bg-slate-800/50 rounded-lg px-3 py-2 border border-slate-700">
+                    <span class="flex h-2 w-2 relative">
+                        <span
+                            class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                    <span class="text-xs font-mono font-medium text-emerald-400">Protección Activa</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabla de Logs -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col">
+            <div class="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-xl">
+                <h3 class="font-bold text-slate-700 text-sm">Últimas 200 Modificaciones y Subidas de DB</h3>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr
+                            class="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider border-b border-slate-200">
+                            <th class="p-4 font-semibold">Fecha y Hora</th>
+                            <th class="p-4 font-semibold">Usuario</th>
+                            <th class="p-4 font-semibold">Acción Protocolar</th>
+                            <th class="p-4 font-semibold">IP Origen</th>
+                            <th class="p-4 font-semibold">Carga Utíl (Detalles)</th>
+                        </tr>
+                    </thead>
+                    <tbody class="text-sm text-slate-600 divide-y divide-slate-100 table-fixed">
+                        {% for log in logs %}
+                        <tr class="hover:bg-slate-50/80 transition-colors">
+                            <td class="p-4 whitespace-nowrap text-slate-500"><i class="ph ph-calendar-blank mr-2"></i>{{
+                                log[5] }}</td>
+                            <td class="p-4 font-medium text-slate-700 capitalize">{{ log[1] }}</td>
+                            <td class="p-4">
+                                <span class="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-widest
+                                            {% if 'Bloqueo' in log[2] %}bg-rose-600 text-white shadow-lg shadow-rose-500/30 border border-rose-500
+                                            {% elif 'Eliminar' in log[2] or 'Borrar' in log[2] or 'Vaciar' in log[2] %}bg-rose-100 text-rose-700
+                                            {% elif 'Importar' in log[2] or 'Crear' in log[2] %}bg-emerald-100 text-emerald-700
+                                            {% elif 'Alterar' in log[2] or 'Editar' in log[2] %}bg-amber-100 text-amber-700
+                                            {% else %}bg-indigo-100 text-indigo-700{% endif %}">
+                                    {{ log[2] }}
+                                </span>
+                            </td>
+                            <td class="p-4 font-mono text-xs text-slate-400">{{ log[4] }}</td>
+                            <td class="p-4 max-w-sm truncate" title="{{ log[3] }}">{{ log[3] }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="5" class="p-8 text-center text-slate-400">
+                                <i class="ph ph-magnifying-glass text-4xl mb-3 block opacity-50"></i>
+                                El sistema no ha registrado acciones destructivas aún.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+</main>
+{% endblock %}

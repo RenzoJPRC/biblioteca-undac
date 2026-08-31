@@ -1,0 +1,142 @@
+{% extends "layout_admin.html" %}
+
+{% block title %}Respaldo General | Panel Admin{% endblock %}
+
+{% block content %}
+
+{% set tablas = tablas_backup if tablas_backup is defined and tablas_backup else [
+'Alumnos',
+'Egresados',
+'Docentes',
+'PersonalAdm',
+'Visitantes',
+'RegistroIngresos',
+'Salas',
+'ConfigTurnos',
+'EventosEspeciales',
+'AsistenciaEventos',
+'InvitadosEvento',
+'UsuariosSistema',
+'AdminAuditLog',
+'UploadTasks',
+'Facultades',
+'Escuelas',
+'Semestres',
+'Sedes',
+'PuntosRegistro',
+'RegistroIngresosHistorico'
+] %}
+
+<header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shrink-0">
+    <div>
+        <h2 class="text-lg font-bold text-slate-700">Backup Integral del Sistema</h2>
+        <span class="text-xs text-orange-500 font-bold uppercase tracking-wide">
+            Mantenimiento y Respaldo
+        </span>
+    </div>
+</header>
+
+<main class="flex-1 overflow-y-auto p-8 bg-slate-50 flex flex-col items-center justify-center">
+
+    <div class="max-w-xl w-full">
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div
+            class="mb-6 px-4 py-3 rounded-lg text-sm border {% if category == 'error' %}bg-rose-50 border-rose-200 text-rose-600{% else %}bg-emerald-50 border-emerald-200 text-emerald-600{% endif %} shadow-sm">
+            {{ message }}
+        </div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        <div
+            class="bg-white rounded-2xl shadow-2xl shadow-slate-200/50 border border-slate-100 p-10 text-center relative overflow-hidden">
+
+            <!-- Elemento decorativo de fondo -->
+            <div class="absolute -right-12 -top-12 opacity-5 text-orange-500 pointer-events-none">
+                <i class="ph-fill ph-hard-drives text-[200px]"></i>
+            </div>
+
+            <div
+                class="w-24 h-24 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner ring-4 ring-orange-50">
+                <i class="ph-fill ph-archive text-5xl text-orange-500"></i>
+            </div>
+
+            <h3 class="text-2xl font-extrabold text-slate-800 mb-2">
+                Exportación Global
+            </h3>
+
+            <p class="text-slate-500 text-sm mb-8 leading-relaxed">
+                Este módulo generará un archivo
+                <strong class="text-slate-700 font-mono">.ZIP</strong>
+                comprimido con el respaldo de la base de datos, dividiéndolo estructuralmente en
+                <strong class="text-slate-700">{{ tablas|length }} posibles archivos Excel</strong>.
+                Si alguna tabla no existe en la base de datos, será omitida automáticamente sin detener el backup.
+            </p>
+
+            <form action="{{ url_for('admin_backup.generar') }}" method="POST" onsubmit="mostrarCargando()">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+                <button type="submit" id="btn-descargar"
+                    class="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-bold py-4 rounded-xl flex justify-center items-center gap-3 transition-all shadow-lg hover:shadow-orange-500/30 transform hover:-translate-y-1">
+                    <i class="ph-bold ph-download-simple text-2xl"></i>
+                    <span class="text-lg">Descargar Copia de Seguridad Completa</span>
+                </button>
+            </form>
+
+            <div id="loading-spinner"
+                class="hidden mt-6 text-orange-500 font-bold animate-pulse text-sm uppercase tracking-widest flex items-center justify-center gap-2">
+                <i class="ph ph-spinner-gap animate-spin text-xl"></i>
+                Empaquetando SQL a Excel...
+            </div>
+
+            <div class="mt-8 pt-6 border-t border-slate-100 text-left">
+                <p class="text-[10px] uppercase font-bold text-slate-400 mb-3 tracking-wider">
+                    <i class="ph-fill ph-database mr-1"></i>
+                    Tablas incluidas en el compilado ZIP:
+                </p>
+
+                <div class="flex flex-wrap gap-2">
+                    {% for tabla in tablas %}
+                    <span
+                        class="bg-slate-100 text-slate-600 px-3 py-1 rounded text-xs font-semibold border border-slate-200">
+                        {{ tabla }}
+                    </span>
+                    {% endfor %}
+                </div>
+
+                <p class="text-[11px] text-slate-400 mt-4 leading-relaxed">
+                    Nota: el sistema intentará exportar todas las tablas mostradas. Si alguna tabla no existe en la base
+                    de datos actual, será registrada como omitida dentro del archivo
+                    <strong>RESUMEN_BACKUP.txt</strong>.
+                </p>
+            </div>
+
+        </div>
+
+    </div>
+
+</main>
+
+<script>
+    function mostrarCargando() {
+        const btn = document.getElementById('btn-descargar');
+        const spinner = document.getElementById('loading-spinner');
+
+        btn.classList.add('opacity-50', 'pointer-events-none');
+        btn.innerHTML = '<i class="ph ph-circle-notch animate-spin text-2xl"></i> <span class="text-lg">Procesando...</span>';
+
+        spinner.classList.remove('hidden');
+
+        // Reactiva el botón después de unos segundos porque send_file descarga sin recargar la página.
+        setTimeout(() => {
+            btn.classList.remove('opacity-50', 'pointer-events-none');
+            btn.innerHTML = '<i class="ph-bold ph-download-simple text-2xl"></i> <span class="text-lg">Descargar Copia de Seguridad Completa</span>';
+            spinner.classList.add('hidden');
+        }, 15000);
+    }
+</script>
+
+{% endblock %}

@@ -1,0 +1,260 @@
+{% extends "layout_admin.html" %}
+
+{% block content %}
+<header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shrink-0">
+    <div>
+        <h2 class="text-lg font-bold text-slate-700">Gestores del Sistema</h2>
+        <span class="text-xs text-sky-500 font-bold uppercase tracking-wide">Cuentas de Acceso (RBAC)</span>
+    </div>
+    <button onclick="document.getElementById('modal-crear').classList.remove('hidden')"
+        class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-xs font-bold uppercase transition-colors shadow-lg shadow-blue-500/20 flex items-center gap-2">
+        <i class="ph ph-plus text-lg"></i>
+        Nuevo Gestor
+    </button>
+</header>
+
+<div class="flex-1 overflow-y-auto p-8 bg-slate-50">
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    {% for category, message in messages %}
+    <div
+        class="mb-6 px-4 py-3 rounded-lg text-sm border {% if category == 'error' %}bg-rose-50 border-rose-200 text-rose-600{% else %}bg-emerald-50 border-emerald-200 text-emerald-600{% endif %}">
+        {{ message }}
+    </div>
+    {% endfor %}
+    {% endif %}
+    {% endwith %}
+
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <table class="w-full text-left border-collapse">
+            <thead class="bg-slate-100 text-xs uppercase text-slate-500 font-bold border-b border-slate-200">
+                <tr>
+                    <th class="px-6 py-4">Usuario</th>
+                    <th class="px-6 py-4">Rol de Sistema</th>
+                    <th class="px-6 py-4">Sede Asignada</th>
+                    <th class="px-6 py-4 text-center">Estado</th>
+                    <th class="px-6 py-4 text-center">Registrado</th>
+                    <th class="px-6 py-4 text-center">Acciones</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100 text-sm">
+                {% if usuarios %}
+                {% for reg in usuarios %}
+                <tr class="hover:bg-sky-50 transition-colors group">
+                    <td class="px-6 py-4 font-bold text-slate-700">
+                        {{ reg[1] }}
+                        <span class="block text-xs font-normal text-slate-400 mt-1">{{ reg[2] or 'Sin Correo' }}</span>
+                    </td>
+                    <td class="px-6 py-4">
+                        {% if reg[3] == 'SuperAdmin' %}
+                        <span
+                            class="bg-purple-100 text-purple-700 text-xs px-2 py-1 rounded font-bold uppercase">SuperAdmin</span>
+                        {% elif reg[3] == 'Supervisor' %}
+                        <span
+                            class="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded font-bold uppercase">Supervisor</span>
+                        {% elif reg[3] == 'Consultor' %}
+                        <span
+                            class="bg-emerald-100 text-emerald-700 text-xs px-2 py-1 rounded font-bold uppercase">Consultor</span>
+                        {% else %}
+                        <span class="bg-amber-100 text-amber-700 text-xs px-2 py-1 rounded font-bold uppercase">{{
+                            reg[3] }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4">
+                        {% if reg[3] == 'SuperAdmin' %}
+                        <span class="text-xs text-slate-400 font-mono">GLOBAL (Todo)</span>
+                        {% else %}
+                        <span class="text-xs font-bold text-emerald-600 uppercase">{{ reg[4] or 'Central' }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 text-center">
+                        {% if reg[5] %}
+                        <span
+                            class="w-2 h-2 rounded-full bg-emerald-500 inline-block shadow-lg shadow-emerald-500/50"></span>
+                        {% else %}
+                        <span class="w-2 h-2 rounded-full bg-rose-500 inline-block"></span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 font-mono text-center text-slate-500">{{ reg[6] or '-' }}</td>
+                    <td class="px-6 py-4">
+                        <div class="flex items-center justify-center gap-2">
+                            <button type="button" onclick="abrirModalEditar('{{ reg[0] }}', '{{ reg[1] }}')"
+                                class="text-sky-500 hover:text-sky-700 p-2 rounded-lg hover:bg-sky-50 transition-colors cursor-pointer outline-none text-xl"
+                                title="Editar Credenciales">
+                                <i class="ph-bold ph-pencil-simple"></i>
+                            </button>
+                            {% if reg[1] != 'admin' %}
+                            {% if reg[3] in ['SuperAdmin', 'Supervisor'] %}
+                            <form action="/admin/accesos/eliminar/{{ reg[0] }}" method="POST" class="inline"
+                                onsubmit="return confirm('¿Seguro que deseas eliminar esta cuenta permanentemente?');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <button type="submit"
+                                    class="text-rose-400 hover:text-rose-600 p-2 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer outline-none text-xl">
+                                    <i class="ph-bold ph-trash"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                            {% else %}
+                            <span class="text-[10px] text-slate-300 italic font-bold uppercase ml-2"><i
+                                    class="ph-fill ph-crown"></i> Root</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+                {% else %}
+                <tr>
+                    <td colspan="6" class="px-6 py-8 text-center text-slate-500">No hay otras cuentas registradas.</td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal Crear Usuario -->
+<div id="modal-crear"
+    class="fixed inset-0 bg-slate-900/60 hidden backdrop-blur-sm flex items-center justify-center z-50">
+    <div
+        class="bg-white p-8 rounded-2xl w-full max-w-md shadow-2xl scale-100 transition-transform relative overflow-hidden">
+
+        <div class="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-sky-500 to-indigo-500"></div>
+        <button onclick="document.getElementById('modal-crear').classList.add('hidden')"
+            class="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
+            <i class="ph ph-x text-xl"></i>
+        </button>
+
+        <h3 class="text-xl font-bold text-slate-800 mb-1">Nueva Cuenta de Acceso</h3>
+        <p class="text-xs text-slate-500 mb-6 font-medium uppercase tracking-wider">Control de Personal Administrador
+            (RBAC)</p>
+
+        <form method="POST" action="/admin/accesos/crear" class="space-y-4">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Usuario (Login)</label>
+                <input type="text" name="usuario" required
+                    class="w-full border border-slate-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none transition-shadow"
+                    placeholder="Ej. jperez">
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Contraseña</label>
+                    <input type="password" name="password" required
+                        class="w-full border border-slate-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none transition-shadow"
+                        placeholder="••••••••">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Rol del Sistema</label>
+                    <select name="rol" required
+                        class="w-full border border-slate-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none"
+                        onchange="document.getElementById('sede-container').style.display = this.value === 'SuperAdmin' ? 'none' : 'block'">
+                        <option value="Supervisor">Supervisor</option>
+                        <option value="Consultor">Consultor</option>
+                        <option value="SuperAdmin">SuperAdmin</option>
+                    </select>
+                </div>
+            </div>
+
+            <div id="sede-container">
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Sede / Filial Permitida</label>
+                <select name="sede"
+                    class="w-full border border-slate-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none">
+                    <option value="Todas" class="font-bold text-sky-600">Global (Todas las Sedes)</option>
+                    <option value="Central">UNDAC - Central (Pasco)</option>
+                    <option value="La Merced">Filial La Merced</option>
+                    <option value="Oxapampa">Filial Oxapampa</option>
+                    <option value="Yanahuanca">Filial Yanahuanca</option>
+                    <option value="Tarma">Filial Tarma</option>
+                    <option value="Paucartambo">Filial Paucartambo</option>
+                </select>
+            </div>
+
+            <div class="pt-4">
+                <button type="submit"
+                    class="w-full bg-slate-900 text-white font-bold py-3 rounded-lg flex justify-center items-center gap-2 hover:bg-slate-800 transition-colors shadow-xl shadow-slate-900/10">
+                    <i class="ph ph-user-plus text-lg"></i> Generar Accesos
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal Editar Acceso -->
+<div id="modal-editar-acceso"
+    class="fixed inset-0 bg-slate-900/60 hidden backdrop-blur-sm flex items-center justify-center z-50">
+    <div
+        class="bg-white p-8 rounded-2xl w-full max-w-md shadow-2xl scale-100 transition-transform relative overflow-hidden">
+        <div class="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-amber-400 to-orange-500"></div>
+
+        <button onclick="document.getElementById('modal-editar-acceso').classList.add('hidden')"
+            class="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
+            <i class="ph ph-x text-xl"></i>
+        </button>
+
+        <h3 class="text-xl font-bold text-slate-800 mb-1">Modificar Gestor</h3>
+        <p
+            class="text-[10px] text-slate-500 mb-6 font-bold uppercase tracking-wider bg-orange-50 inline-block px-2 py-1 rounded text-orange-700 border border-orange-100">
+            <i class="ph-fill ph-warning"></i> Requiere Verificación de Identidad
+        </p>
+
+        <form method="POST" action="/admin/accesos/editar" class="space-y-4">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="id_usuario" id="editar_id_usuario">
+
+            <p id="label_edit_nombre"
+                class="font-bold text-slate-700 mb-4 bg-slate-50 border border-slate-200 p-2 text-center rounded truncate">
+            </p>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div class="col-span-1">
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Nuevo Usuario (Login)</label>
+                    <input type="text" name="nuevo_usuario"
+                        class="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-shadow"
+                        placeholder="Opcional">
+                </div>
+                <div class="col-span-1">
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Nuevo Correo</label>
+                    <input type="email" name="nuevo_correo"
+                        class="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-shadow"
+                        placeholder="Opcional">
+                </div>
+
+                <div class="col-span-2">
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Nueva Contraseña
+                        (Opcional)</label>
+                    <input type="password" name="nueva_password"
+                        class="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-shadow"
+                        placeholder="Dejar vacío para mantener">
+                </div>
+            </div>
+
+            <hr class="border-slate-100 my-4">
+
+            <div>
+                <label class="block text-xs font-bold text-rose-600 uppercase mb-2"><i class="ph-fill ph-lock-key"></i>
+                    Tu Contraseña Actual</label>
+                <input type="password" name="password_admin" required
+                    class="w-full border border-rose-300 bg-rose-50 rounded-lg p-3 text-sm focus:ring-2 focus:ring-rose-500 outline-none placeholder-rose-300"
+                    placeholder="Valida que eres tú...">
+            </div>
+
+            <div class="pt-4">
+                <button type="submit"
+                    class="w-full bg-orange-500 text-white font-bold py-3 rounded-lg flex justify-center items-center gap-2 hover:bg-orange-600 transition-colors shadow-lg shadow-orange-500/20">
+                    <i class="ph ph-arrows-clockwise text-lg"></i> Guardar Cambios
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    function abrirModalEditar(id, nombre) {
+        document.getElementById('editar_id_usuario').value = id;
+        document.getElementById('label_edit_nombre').innerText = "Editando Perfil de: " + nombre;
+        document.getElementById('modal-editar-acceso').classList.remove('hidden');
+    }
+</script>
+{% endblock %}

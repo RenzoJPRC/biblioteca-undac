@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal de Recursos Académicos & Catálogo Bibliográfico - UNDAC</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <link rel="shortcut icon" href="{{ url_for('static', filename='logo.png') }}" type="image/png">
+</head>
+<body class="bg-slate-100 min-h-screen text-slate-800 font-sans flex flex-col">
+
+    <!-- HEADER / NAVIGATION BAR -->
+    <header class="bg-slate-900 text-white border-b border-slate-800 shadow-md sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <a href="/" class="flex items-center gap-3 hover:opacity-90 transition-opacity">
+                    <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo UNDAC" class="w-10 h-10 object-contain bg-white rounded-full p-1">
+                    <div>
+                        <h1 class="font-bold text-lg leading-tight tracking-wide">Biblioteca UNDAC</h1>
+                        <p class="text-xs text-sky-400 font-medium">Recursos Académicos & Catálogo Bibliográfico</p>
+                    </div>
+                </a>
+            </div>
+
+            <!-- BOTONES DINÁMICOS DE NAVEGACIÓN -->
+            <div class="flex items-center gap-3">
+                <button onclick="cambiarUsuario()" class="text-xs font-bold bg-sky-600 hover:bg-sky-500 text-white px-4 py-2 rounded-xl transition-all flex items-center gap-2 shadow-sm">
+                    <i class="ph-bold ph-user-switch"></i> Cambiar Usuario / Nuevo Ingreso
+                </button>
+                <a id="btn-header-inicio" href="/" class="text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 px-3.5 py-2 rounded-xl border border-slate-700 transition-all flex items-center gap-1">
+                    <i class="ph-bold ph-house"></i> Inicio
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- TOAST NOTIFICACIÓN -->
+    <div id="toast-notificacion" class="fixed bottom-6 right-6 bg-slate-900 text-white text-xs font-bold px-5 py-3 rounded-2xl shadow-2xl border border-slate-700 z-50 flex items-center gap-2.5 translate-y-20 opacity-0 transition-all duration-300 pointer-events-none">
+        <i class="ph-bold ph-check-circle text-emerald-400 text-lg"></i>
+        <span id="toast-mensaje">¡Notificación!</span>
+    </div>
+
+    <!-- MAIN CONTAINER -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-6 md:p-8 flex flex-col gap-8">
+
+        <!-- PASO 1: PANTALLA DE IDENTIFICACIÓN INICIAL -->
+        <section id="sec-identificacion" class="bg-white rounded-3xl p-8 md:p-12 shadow-xl border border-slate-200 max-w-2xl mx-auto w-full text-center relative overflow-hidden my-auto animate-fade-in-up">
+            <div class="p-4 bg-sky-50 text-sky-600 rounded-full inline-block mb-4 ring-8 ring-sky-50/50">
+                <i class="ph-fill ph-identification-card text-5xl"></i>
+            </div>
+            
+            <h2 class="text-2xl md:text-3xl font-extrabold text-slate-900 mb-2">¡Hola! 👋 Bienvenido al Portal Bibliográfico</h2>
+            <p class="text-slate-500 text-sm mb-8 max-w-md mx-auto">
+                Para ingresar al buscador de libros y recursos académicos, por favor ingresa tu identificador:
+            </p>
+
+            <form onsubmit="procesarIdentificacion(event)" class="flex flex-col gap-4 max-w-md mx-auto">
+                <div class="relative">
+                    <i class="ph-bold ph-user text-slate-400 text-lg absolute left-4 top-1/2 -translate-y-1/2"></i>
+                    <input type="text" id="input-identificador" required placeholder="Ingresa tu Código UNDAC o DNI"
+                        class="w-full bg-slate-50 border border-slate-300 focus:border-sky-500 focus:bg-white rounded-2xl pl-11 pr-4 py-3.5 text-sm font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-4 focus:ring-sky-100 transition-all text-center">
+                </div>
+
+                <button type="submit" id="btn-identificar"
+                    class="bg-sky-600 hover:bg-sky-500 text-white font-extrabold px-6 py-3.5 rounded-2xl text-sm shadow-lg hover:shadow-sky-500/25 transition-all flex items-center justify-center gap-2 mt-2">
+                    <span>Verificar e Ingresar al Catálogo</span>
+                    <i class="ph-bold ph-arrow-right"></i>
+                </button>
+            </form>
+
+            <div id="msg-identificando" class="hidden mt-4 text-xs font-bold text-sky-600 flex items-center justify-center gap-2">
+                <i class="ph-bold ph-spinner animate-spin text-lg"></i>
+                <span id="txt-msg-identificando">Verificando datos...</span>
+            </div>
+        </section>
+
+
+        <!-- PASO 2: PANTALLA PRINCIPAL DE BÚSQUEDA -->
+        <div id="sec-catalogo-principal" class="hidden flex flex-col gap-8 animate-fade-in-up">
+
+            <!-- BANNER DE BIENVENIDA PERSONALIZADA -->
+            <section class="bg-gradient-to-r from-sky-900 via-indigo-900 to-slate-900 text-white rounded-3xl p-8 shadow-xl border border-sky-800/40 relative overflow-hidden">
+                <div class="relative z-10 max-w-4xl flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                    <div>
+                        <div class="flex items-center gap-2 mb-2">
+                            <span id="badge-tipo-usuario" class="text-xs font-extrabold uppercase tracking-widest bg-sky-500/30 text-sky-300 px-3 py-1 rounded-full border border-sky-400/30 inline-block">
+                                Estudiante UNDAC
+                            </span>
+                            <span id="badge-fuente-api" class="text-[10px] font-bold bg-emerald-500/20 text-emerald-300 px-2.5 py-0.5 rounded-full border border-emerald-400/30">
+                                Identidad Verificada
+                            </span>
+                        </div>
+                        <h2 class="text-2xl md:text-3xl font-extrabold tracking-tight">
+                            ¡Hola, <span id="txt-nombre-usuario" class="text-sky-300">Renzo</span>! 👋
+                        </h2>
+                        <p id="txt-escuela-usuario" class="text-sky-200 text-xs md:text-sm font-medium mt-1">
+                            Escuela: Ingeniería de Sistemas y Computación
+                        </p>
+                    </div>
+
+                    <button onclick="cambiarUsuario()" class="text-xs bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700 px-4 py-2 rounded-xl transition-all font-bold flex items-center gap-1.5 shrink-0">
+                        <i class="ph-bold ph-user-switch"></i> Cambiar Identificación
+                    </button>
+                </div>
+            </section>
+
+            <!-- BARRA DE BÚSQUEDA DE LIBROS Y FILTROS -->
+            <section class="bg-white rounded-3xl p-6 shadow-md border border-slate-200 flex flex-col gap-4">
+                <form id="form-busqueda" onsubmit="realizarBusquedaLibros(event)" class="flex flex-col md:flex-row gap-3">
+                    <div class="relative flex-1">
+                        <i class="ph-bold ph-magnifying-glass text-slate-400 text-lg absolute left-4 top-1/2 -translate-y-1/2"></i>
+                        <input type="text" id="input-query-libro" placeholder="¿Qué libro o recurso académico buscas hoy? (ej: Inteligencia Artificial, Algoritmos, Redes...)"
+                            class="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-11 pr-4 py-3.5 text-sm font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:bg-white transition-all">
+                    </div>
+
+                    <button type="submit" class="bg-sky-600 hover:bg-sky-500 text-white font-extrabold px-8 py-3.5 rounded-2xl text-sm shadow-md transition-all flex items-center justify-center gap-2 shrink-0">
+                        <i class="ph-bold ph-magnifying-glass"></i>
+                        <span>Buscar Libro</span>
+                    </button>
+                </form>
+
+                <!-- PESTAÑAS DE FILTRO POR DISPONIBILIDAD -->
+                <div class="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
+                    <div class="flex items-center gap-2 text-xs">
+                        <span class="text-slate-400 font-bold uppercase text-[11px] mr-1">Filtrar:</span>
+                        <button id="btn-filtro-todos" onclick="aplicarFiltroDisponibilidad('todos')" class="bg-sky-600 text-white px-3 py-1.5 rounded-xl font-bold transition-all shadow-sm">
+                            📚 Todos los Libros
+                        </button>
+                        <button id="btn-filtro-pdf" onclick="aplicarFiltroDisponibilidad('pdf')" class="bg-slate-100 text-slate-700 hover:bg-emerald-600 hover:text-white px-3 py-1.5 rounded-xl font-bold transition-all border border-slate-200">
+                            📄 Con PDF Gratuito
+                        </button>
+                    </div>
+
+                    <!-- SUGERENCIAS DE BÚSQUEDA POR MATERIA -->
+                    <div class="flex flex-wrap items-center gap-1.5 text-xs">
+                        <span class="text-slate-400 font-bold uppercase text-[11px] mr-1">Sugerencias:</span>
+                        <button onclick="buscarMateria('Inteligencia Artificial')" class="bg-slate-100 hover:bg-sky-600 text-slate-700 hover:text-white px-2.5 py-1 rounded-lg transition-all font-semibold border border-slate-200">IA</button>
+                        <button onclick="buscarMateria('Sistemas Operativos')" class="bg-slate-100 hover:bg-sky-600 text-slate-700 hover:text-white px-2.5 py-1 rounded-lg transition-all font-semibold border border-slate-200">Sistemas Operativos</button>
+                        <button onclick="buscarMateria('Base de Datos')" class="bg-slate-100 hover:bg-sky-600 text-slate-700 hover:text-white px-2.5 py-1 rounded-lg transition-all font-semibold border border-slate-200">Bases de Datos</button>
+                        <button onclick="buscarMateria('Algoritmos')" class="bg-slate-100 hover:bg-sky-600 text-slate-700 hover:text-white px-2.5 py-1 rounded-lg transition-all font-semibold border border-slate-200">Algoritmos</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- CAJA DE RESUMEN TEÓRICO ACADÉMICO E ILUSTRACIÓN -->
+            <div id="box-definicion-wikipedia" class="hidden bg-gradient-to-r from-sky-950 via-slate-900 to-indigo-950 text-sky-100 rounded-3xl p-6 shadow-xl border border-sky-800/60 backdrop-blur-md animate-fade-in-up">
+                <div class="flex items-center justify-between mb-3 border-b border-sky-800/40 pb-2">
+                    <div class="flex items-center gap-2 text-xs font-bold text-sky-400 uppercase tracking-wider">
+                        <i class="ph-bold ph-globe-hemisphere-west text-lg"></i>
+                        <span>Resumen Académico del Tema</span>
+                    </div>
+                    <span class="text-[10px] bg-sky-500/20 text-sky-300 font-bold px-2.5 py-0.5 rounded-full border border-sky-400/30">Enciclopedia Académica</span>
+                </div>
+
+                <div class="flex flex-col md:flex-row items-center gap-6">
+                    <div id="box-wiki-imagen" class="hidden shrink-0">
+                        <img id="img-wiki-thumb" src="" alt="Ilustración" class="w-32 h-32 object-cover rounded-2xl border border-sky-700/50 shadow-md">
+                    </div>
+                    <div class="flex-1">
+                        <h4 id="txt-wiki-titulo" class="text-xl font-extrabold text-white mb-1.5"></h4>
+                        <p id="txt-wiki-extracto" class="text-xs text-sky-200 leading-relaxed font-light"></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RESULTADOS DEL CATÁLOGO -->
+            <section class="flex flex-col gap-4">
+                <div class="flex justify-between items-center border-b border-slate-200 pb-4">
+                    <div>
+                        <h3 class="text-xl font-extrabold text-slate-900">Resultados del Catálogo Bibliográfico</h3>
+                        <p id="subtitulo-resultados" class="text-xs text-slate-500 font-medium">Recursos académicos universitarios</p>
+                    </div>
+                    <span id="tag-total-resultados" class="text-xs font-bold bg-sky-100 text-sky-800 px-3.5 py-1.5 rounded-full border border-sky-200">
+                        Cargando...
+                    </span>
+                </div>
+
+                <!-- GRID CONTENEDOR DE LIBROS -->
+                <div id="grid-libros" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                    <!-- Se llena dinámicamente -->
+                </div>
+            </section>
+
+        </div>
+
+    </main>
+
+    <!-- MODAL DETALLE DE LIBRO ENRIQUECIDO CON CITA APA 7-->
+    <div id="modal-detalle-libro" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-3xl max-w-2xl w-full p-8 shadow-2xl border border-slate-100 relative animate-fade-in-up">
+            <button onclick="cerrarModalLibro()" class="absolute top-6 right-6 text-slate-400 hover:text-slate-700 p-2 rounded-full hover:bg-slate-100 transition-all">
+                <i class="ph-bold ph-x text-xl"></i>
+            </button>
+
+            <div class="flex flex-col md:flex-row gap-6">
+                <div id="modal-container-portada" class="w-36 h-52 shrink-0 mx-auto md:mx-0">
+                    <img id="modal-libro-portada" src="" alt="Portada" class="w-36 h-52 object-cover rounded-xl shadow-md border border-slate-200">
+                </div>
+
+                <div class="flex flex-col justify-between flex-1">
+                    <div>
+                        <div class="flex items-center gap-2 mb-2">
+                            <span id="modal-libro-categoria" class="text-[11px] font-extrabold uppercase bg-sky-100 text-sky-700 px-2.5 py-0.5 rounded-full inline-block"></span>
+                            <span id="modal-libro-precio" class="text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200 px-2.5 py-0.5 rounded-full inline-block"></span>
+                        </div>
+
+                        <h3 id="modal-libro-titulo" class="text-xl font-extrabold text-slate-900 leading-tight"></h3>
+                        <p id="modal-libro-autores" class="text-sm font-bold text-sky-600 mt-1"></p>
+                        <p id="modal-libro-editorial" class="text-xs text-slate-500 mt-0.5"></p>
+                        
+                        <!-- CITA BIBLIOGRÁFICA EN FORMATO APA 7 -->
+                        <div class="mt-3 bg-slate-900 text-slate-200 p-3 rounded-xl text-xs font-mono border border-slate-800">
+                            <div class="flex items-center justify-between mb-1">
+                                <span class="text-[10px] font-bold text-sky-400 uppercase tracking-widest">Cita APA 7ª Edición</span>
+                                <button onclick="copiarCitaAPA()" class="text-[10px] bg-sky-600 hover:bg-sky-500 text-white font-sans font-bold px-2 py-0.5 rounded transition-all">
+                                    📋 Copiar Cita
+                                </button>
+                            </div>
+                            <p id="modal-libro-cita-apa" class="text-[11px] text-slate-300 italic select-all"></p>
+                        </div>
+
+                        <div class="mt-3 pt-3 border-t border-slate-100">
+                            <h4 class="text-xs font-bold text-slate-400 uppercase mb-1">Resumen / Sinopsis</h4>
+                            <p id="modal-libro-descripcion" class="text-xs text-slate-600 leading-relaxed max-h-24 overflow-y-auto pr-2"></p>
+                        </div>
+                    </div>
+
+                    <!-- BOTONES DE ACCIÓN REST -->
+                    <div class="mt-4 pt-3 border-t border-slate-100 flex flex-wrap items-center justify-end gap-3">
+                        <div class="flex items-center gap-2">
+                            <a id="modal-btn-pdf" href="#" target="_blank" class="hidden bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 shadow-sm">
+                                <i class="ph-bold ph-file-pdf"></i> Leer PDF Gratuito
+                            </a>
+                            <a id="modal-btn-tienda" href="#" target="_blank" class="bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 shadow-sm">
+                                <i class="ph-bold ph-shopping-cart"></i> Ver Tienda / Comprar
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- FOOTER -->
+    <footer class="bg-white border-t border-slate-200 py-6 mt-12">
+        <div class="max-w-7xl mx-auto px-6 text-center text-xs text-slate-400 font-medium">
+            &copy; 2026 Universidad Nacional Daniel Alcides Carrión — Sistema Web de Biblioteca Universitaria
+        </div>
+    </footer>
+
+    <!-- JAVASCRIPT DE CONTROL E INTERACTIVIDAD -->
+    <script>
+        let usuarioActual = null;
+        let librosActuales = [];
+        let libroSeleccionadoModal = null;
+        let filtroSoloPdf = false;
+
+        function procesarIdentificacion(e) {
+            e.preventDefault();
+            const val = document.getElementById('input-identificador').value.trim();
+            if (!val) return;
+
+            const msgBox = document.getElementById('msg-identificando');
+            const txtMsg = document.getElementById('txt-msg-identificando');
+            msgBox.classList.remove('hidden');
+
+            if (val.length >= 9) {
+                txtMsg.innerText = "Verificando código de estudiante...";
+            } else if (val.length === 8) {
+                txtMsg.innerText = "Verificando DNI en registro...";
+            } else {
+                txtMsg.innerText = "Verificando datos...";
+            }
+
+            fetch('/api/identificar_usuario', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ identificador: val })
+            })
+            .then(res => res.json())
+            .then(data => {
+                msgBox.classList.add('hidden');
+                if (data.status === 'success' || data.status === 'warning') {
+                    usuarioActual = data;
+                    mostrarPantallaBusqueda(data);
+                } else {
+                    alert(data.msg || "No se pudo identificar el usuario.");
+                }
+            })
+            .catch(err => {
+                msgBox.classList.add('hidden');
+                console.error("Error al identificar:", err);
+                alert("Error de conexión al verificar identificador.");
+            });
+        }
+
+        function mostrarPantallaBusqueda(usr) {
+            document.getElementById('sec-identificacion').classList.add('hidden');
+            document.getElementById('sec-catalogo-principal').classList.remove('hidden');
+
+            document.getElementById('txt-nombre-usuario').innerText = usr.nombre;
+            document.getElementById('txt-escuela-usuario').innerText = `Institución / Escuela: ${usr.escuela}`;
+            document.getElementById('badge-tipo-usuario').innerText = usr.tipo;
+
+            const badgeFuente = document.getElementById('badge-fuente-api');
+            if (usr.status === 'warning') {
+                badgeFuente.innerText = 'Visitante No Registrado';
+                badgeFuente.className = 'text-[10px] font-bold bg-amber-500/20 text-amber-300 px-2.5 py-0.5 rounded-full border border-amber-400/30';
+            } else {
+                badgeFuente.innerText = 'Identidad Verificada';
+                badgeFuente.className = 'text-[10px] font-bold bg-emerald-500/20 text-emerald-300 px-2.5 py-0.5 rounded-full border border-emerald-400/30';
+            }
+
+            // Ocultar botón 'Inicio' innecesario al estar dentro del catálogo activo
+            const btnInicio = document.getElementById('btn-header-inicio');
+            if (btnInicio) btnInicio.classList.add('hidden');
+
+            // Cargar búsqueda por defecto al entrar
+            buscarLibros("Inteligencia Artificial");
+        }
+
+        function cambiarUsuario() {
+            usuarioActual = null;
+            document.getElementById('sec-catalogo-principal').classList.add('hidden');
+            document.getElementById('sec-identificacion').classList.remove('hidden');
+            document.getElementById('input-identificador').value = '';
+
+            const btnInicio = document.getElementById('btn-header-inicio');
+            if (btnInicio) btnInicio.classList.remove('hidden');
+
+            document.getElementById('input-identificador').focus();
+        }
+
+        function buscarMateria(materia) {
+            document.getElementById('input-query-libro').value = materia;
+            buscarLibros(materia);
+        }
+
+        function aplicarFiltroDisponibilidad(tipo) {
+            filtroSoloPdf = (tipo === 'pdf');
+            const btnTodos = document.getElementById('btn-filtro-todos');
+            const btnPdf = document.getElementById('btn-filtro-pdf');
+
+            if (filtroSoloPdf) {
+                btnPdf.className = "bg-emerald-600 text-white px-3 py-1.5 rounded-xl font-bold transition-all shadow-sm";
+                btnTodos.className = "bg-slate-100 text-slate-700 hover:bg-sky-600 hover:text-white px-3 py-1.5 rounded-xl font-bold transition-all border border-slate-200";
+            } else {
+                btnTodos.className = "bg-sky-600 text-white px-3 py-1.5 rounded-xl font-bold transition-all shadow-sm";
+                btnPdf.className = "bg-slate-100 text-slate-700 hover:bg-emerald-600 hover:text-white px-3 py-1.5 rounded-xl font-bold transition-all border border-slate-200";
+            }
+
+            const query = document.getElementById('input-query-libro').value.trim();
+            buscarLibros(query);
+        }
+
+        function realizarBusquedaLibros(e) {
+            e.preventDefault();
+            const query = document.getElementById('input-query-libro').value.trim();
+            buscarLibros(query);
+        }
+
+        function buscarLibros(query) {
+            const grid = document.getElementById('grid-libros');
+            const tagTotal = document.getElementById('tag-total-resultados');
+            const subtitulo = document.getElementById('subtitulo-resultados');
+
+            tagTotal.innerText = "Buscando...";
+            grid.innerHTML = '<div class="col-span-full py-16 text-center text-slate-400 font-bold"><i class="ph-bold ph-spinner animate-spin text-3xl mb-2 inline-block"></i><p>Consultando catálogo bibliográfico en tiempo real...</p></div>';
+
+            // 1. Consultar Resumen Teórico e Ilustración
+            fetch('/api/resumen_tema', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query: query || "Inteligencia Artificial" })
+            })
+            .then(res => res.json())
+            .then(dataWiki => {
+                const boxWiki = document.getElementById('box-definicion-wikipedia');
+                const boxImg = document.getElementById('box-wiki-imagen');
+                const imgThumb = document.getElementById('img-wiki-thumb');
+
+                if (dataWiki.status === 'success' && dataWiki.extracto) {
+                    document.getElementById('txt-wiki-titulo').innerText = dataWiki.titulo;
+                    document.getElementById('txt-wiki-extracto').innerText = dataWiki.extracto;
+
+                    if (dataWiki.imagen) {
+                        imgThumb.src = dataWiki.imagen;
+                        boxImg.classList.remove('hidden');
+                    } else {
+                        boxImg.classList.add('hidden');
+                    }
+
+                    boxWiki.classList.remove('hidden');
+                } else {
+                    boxWiki.classList.add('hidden');
+                }
+            })
+            .catch(e => console.error("Error Wikipedia:", e));
+
+            // 2. Consultar Catálogo de Libros
+            fetch('/api/buscar_libros', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query: query || "Inteligencia Artificial", solo_pdf: filtroSoloPdf })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    librosActuales = data.libros;
+                    tagTotal.innerText = `${data.total_encontrados} Libros Encontrados`;
+                    subtitulo.innerText = `Resultados para: "${data.query}" • Servicio de Información Bibliográfica`;
+                    renderizarLibros(data.libros);
+                } else {
+                    tagTotal.innerText = "0 Resultados";
+                    grid.innerHTML = `<div class="col-span-full py-12 text-center text-rose-500 font-bold">${data.msg || 'No se hallaron registros'}</div>`;
+                }
+            })
+            .catch(err => {
+                console.error("Error catálogo:", err);
+                tagTotal.innerText = "Error";
+                grid.innerHTML = '<div class="col-span-full py-12 text-center text-rose-500 font-bold">Error de conexión al buscar libros.</div>';
+            });
+        }
+
+        function renderizarLibros(libros) {
+            const grid = document.getElementById('grid-libros');
+            if (!libros || libros.length === 0) {
+                grid.innerHTML = '<div class="col-span-full py-12 text-center text-slate-400 font-bold">No se encontraron libros para esta búsqueda.</div>';
+                return;
+            }
+
+            let html = '';
+            libros.forEach((l, idx) => {
+                const tagPdf = l.tiene_pdf ? `<span class="bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-full"><i class="ph-bold ph-file-pdf"></i> PDF Libre</span>` : '';
+                
+                let coverContent = '';
+                if (l.portada && l.portada.trim() !== '') {
+                    coverContent = `<img src="${l.portada}" alt="${l.titulo}" class="h-44 object-contain shadow-md group-hover:scale-105 transition-transform duration-300" onerror="this.parentElement.innerHTML='<div class=\\'flex flex-col items-center justify-center p-4 text-center h-full w-full bg-slate-900 text-white rounded-xl shadow-inner\\'><i class=\\'ph-bold ph-book-bookmark text-4xl text-sky-400 mb-2\\'></i><span class=\\'text-xs font-bold line-clamp-3 text-sky-200\\'>${l.titulo.replace(/'/g, "")}</span></div>'">`;
+                } else {
+                    coverContent = `<div class="flex flex-col items-center justify-center p-4 text-center h-full w-full bg-slate-900 text-white rounded-xl shadow-inner"><i class="ph-bold ph-book-bookmark text-4xl text-sky-400 mb-2"></i><span class="text-xs font-bold line-clamp-3 text-sky-200">${l.titulo}</span></div>`;
+                }
+
+                html += `
+                <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 hover:shadow-xl hover:-translate-y-1 transition-all flex flex-col justify-between group">
+                    <div>
+                        <div class="relative mb-4 overflow-hidden rounded-xl bg-slate-100 flex items-center justify-center h-48">
+                            ${coverContent}
+                            <span class="absolute top-2 right-2 bg-slate-900/80 text-white text-[10px] font-bold px-2 py-0.5 rounded-full backdrop-blur-sm">${l.fecha_publicacion}</span>
+                        </div>
+
+                        <div class="flex items-center justify-between gap-1 mb-1">
+                            <span class="text-[10px] font-extrabold uppercase bg-sky-50 text-sky-700 px-2 py-0.5 rounded-md inline-block border border-sky-100 line-clamp-1">${l.categoria}</span>
+                            ${tagPdf}
+                        </div>
+
+                        <h4 class="font-extrabold text-slate-900 text-sm line-clamp-2 leading-tight group-hover:text-sky-600 transition-colors" title="${l.titulo}">${l.titulo}</h4>
+                        <p class="text-xs font-semibold text-slate-500 mt-1 line-clamp-1">${l.autores}</p>
+                        <p class="text-[11px] text-slate-400 mt-0.5 line-clamp-1">${l.editorial}</p>
+                    </div>
+
+                    <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                        <span class="text-[10px] font-bold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-md border border-slate-200">${l.precio_estimado}</span>
+                        <button onclick="verDetalleLibro(${idx})" class="bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm transition-colors">
+                            Detalles
+                        </button>
+                    </div>
+                </div>`;
+            });
+
+            grid.innerHTML = html;
+        }
+
+        function verDetalleLibro(index) {
+            const l = librosActuales[index];
+            if (!l) return;
+            libroSeleccionadoModal = l;
+
+            const containerPortada = document.getElementById('modal-container-portada');
+            if (l.portada && l.portada.trim() !== '') {
+                containerPortada.innerHTML = `<img src="${l.portada}" alt="${l.titulo}" class="w-36 h-52 object-cover rounded-xl shadow-md border border-slate-200">`;
+            } else {
+                containerPortada.innerHTML = `<div class="flex flex-col items-center justify-center p-4 text-center w-36 h-52 bg-slate-900 text-white rounded-xl shadow-inner"><i class="ph-bold ph-book-bookmark text-4xl text-sky-400 mb-2"></i><span class="text-xs font-bold line-clamp-4 text-sky-200">${l.titulo}</span></div>`;
+            }
+
+            document.getElementById('modal-libro-titulo').innerText = l.titulo;
+            document.getElementById('modal-libro-autores').innerText = l.autores;
+            document.getElementById('modal-libro-editorial').innerText = `${l.editorial} (${l.fecha_publicacion})`;
+            document.getElementById('modal-libro-categoria').innerText = l.categoria;
+            document.getElementById('modal-libro-precio').innerText = l.precio_estimado;
+            document.getElementById('modal-libro-descripcion').innerText = l.descripcion || 'Sin resumen disponible.';
+            document.getElementById('modal-libro-cita-apa').innerText = l.cita_apa || `${l.autores} (${l.fecha_publicacion}). ${l.titulo}. ${l.editorial}.`;
+
+            // Botón de tienda de compra (Amazon / Tienda oficial)
+            const btnTienda = document.getElementById('modal-btn-tienda');
+            if (l.buy_link) {
+                btnTienda.href = l.buy_link;
+                btnTienda.classList.remove('hidden');
+            } else {
+                btnTienda.classList.add('hidden');
+            }
+
+            // Botón de descarga de PDF / Lectura gratuita
+            const btnPdf = document.getElementById('modal-btn-pdf');
+            if (l.tiene_pdf && l.pdf_link) {
+                btnPdf.href = l.pdf_link;
+                btnPdf.classList.remove('hidden');
+            } else {
+                btnPdf.classList.add('hidden');
+            }
+
+            document.getElementById('modal-detalle-libro').classList.remove('hidden');
+        }
+
+        function copiarCitaAPA() {
+            if (!libroSeleccionadoModal) return;
+            const textCita = document.getElementById('modal-libro-cita-apa').innerText;
+            navigator.clipboard.writeText(textCita).then(() => {
+                mostrarToast("¡Cita APA 7ª Edición copiada al portapapeles!");
+            }).catch(err => console.error("Error copiando cita:", err));
+        }
+
+        function mostrarToast(msg) {
+            const toast = document.getElementById('toast-notificacion');
+            const txtMsg = document.getElementById('toast-mensaje');
+            txtMsg.innerText = msg;
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3000);
+        }
+
+        function cerrarModalLibro() {
+            document.getElementById('modal-detalle-libro').classList.add('hidden');
+        }
+    </script>
+</body>
+</html>

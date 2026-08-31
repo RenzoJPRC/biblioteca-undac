@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ titulo }}</title>
+    <!-- TailwindCSS for standard styling (will strip for print if necessary, but helpful for layout) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #fff;
+            color: #000;
+        }
+        
+        .print-container {
+            max-width: 100%;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #1e293b;
+            padding-bottom: 10px;
+        }
+
+        .header h1 {
+            font-size: 20px;
+            font-weight: bold;
+            margin: 0;
+            text-transform: uppercase;
+        }
+
+        .header p {
+            font-size: 14px;
+            margin: 5px 0 0 0;
+            color: #475569;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 10px;
+        }
+
+        th, td {
+            border: 1px solid #cbd5e1;
+            padding: 6px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f1f5f9;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        /* Responsive hiding for very tight columns if needed */
+        .col-id { width: 30px; text-align: center; }
+        .col-hora { width: 60px; text-align: center; }
+
+        @media print {
+            @page {
+                size: A4 landscape;
+                margin: 1cm;
+            }
+            body {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            .no-print {
+                display: none !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="print-container">
+        
+        <div class="no-print mb-4 text-center">
+            <button onclick="window.print()" class="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold shadow-md hover:bg-blue-700 transition">
+                Imprimir Documento / Guardar como PDF
+            </button>
+            <p class="text-xs text-gray-500 mt-2">También puedes presionar Ctrl+P</p>
+        </div>
+
+        <div class="header">
+            <h1>Sistema Bibliotecario UNDAC</h1>
+            <p>{{ titulo }}</p>
+            <p style="font-size: 10px; text-align: right; margin-top: 10px;">Generado el: <script>document.write(new Date().toLocaleString('es-PE'))</script></p>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th class="col-id">N°</th>
+                    <th>Usuario</th>
+                    <th>DNI / Cód.</th>
+                    <th>Perfil</th>
+                    <th>Ubicación</th>
+                    <th>Turno</th>
+                    <th>Fecha</th>
+                    <th class="col-hora">Hora</th>
+                    <th>Facultad / Escuela / Área</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for reg in registros %}
+                <tr>
+                    <td class="col-id">{{ loop.index }}</td>
+                    <td>{{ reg[1] }}</td>
+                    <td>
+                        {{ reg[2] }}
+                        {% if reg[3] %} / {{ reg[3] }}{% endif %}
+                    </td>
+                    <td>{{ reg[4] }}</td>
+                    <td>{{ reg[5] }} - Piso {{ reg[6] }} {% if reg[7] != 'N/A' %}({{ reg[7] }}){% endif %}</td>
+                    <td>{{ reg[8] }}</td>
+                    <td>{{ reg[9] }}</td>
+                    <td class="col-hora">{{ reg[10] }}</td>
+                    <td>
+                        {% if reg[11] %}{{ reg[11] }}{% endif %}
+                        {% if reg[11] and reg[12] %} - {% endif %}
+                        {% if reg[12] %}{{ reg[12] }}{% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="9" style="text-align: center; padding: 20px;">
+                        No se encontraron registros para los filtros seleccionados.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        
+        <div style="margin-top: 40px; text-align: center; font-size: 12px; color: #64748b;">
+            <p>Fin del reporte (Total: {{ registros|length }} registros)</p>
+        </div>
+
+    </div>
+
+    <script>
+        // Lanzar la impresión automáticamente si hay registros
+        window.onload = function() {
+            // Un ligero timeout asegura que Tailwind termine de aplicar los estilos base antes de abrir el diálogo
+            setTimeout(function() {
+                window.print();
+            }, 500);
+        };
+    </script>
+</body>
+</html>

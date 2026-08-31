@@ -1,0 +1,286 @@
+{% extends "layout_admin.html" %}
+
+{% block content %}
+<header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shrink-0">
+    <div class="flex flex-col">
+        <h2 class="text-lg font-bold text-slate-700">Resumen General</h2>
+        <span class="text-xs text-blue-500 font-bold uppercase tracking-wide">{{ filtro_label }}</span>
+    </div>
+
+    <div class="flex gap-2">
+        <form id="filtro-form" method="GET" action="/admin/"
+            class="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 mr-2">
+            <input type="date" name="inicio" value="{{ params_inicio }}"
+                class="bg-transparent border-none text-xs text-slate-600 focus:ring-0 outline-none cursor-pointer p-2"
+                required>
+            <span class="text-slate-300 mx-1">al</span>
+            <input type="date" name="fin" value="{{ params_fin }}"
+                class="bg-transparent border-none text-xs text-slate-600 focus:ring-0 outline-none cursor-pointer p-2"
+                required>
+                
+            <span class="text-slate-300 mx-1 border-l border-slate-200 pl-2">Hora:</span>
+            <input type="time" name="hora_inicio" value="{{ params_hora_inicio }}"
+                class="bg-transparent border-none text-xs text-slate-600 focus:ring-0 outline-none cursor-pointer p-1">
+            <span class="text-slate-300 mx-1">-</span>
+            <input type="time" name="hora_fin" value="{{ params_hora_fin }}"
+                class="bg-transparent border-none text-xs text-slate-600 focus:ring-0 outline-none cursor-pointer p-1">
+
+            <button type="submit"
+                class="text-blue-600 hover:text-blue-800 font-bold text-xs uppercase px-2 py-2 transition-colors">Filtrar</button>
+            {% if params_inicio or params_hora_inicio %}
+            <a href="/admin/" class="text-slate-400 hover:text-rose-500 px-2 py-2 transition-colors"
+                title="Limpiar Filtros">
+                <i class="ph ph-x"></i>
+            </a>
+            {% endif %}
+        </form>
+
+        <button onclick="exportarExcelConFiltros()"
+            class="flex items-center gap-2 bg-emerald-600 text-white px-3 py-2 rounded-lg text-xs font-bold uppercase hover:bg-emerald-500 transition-colors">
+            <i class="ph ph-file-xls text-lg"></i> Excel
+        </button>
+        <button onclick="imprimirPDFConFiltros()"
+            class="flex items-center gap-2 bg-rose-600 text-white px-3 py-2 rounded-lg text-xs font-bold uppercase hover:bg-rose-500 transition-colors">
+            <i class="ph ph-printer text-lg"></i> Imprimir PDF
+        </button>
+    </div>
+</header>
+
+<div class="flex-1 overflow-y-auto p-6 space-y-6">
+
+    <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div
+            class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 col-span-2 flex justify-between items-center">
+            <div>
+                <p class="text-xs font-bold text-slate-400 uppercase">Total Ingresos</p>
+                <h3 class="text-3xl font-bold text-slate-800">{{ total_hoy }}</h3>
+            </div>
+            <div class="flex flex-col gap-1 text-right">
+                <span class="text-[10px] font-bold text-sky-600 bg-sky-50 px-2 py-0.5 rounded-full inline-block">{{
+                    total_alumnos }} Alumnos</span>
+                <span
+                    class="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full inline-block">{{
+                    total_egresados }} Egresados</span>
+                <span
+                    class="text-[10px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full inline-block">{{
+                    total_visitantes }} Externos</span>
+                <span
+                    class="text-[10px] font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full inline-block">{{
+                    total_personal }} Trabajadores</span>
+                <span
+                    class="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full inline-block">{{
+                    total_docentes }} Docentes</span>
+            </div>
+        </div>
+        <!-- Pestañas de Afluencia Multi-Sala (Drill-Down) -->
+        {% if session.get('admin_rol') == 'SuperAdmin' or session.get('admin_sede') == 'Central' %}
+        <div class="col-span-3 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+            <div class="px-5 py-3 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <h3 class="text-xs font-bold text-slate-700 uppercase flex items-center gap-1.5"><i
+                        class="ph-fill ph-buildings text-lg text-sky-500"></i> Afluencia por Pisos y Salas</h3>
+            </div>
+
+            <div class="p-5 flex-1 flex flex-col">
+                <div class="flex gap-2 mb-4 border-b border-slate-100 pb-2">
+                    {% for i in range(1, 4) %}
+                    <button onclick="mostrarPisoDash('Piso{{ i }}', this)"
+                        class="tab-piso-btn {% if loop.first %}active text-sky-600 border-b-2 border-sky-600{% else %}text-slate-400 hover:text-slate-600{% endif %} px-4 py-1.5 text-sm font-bold uppercase transition-all">
+                        Piso {{ i }} <span
+                            class="bg-slate-100 text-slate-500 text-[10px] px-1.5 rounded-full ml-1 font-mono">{{
+                            pisos.get(i, 0) | default(0) }}</span>
+                    </button>
+                    {% endfor %}
+                </div>
+
+                <div class="flex-1 relative pb-2">
+                    {% for i in range(1, 4) %}
+                    <div id="dashPiso{{ i }}-content"
+                        class="tab-piso-content {% if not loop.first %}hidden{% endif %} animate-fade-in-up w-full h-full">
+                        <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+                            {% set salas_del_piso = salas.get(i|string, {}) %}
+                            {% if salas_del_piso %}
+                            {% for nombre, cant in salas_del_piso.items() %}
+                            <div
+                                class="bg-sky-50/40 p-3 rounded-lg border border-sky-100 flex flex-col justify-between">
+                                <p class="text-[10px] font-bold text-sky-600 uppercase mb-1 leading-tight">{{ nombre }}
+                                </p>
+                                <h3 class="text-2xl font-black text-slate-700">{{ cant }}</h3>
+                            </div>
+                            {% endfor %}
+                            {% else %}
+                            <div class="col-span-full py-2 text-center text-slate-400">
+                                <p class="text-xs">No hay actividad registrada en Salas de este piso.</p>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+
+
+    <!-- SECCIÓN FILIALES -->
+    <div class="flex items-center gap-2 mt-2 -mb-2">
+        <i class="ph-fill ph-map-pin text-emerald-500 text-xl"></i>
+        <h3 class="text-sm font-bold text-slate-700">Afluencia en Filiales</h3>
+    </div>
+
+    <div class="grid grid-cols-2 lg:grid-cols-5 gap-4">
+        {% if session.get('admin_rol') == 'SuperAdmin' %}
+        {% set lista_filiales = ['La Merced', 'Oxapampa', 'Paucartambo', 'Yanahuanca', 'Tarma'] %}
+        {% elif session.get('admin_sede') != 'Central' %}
+        {% set lista_filiales = [session.get('admin_sede')] %}
+        {% else %}
+        {% set lista_filiales = [] %}
+        {% endif %}
+
+        {% for filial in lista_filiales %}
+        <div
+            class="bg-emerald-50/30 p-4 rounded-xl shadow-sm border border-emerald-100 flex justify-between items-center hover:bg-emerald-50/60 transition-colors">
+            <div class="w-full">
+                <p class="text-xs font-bold text-emerald-600 uppercase w-full truncate" title="{{ filial }}">{{ filial
+                    }}</p>
+                <h3 class="text-2xl font-bold text-emerald-800 mt-1">{{ sedes.get(filial, 0) | default(0) }}</h3>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-80">
+            <h3 class="text-sm font-bold text-slate-700 mb-4">Afluencia por Hora</h3>
+            <div class="relative h-64 w-full">
+                <canvas id="chartHoras"></canvas>
+            </div>
+        </div>
+        <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-80">
+            <h3 class="text-sm font-bold text-slate-700 mb-4">Top Orígenes</h3>
+            <div class="relative h-64 w-full">
+                <canvas id="chartEscuelas"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
+            <h3 class="font-bold text-slate-700">Últimos Accesos</h3>
+            <div class="flex gap-2">
+                <button onclick="filtrarUltimos('Todos', this)"
+                    class="tab-btn active bg-slate-800 text-white px-3 py-1 rounded-md text-xs font-bold uppercase transition-colors">Todos</button>
+                <button onclick="filtrarUltimos('Central', this)"
+                    class="tab-btn text-slate-500 hover:bg-slate-100 px-3 py-1 rounded-md text-xs font-bold uppercase transition-colors">Sede
+                    Central</button>
+                <button onclick="filtrarUltimos('Filiales', this)"
+                    class="tab-btn text-slate-500 hover:bg-slate-100 px-3 py-1 rounded-md text-xs font-bold uppercase transition-colors">Filiales</button>
+            </div>
+        </div>
+        <table class="w-full text-left">
+            <thead class="bg-slate-50 text-xs uppercase text-slate-400 font-bold">
+                <tr>
+                    <th class="px-6 py-3">Hora</th>
+                    <th class="px-6 py-3">Nombre</th>
+                    <th class="px-6 py-3">Origen</th>
+                    <th class="px-6 py-3 text-center">Ubicación</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100 text-sm" id="tbody-ultimos">
+                {% for reg in ultimos %}
+                <tr data-sede="{{ reg[6] or 'Central' }}">
+                    <td class="px-6 py-3 text-slate-500">
+                        <span class="block text-xs font-bold text-slate-400 mb-0.5">{{ reg[5] }}</span>
+                        <span class="font-mono text-[13px]">{{ reg[2] }}</span>
+                    </td>
+                    <td class="px-6 py-3 font-medium">{{ reg[0] }}
+                        {% if reg[4] == 'Visitante' %}<span
+                            class="text-[10px] bg-orange-100 text-orange-700 font-bold px-1 rounded ml-1">EXT</span>{%
+                        endif %}
+                        {% if reg[4] == 'Administrativo' %}<span
+                            class="text-[10px] bg-purple-100 text-purple-700 font-bold px-1 rounded ml-1">ADM</span>{%
+                        endif %}
+                        {% if reg[4] == 'Docente' %}<span
+                            class="text-[10px] bg-indigo-100 text-indigo-700 font-bold px-1 rounded ml-1">DOC</span>{%
+                        endif %}
+                        {% if reg[4] == 'Alumno' %}<span
+                            class="text-[10px] bg-sky-100 text-sky-700 font-bold px-1 rounded ml-1">ALU</span>{% endif
+                        %}
+                        {% if reg[4] == 'Egresado' %}<span
+                            class="text-[10px] bg-emerald-100 text-emerald-700 font-bold px-1 rounded ml-1">EGR</span>{%
+                        endif %}
+                    </td>
+                    <td class="px-6 py-3 text-slate-500">{{ reg[3] }}</td>
+                    <td class="px-6 py-3 text-center font-medium text-slate-600">
+                        {% if reg[6] == 'Central' or not reg[6] %}
+                        {% if reg[7] %}
+                        <div class="flex flex-col items-center gap-1">
+                            <span class="text-slate-400 font-medium text-xs">Piso {{ reg[1] }}</span>
+                            <span
+                                class="text-[10px] bg-sky-100 text-sky-700 font-bold px-2 py-1.5 rounded-md shadow-sm border border-sky-200/50 uppercase">{{
+                                reg[7] }}</span>
+                        </div>
+                        {% else %}
+                        <span class="text-slate-500 font-medium">Piso {{ reg[1] }}</span>
+                        {% endif %}
+                        {% else %}
+                        <span
+                            class="text-[10px] bg-emerald-100 text-emerald-700 font-bold px-2 py-1 rounded truncate inline-block max-w-[100px] uppercase">{{
+                            reg[6] }}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        // DATOS DE FLASK
+        const labelsHoras = {{ labels_horas | tojson | safe }};
+        const dataHoras = {{ data_horas | tojson | safe }};
+        const labelsOrigenes = {{ labels_escuelas | tojson | safe }};
+        const dataOrigenes = {{ data_escuelas | tojson | safe }};
+
+        // INICIALIZACIÓN DE MÓDULOS DE DASHBOARD.JS
+        inicializarGraficos(labelsHoras, dataHoras, labelsOrigenes, dataOrigenes);
+        inicializarFormularioRangoFechas();
+
+        // AUTO-REFRESH SÓLO EN "DATOS DE HOY"
+        const isToday = "{{ 'true' if not params_inicio and not params_fin else 'false' }}";
+        inicializarAutoRefresh(isToday);
+    });
+
+    function mostrarPisoDash(pisoId, btnEl) {
+        document.querySelectorAll('.tab-piso-content').forEach(el => el.classList.add('hidden'));
+        document.getElementById('dash' + pisoId + '-content').classList.remove('hidden');
+
+        document.querySelectorAll('.tab-piso-btn').forEach(btn => {
+            btn.classList.remove('active', 'text-sky-600', 'border-b-2', 'border-sky-600');
+            btn.classList.add('text-slate-400');
+        });
+        btnEl.classList.remove('text-slate-400');
+        btnEl.classList.add('active', 'text-sky-600', 'border-b-2', 'border-sky-600');
+    }
+
+    function exportarExcelConFiltros() {
+        const form = document.getElementById('filtro-form');
+        const urlParams = new URLSearchParams(new FormData(form));
+        window.location.href = "/admin/exportar_ingresos_excel?" + urlParams.toString();
+    }
+
+    function imprimirPDFConFiltros() {
+        const form = document.getElementById('filtro-form');
+        const urlParams = new URLSearchParams(new FormData(form));
+        window.open("/admin/imprimir_reporte?" + urlParams.toString(), "_blank");
+    }
+</script>
+{% endblock %}

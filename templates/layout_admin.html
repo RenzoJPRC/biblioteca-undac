@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel Admin - UNDAC</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="shortcut icon" href="{{ url_for('static', filename='logo_2.png') }}" type="image/x-icon">
+    <meta name="csrf-token" content="{{ csrf_token }}">
+</head>
+
+<body class="bg-slate-50 h-screen flex flex-col md:flex-row overflow-hidden font-sans relative">
+
+    <!-- CABECERA RESPONSIVA EXCLUSIVA PARA CELULARES Y TABLETS -->
+    <header class="md:hidden bg-slate-900 text-white px-4 py-3 flex items-center justify-between shrink-0 z-30 border-b border-slate-800 shadow-md">
+        <div class="flex items-center gap-2.5">
+            <img src="{{ url_for('static', filename='logo_2.png') }}" alt="Logo" class="w-8 h-8 object-contain">
+            <div>
+                <h1 class="text-base font-bold text-sky-500 leading-tight">UNDAC Admin</h1>
+                <p class="text-[9px] text-slate-400 uppercase tracking-widest">Panel de Supervisión</p>
+            </div>
+        </div>
+        <button onclick="toggleMobileSidebar()" class="p-2 text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl transition-all border border-slate-700">
+            <i class="ph ph-list text-2xl"></i>
+        </button>
+    </header>
+
+    <!-- OVERLAY OSCURO PARA MENÚ MÓVIL -->
+    <div id="sidebar-overlay" onclick="toggleMobileSidebar()" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 hidden md:hidden transition-all duration-300"></div>
+
+    <!-- SIDEBAR DE NAVEGACIÓN -->
+    {% include 'partials/_sidebar.html' %}
+
+    <!-- CONTENIDO PRINCIPAL DE PÁGINAS -->
+    <main class="flex-1 flex flex-col h-full overflow-hidden relative">
+        {% block content %}
+        {% endblock %}
+    </main>
+
+    {% include 'partials/_modals_upload.html' %}
+    {% include 'partials/_toast.html' %}
+
+    <script>
+        window.ADMIN_ROL = "{{ session.get('admin_rol', '') }}";
+
+        function toggleMobileSidebar() {
+            const sidebar = document.getElementById('admin-sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+            if (sidebar && overlay) {
+                const isHidden = sidebar.classList.contains('-translate-x-full');
+                if (isHidden) {
+                    sidebar.classList.remove('-translate-x-full');
+                    overlay.classList.remove('hidden');
+                } else {
+                    sidebar.classList.add('-translate-x-full');
+                    overlay.classList.add('hidden');
+                }
+            }
+        }
+        
+        // Interceptor Global Avanzado (Anti-CSRF)
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+        if (csrfToken) {
+            const _originalFetch = window.fetch;
+            window.fetch = async function (...args) {
+                let [resource, config] = args;
+                if (config && (config.method === 'POST' || config.method === 'DELETE')) {
+                    config.headers = {
+                        ...config.headers,
+                        'X-CSRFToken': csrfToken
+                    };
+                }
+                return _originalFetch(resource, config);
+            };
+        }
+    </script>
+
+    {% block scripts %}{% endblock %}
+
+</body>
+
+</html>

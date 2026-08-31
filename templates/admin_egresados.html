@@ -1,0 +1,637 @@
+{% extends "layout_admin.html" %}
+
+{% block content %}
+<header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shrink-0">
+    <h2 class="text-lg font-bold text-slate-700">Gestión de Egresados</h2>
+    <div class="flex gap-2">
+        {% if session.get('admin_rol') != 'Consultor' %}
+        <button onclick="document.getElementById('modal-upload-egresados').classList.remove('hidden')"
+            class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow flex items-center gap-2 transition-colors">
+            <i class="ph ph-file-csv text-lg"></i> Importar Excel
+        </button>
+        <button onclick="abrirModalNuevo()"
+            class="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-colors shadow-sm">
+            <i class="ph ph-plus-circle text-lg"></i>
+            Nuevo Egresado
+        </button>
+        {% endif %}
+    </div>
+</header>
+
+<div class="flex-1 overflow-y-auto p-6 space-y-4 flex flex-col h-full">
+
+    <!-- BUSCADOR Y ACCIONES GLOBALES -->
+    <div class="flex items-center justify-between gap-4">
+        <div class="flex-1">
+            {% with
+            search_title="Buscar Egresado",
+            search_placeholder="Ingresa DNI, Código o Nombre...",
+            base_color="emerald"
+            %}
+            {% include "partials/_search_bar.html" %}
+            {% endwith %}
+        </div>
+
+        <!-- BOTONES GLOBALES DE BASE DE DATOS -->
+        {% if session.get('admin_rol') != 'Consultor' %}
+        <div class="flex gap-2 self-end mb-2 shrink-0">
+            <div class="relative group">
+                <button
+                    class="bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 px-4 py-2 pt-2 rounded-xl text-sm font-bold flex items-center gap-2 shadow-sm transition-all h-[42px]">
+                    <i class="ph ph-globe text-lg text-emerald-500"></i> Acciones Globales
+                    <i class="ph-bold ph-caret-down text-slate-400 text-xs ml-1"></i>
+                </button>
+
+                <!-- Menú Desplegable -->
+                <div
+                    class="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 transform origin-top-right scale-95 group-hover:scale-100">
+                    <div class="p-3 border-b border-slate-50 bg-slate-50 rounded-t-xl">
+                        <p
+                            class="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                            <i class="ph-fill ph-warning text-rose-500"></i> Aplica a toda la BD
+                        </p>
+                    </div>
+                    <div class="p-2 flex flex-col gap-1">
+                        <button onclick="accionGlobalEgresados('vaciar')"
+                            class="w-full text-left px-3 py-2.5 text-sm font-bold text-rose-700 hover:bg-rose-50 rounded-lg flex items-center gap-2 transition-colors">
+                            <i class="ph ph-trash text-lg"></i> Vaciar Todos (Peligro)
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- BARRA DE ACCIONES MASIVAS (Oculta por defecto) -->
+    <div id="barra-acciones-egresados"
+        class="hidden bg-slate-800 text-white p-4 rounded-xl shadow-lg flex items-center justify-between animate-fade-in shrink-0">
+        <div class="font-bold flex items-center gap-2">
+            <i class="ph ph-check-square text-xl text-emerald-400"></i>
+            <span id="contador-seleccionados" class="text-xl">0</span> seleccionados
+        </div>
+        <div class="flex gap-3">
+            <button onclick="accionMasivaEgresados('eliminar')"
+                class="bg-rose-600 hover:bg-rose-500 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors">
+                <i class="ph ph-trash"></i> Eliminar Seleccionados
+            </button>
+        </div>
+    </div>
+
+    <!-- TABLA DE RESULTADOS -->
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex-1 flex flex-col min-h-0"
+        id="contenedor-resultados">
+        <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+            <h3 class="font-bold text-slate-700">Listado de Egresados</h3>
+            <span id="info-paginacion" class="text-xs text-slate-500 font-bold uppercase">Cargando...</span>
+        </div>
+
+        <div class="overflow-y-auto flex-1 relative">
+            <table class="w-full text-left border-collapse">
+                <thead class="bg-slate-50 text-xs uppercase text-slate-400 font-bold sticky top-0 z-10 shadow-sm">
+                    <tr>
+                        {% if session.get('admin_rol') != 'Consultor' %}
+                        <th class="px-6 py-3 bg-slate-50 border-b border-slate-200 w-12 text-center col-acciones">
+                            <input type="checkbox" id="check-todos" onclick="seleccionarTodos(this)"
+                                class="w-4 h-4 text-emerald-600 bg-slate-100 border-slate-300 rounded focus:ring-emerald-500 focus:ring-2 cursor-pointer transition-all">
+                        </th>
+                        {% endif %}
+                        <th class="px-6 py-3 bg-slate-50 border-b border-slate-200">Egresado</th>
+                        <th class="px-6 py-3 bg-slate-50 border-b border-slate-200">DNI / Código</th>
+                        <th class="px-6 py-3 bg-slate-50 border-b border-slate-200">Facultad / Escuela</th>
+                        <th class="px-6 py-3 bg-slate-50 border-b border-slate-200">Contacto</th>
+                        <th class="px-6 py-3 bg-slate-50 border-b border-slate-200">Estado</th>
+                        {% if session.get('admin_rol') != 'Consultor' %}
+                        <th class="px-6 py-3 bg-slate-50 border-b border-slate-200 text-center col-acciones">Acciones</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 text-sm" id="tabla-body">
+                </tbody>
+            </table>
+        </div>
+
+        <!-- FOOTER PAGINACION -->
+        {% with base_color="emerald" %}
+        {% include "partials/_pagination_footer.html" %}
+        {% endwith %}
+    </div>
+</div>
+
+<!-- MODAL FORMULARIO EGRESADO -->
+<div id="modal-egresado"
+    class="fixed inset-0 bg-black/60 hidden backdrop-blur-sm flex items-center justify-center z-50">
+    <div class="bg-white p-8 rounded-xl w-full max-w-2xl shadow-2xl animate-scale-up max-h-[90vh] overflow-y-auto">
+        <h3 id="modal-titulo" class="font-bold mb-6 text-xl text-slate-800 flex items-center gap-2">
+            <i class="ph ph-graduation-cap text-emerald-600 text-2xl"></i>
+            <span>Nuevo Egresado</span>
+        </h3>
+
+        <form id="form-egresado" onsubmit="guardarEgresado(event)" class="space-y-4">
+            <input type="hidden" id="modal-id">
+
+            <!-- Fila 1 -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">DNI *</label>
+                    <input type="text" id="modal-dni" required
+                        class="border border-slate-300 w-full p-2.5 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none transition-all">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Código de Matrícula *</label>
+                    <div class="relative">
+                        <input type="text" id="modal-codigo" required
+                            class="border border-slate-300 w-full p-2.5 pr-12 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none transition-all" placeholder="Buscar en UNDAC...">
+                        <button type="button" onclick="buscarEgresadoUNDAC()" class="absolute right-1.5 top-1.5 bottom-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white px-3 rounded-md transition-all flex items-center justify-center" title="Autocompletar con UNDAC">
+                            <i class="ph-bold ph-magnifying-glass"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Fila 2 -->
+            <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Apellidos y Nombres *</label>
+                <input type="text" id="modal-nombre" required
+                    class="border border-slate-300 w-full p-2.5 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none transition-all placeholder:text-slate-300"
+                    placeholder="Ej: Perez Garcia, Juan...">
+            </div>
+
+            <!-- Fila 3 -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Facultad *</label>
+                    <input type="text" id="modal-facultad" required
+                        class="border border-slate-300 w-full p-2.5 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none transition-all">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Escuela Profesional *</label>
+                    <input type="text" id="modal-escuela" required
+                        class="border border-slate-300 w-full p-2.5 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none transition-all">
+                </div>
+            </div>
+
+            <hr class="border-slate-100 my-2">
+            <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Información de Contacto
+                (Opcional)</p>
+
+            <!-- Fila 4 -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Correo Personal</label>
+                    <input type="email" id="modal-correo"
+                        class="border border-slate-300 w-full p-2.5 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none transition-all">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Correo Institucional</label>
+                    <input type="email" id="modal-correo-inst"
+                        class="border border-slate-300 w-full p-2.5 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none transition-all">
+                </div>
+            </div>
+
+            <!-- Fila 5 -->
+            <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Celular</label>
+                <input type="text" id="modal-celular"
+                    class="border border-slate-300 w-full p-2.5 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none transition-all">
+            </div>
+
+            <div class="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-100">
+                <button type="button" onclick="cerrarModal()"
+                    class="text-slate-500 px-4 py-2 hover:bg-slate-100 rounded-lg font-medium transition-colors">Cancelar</button>
+                <button type="submit"
+                    class="bg-emerald-600 text-white px-6 py-2 rounded-lg hover:bg-emerald-500 font-bold transition-all shadow-lg shadow-emerald-600/20">
+                    <i class="ph ph-floppy-disk mr-1"></i> Guardar Egresado
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let currentPage = 1;
+    let totalPages = 1;
+    let seleccionados = new Set(); // Almacenar IDs seleccionados
+
+    window.onload = function () {
+        buscarEgresado();
+
+        // Polling silencioso
+        setInterval(() => {
+            if (!document.getElementById('modal-egresado').classList.contains('hidden')) return;
+            buscarEgresado(currentPage, true);
+        }, 60000);
+    };
+
+    function buscarEgresado(pagina = 1, silent = false) {
+        const query = document.getElementById('input-busqueda').value;
+        currentPage = pagina;
+
+        const url = `/admin/buscar_egresado?q=${query}&page=${currentPage}`;
+        
+        const checkTodos = document.getElementById('check-todos');
+        if (checkTodos) checkTodos.checked = false;
+
+        const info = document.getElementById('info-paginacion');
+        if (!silent) info.innerText = "Cargando...";
+
+        fetch(url)
+            .then(res => res.json())
+            .then(resp => {
+                const tbody = document.getElementById('tabla-body');
+
+                const data = resp.data;
+                const meta = resp.pagination;
+
+                currentPage = meta.page;
+                totalPages = meta.total_pages;
+
+                if (meta.total_items === 0) {
+                    info.innerText = "0 Resultados";
+                    tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-12 text-center text-slate-400 font-medium">No se encontraron egresados</td></tr>';
+                    actualizarControlesPaginacion();
+                    return;
+                }
+
+                info.innerText = `Mostrando ${data.length} de ${meta.total_items} egresados`;
+
+                let html = "";
+                data.forEach(egre => {
+                    const isActivo = egre.estado === 'ACTIVO';
+                    const estadoHtml = isActivo
+                        ? `<span class="bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-xs font-bold">ACTIVO</span>`
+                        : `<span class="bg-rose-100 text-rose-700 px-2 py-1 rounded text-xs font-bold">INACTIVO</span>`;
+
+                    const isSeleccionado = seleccionados.has(String(egre.id));
+                    const isAdmin = window.ADMIN_ROL !== 'Consultor';
+
+                    html += `
+                        <tr class="hover:bg-slate-50 transition-colors group ${isSeleccionado ? 'bg-emerald-50/50' : ''}">
+                        ${isAdmin ? `<td class="px-6 py-3 border-b border-slate-50 text-center col-acciones">
+                            <input type="checkbox" value="${egre.id}" onclick="toggleSeleccion(this, '${egre.id}')"
+                                ${isSeleccionado ? 'checked' : ''}
+                                class="check-fila w-4 h-4 text-emerald-600 bg-slate-100 border-slate-300 rounded focus:ring-emerald-500 focus:ring-2 cursor-pointer transition-all">
+                        </td>` : ''}
+                        <td class="px-6 py-3 font-medium text-slate-700 border-b border-slate-50">${egre.nombre}</td>
+                        <td class="px-6 py-3 border-b border-slate-50">
+                            <div class="text-slate-600 font-bold">${String(egre.dni).startsWith('INV-') ? '-' : egre.dni}</div>
+                            <div class="text-xs text-slate-400 font-mono">${egre.codigo}</div>
+                        </td>
+                        <td class="px-6 py-3 border-b border-slate-50">
+                            <div class="text-slate-600 text-xs font-bold">${egre.facultad}</div>
+                            <div class="text-xs text-slate-400">${egre.escuela}</div>
+                        </td>
+                        <td class="px-6 py-3 border-b border-slate-50 text-xs">
+                            ${egre.celular ? `<div class="text-slate-600"><i class="ph ph-phone mr-1"></i>${egre.celular}</div>` : ''}
+                            ${egre.correo_personal ? `<div class="text-slate-400 truncate w-32" title="${egre.correo_personal}"><i class="ph ph-envelope mr-1"></i>${egre.correo_personal}</div>` : '<span class="text-slate-300 italic">Sin contacto</span>'}
+                        </td>
+                        <td class="px-6 py-3 border-b border-slate-50">${estadoHtml}</td>
+                        ${isAdmin ? `<td class="px-6 py-3 text-center border-b border-slate-50 flex justify-center gap-1 col-acciones">
+                            <button onclick='abrirModalEditar(${JSON.stringify(egre)})' 
+                                    class="text-slate-400 hover:text-emerald-600 p-2 rounded-full hover:bg-emerald-50 transition-all font-bold" title="Editar Egresado">
+                                <i class="ph ph-pencil-simple text-lg"></i>
+                            </button>
+                            <button onclick='eliminarEgresado(${egre.id}, "${egre.nombre}")' 
+                                    class="text-slate-400 hover:text-red-600 p-2 rounded-full hover:bg-red-50 transition-all font-bold" title="Eliminar Egresado">
+                                <i class="ph ph-trash text-lg"></i>
+                            </button>
+                        </td>` : ''}
+                    </tr>`;
+                });
+
+                tbody.innerHTML = html;
+                actualizarEstadoSeccion();
+                actualizarControlesPaginacion();
+            })
+            .catch(err => console.error("Error cargando egresados:", err));
+    }
+
+    function actualizarControlesPaginacion() {
+        const btnPrev = document.getElementById('btn-prev');
+        const btnNext = document.getElementById('btn-next');
+        const container = document.getElementById('pagination-numbers');
+
+        if (btnPrev) btnPrev.disabled = currentPage <= 1;
+        if (btnNext) btnNext.disabled = currentPage >= totalPages;
+
+        if (!container) return;
+        container.innerHTML = '';
+
+        if (totalPages <= 1) return;
+
+        let startPage = Math.max(1, currentPage - 2);
+        let endPage = Math.min(totalPages, currentPage + 2);
+
+        const baseColorCls = 'sky';
+
+        const crearBotonPagina = (num) => {
+            const btn = document.createElement('button');
+            btn.innerText = num;
+            if (num === currentPage) {
+                btn.className = `bg-${baseColorCls}-600 text-white w-8 h-8 rounded shrink-0 font-bold shadow-sm transition-colors text-xs`;
+            } else {
+                btn.className = 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 w-8 h-8 rounded shrink-0 font-medium transition-colors text-xs';
+            }
+            btn.onclick = () => irAPagina(num);
+            return btn;
+        };
+
+        if (startPage > 1) {
+            container.appendChild(crearBotonPagina(1));
+            if (startPage > 2) {
+                const dots = document.createElement('span');
+                dots.className = 'px-1 text-slate-400 text-xs font-bold cursor-default tracking-widest';
+                dots.innerText = '...';
+                container.appendChild(dots);
+            }
+        }
+
+        for (let i = startPage; i <= endPage; i++) {
+            container.appendChild(crearBotonPagina(i));
+        }
+
+        if (endPage < totalPages) {
+            if (endPage < totalPages - 1) {
+                const dots = document.createElement('span');
+                dots.className = 'px-1 text-slate-400 text-xs font-bold cursor-default tracking-widest';
+                dots.innerText = '...';
+                container.appendChild(dots);
+            }
+            container.appendChild(crearBotonPagina(totalPages));
+        }
+    }
+
+    function irAPagina(pagina) {
+        buscarEgresado(parseInt(pagina));
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function cambiarPagina(delta) {
+        const nuevaPagina = currentPage + delta;
+        if (nuevaPagina >= 1 && nuevaPagina <= totalPages) {
+            irAPagina(nuevaPagina);
+        }
+    }
+
+    function nuevaBusqueda() {
+        buscarEgresado(1);
+    }
+
+    document.getElementById('input-busqueda').addEventListener('keypress', function (e) {
+        if (e.key === 'Enter') nuevaBusqueda();
+    });
+
+    // --- MODALES Y CRUD ---
+
+    function abrirModalNuevo() {
+        document.getElementById('form-egresado').reset();
+        document.getElementById('modal-id').value = '';
+        document.getElementById('modal-titulo').innerHTML = '<i class="ph ph-graduation-cap text-emerald-600 text-2xl"></i><span>Nuevo Egresado</span>';
+        document.getElementById('modal-dni').readOnly = false;
+        document.getElementById('modal-codigo').readOnly = false;
+        document.getElementById('modal-egresado').classList.remove('hidden');
+    }
+
+    async function buscarEgresadoUNDAC() {
+        const codigoInput = document.getElementById('modal-codigo');
+        const codigo = codigoInput.value.trim();
+        
+        if (!codigo) {
+            if (typeof showToast !== 'undefined') showToast("Escribe un código primero", "error");
+            else alert("Escribe un código primero");
+            return;
+        }
+        
+        const btnIcon = codigoInput.nextElementSibling.querySelector('i');
+        btnIcon.className = "ph-bold ph-spinner animate-spin";
+        
+        try {
+            const response = await fetch(`/api/undac/alumno/${codigo}`);
+            const data = await response.json();
+            
+            if (data.status === 'success') {
+                document.getElementById('modal-nombre').value = data.data.nombre_completo;
+                document.getElementById('modal-dni').value = data.data.dni;
+                
+                // La API da la escuela en "Programa facultad"
+                document.getElementById('modal-escuela').value = data.data.facultad;
+                document.getElementById('modal-facultad').value = ""; // Dejar vacío para que el usuario lo llene
+                document.getElementById('modal-facultad').focus(); // Enfocar para que sepa que falta
+                
+                if (data.data.correo) {
+                    document.getElementById('modal-correo-inst').value = data.data.correo;
+                }
+                
+                if (typeof showToast !== 'undefined') showToast("Datos autocompletados", "success");
+            } else {
+                if (typeof showToast !== 'undefined') showToast(data.msg, "error");
+                else alert(data.msg);
+            }
+        } catch (error) {
+            if (typeof showToast !== 'undefined') showToast("Error de conexión", "error");
+            console.error(error);
+        } finally {
+            btnIcon.className = "ph-bold ph-magnifying-glass";
+        }
+    }
+
+    function abrirModalEditar(egresado) {
+        document.getElementById('modal-id').value = egresado.id;
+        document.getElementById('modal-nombre').value = egresado.nombre;
+        document.getElementById('modal-dni').value = egresado.dni;
+        document.getElementById('modal-codigo').value = egresado.codigo;
+        document.getElementById('modal-facultad').value = egresado.facultad;
+        document.getElementById('modal-escuela').value = egresado.escuela;
+        document.getElementById('modal-correo').value = egresado.correo_personal;
+        document.getElementById('modal-correo-inst').value = egresado.correo_inst;
+        document.getElementById('modal-celular').value = egresado.celular;
+
+        // Optionally make DNI read-only here if you don't want them changing it on edit
+        // document.getElementById('modal-dni').readOnly = true;
+
+        document.getElementById('modal-titulo').innerHTML = '<i class="ph ph-pencil-simple text-emerald-600 text-2xl"></i><span>Editar Egresado</span>';
+        document.getElementById('modal-egresado').classList.remove('hidden');
+    }
+
+    function cerrarModal() {
+        document.getElementById('modal-egresado').classList.add('hidden');
+    }
+
+    function guardarEgresado(e) {
+        e.preventDefault();
+
+        const payload = {
+            id: document.getElementById('modal-id').value,
+            nombre: document.getElementById('modal-nombre').value,
+            dni: document.getElementById('modal-dni').value,
+            codigo: document.getElementById('modal-codigo').value,
+            facultad: document.getElementById('modal-facultad').value,
+            escuela: document.getElementById('modal-escuela').value,
+            correo_personal: document.getElementById('modal-correo').value,
+            correo_inst: document.getElementById('modal-correo-inst').value,
+            celular: document.getElementById('modal-celular').value
+        };
+
+        const btn = e.target.querySelector('button[type="submit"]');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="ph ph-spinner animate-spin"></i> Guardando...';
+
+        fetch('/admin/guardar_egresado', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+            .then(res => res.json())
+            .then(data => {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="ph ph-floppy-disk mr-1"></i> Guardar Egresado';
+
+                if (data.status === 'success') {
+                    cerrarModal();
+                    buscarEgresado(currentPage); // Recargar
+                } else {
+                    alert('Error: ' + data.msg);
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                btn.disabled = false;
+                btn.innerHTML = '<i class="ph ph-floppy-disk mr-1"></i> Guardar Egresado';
+                alert('Error al conectar con el servidor.');
+            });
+    }
+
+    function eliminarEgresado(id, nombre) {
+        if (!confirm(`¿Estás SEGURO de eliminar permanentemente a "${nombre}"? Esta acción borrará también su historial de ingresos pasados si los tuviera.`)) {
+            return;
+        }
+
+        fetch(`/admin/eliminar_egresado/${id}`, {
+            method: 'DELETE'
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    buscarEgresado(currentPage); // Recargar la tabla
+                } else {
+                    alert('Error: ' + data.msg);
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                alert('Error al conectar con el servidor.');
+            });
+    }
+
+    // --- ACCIONES MASIVAS E INTERACTIVIDAD ---
+
+    function toggleSeleccion(checkbox, id) {
+        if (checkbox.checked) {
+            seleccionados.add(String(id));
+            checkbox.closest('tr').classList.add('bg-emerald-50/50');
+        } else {
+            seleccionados.delete(String(id));
+            checkbox.closest('tr').classList.remove('bg-emerald-50/50');
+            const checkTodos = document.getElementById('check-todos');
+            if (checkTodos) checkTodos.checked = false;
+        }
+        actualizarBarraFlotante();
+    }
+
+    function seleccionarTodos(checkboxMaestro) {
+        const checkboxes = document.querySelectorAll('.check-fila');
+        checkboxes.forEach(cb => {
+            cb.checked = checkboxMaestro.checked;
+            toggleSeleccion(cb, cb.value);
+        });
+    }
+
+    function actualizarEstadoSeccion() {
+        const checkboxes = document.querySelectorAll('.check-fila');
+        if (checkboxes.length === 0) return;
+
+        const todosSeleccionados = Array.from(checkboxes).every(cb => cb.checked);
+        const checkTodos = document.getElementById('check-todos');
+        if (checkTodos) checkTodos.checked = todosSeleccionados;
+        actualizarBarraFlotante();
+    }
+
+    function actualizarBarraFlotante() {
+        const barra = document.getElementById('barra-acciones-egresados');
+        const contador = document.getElementById('contador-seleccionados');
+
+        if (seleccionados.size > 0) {
+            contador.innerText = seleccionados.size;
+            barra.classList.remove('hidden');
+        } else {
+            barra.classList.add('hidden');
+        }
+    }
+
+    function accionMasivaEgresados(accion) {
+        if (seleccionados.size === 0) return;
+
+        let confirmMsg = `¿Seguro que quieres ${accion.toUpperCase()} a los ${seleccionados.size} egresados seleccionados?`;
+        if (accion === 'eliminar') {
+            confirmMsg = `⚠️ ¡ADVERTENCIA! ¿Estás SEGURO de ELIMINAR permanentemente a los ${seleccionados.size} egresados seleccionados? Esta acción no se puede deshacer.`;
+        }
+
+        if (!confirm(confirmMsg)) return;
+
+        const ids = Array.from(seleccionados);
+
+        fetch(`/admin/eliminar_egresados_masivo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids: ids })
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    seleccionados.clear();
+                    actualizarBarraFlotante();
+                    document.getElementById('check-todos').checked = false;
+                    buscarEgresado(currentPage);
+                } else {
+                    alert('Error: ' + data.msg);
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                alert('Error de conexión.');
+            });
+    }
+
+    function accionGlobalEgresados(accion) {
+        if (accion === 'vaciar') {
+            const code = Math.floor(1000 + Math.random() * 9000);
+            const promptStr = prompt(`⚠️ ¡PELIGRO CRÍTICO! ⚠️\nEstás a punto de VACIAR TODA LA TABLA DE EGRESADOS de la base de datos de la UNDAC.\nEsta acción borrará miles de registros permanentemente y NO SE PUEDE RECUPERAR. \n\nEscribe el código "${code}" para confirmar la destrucción masiva:`);
+
+            if (promptStr !== String(code)) {
+                alert("Código de seguridad incorrecto. Operación abortada.");
+                return;
+            }
+
+            fetch('/admin/vaciar_egresados', {
+                method: 'DELETE'
+            })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        alert("✅ " + data.msg);
+                        seleccionados.clear();
+                        buscarEgresado(1);
+                    } else {
+                        alert("Error: " + data.msg);
+                    }
+                })
+                .catch(err => alert('Error de conexión con el servidor.'));
+        }
+    }
+
+</script>
+{% endblock %}
+```

@@ -1,0 +1,80 @@
+<!-- templates/partials/_toast.html -->
+<div id="toast-container" class="fixed top-6 right-6 z-[100] flex flex-col gap-3 pointer-events-none"></div>
+
+<style>
+    @keyframes slideInRight {
+        from {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+
+    @keyframes fadeOutRight {
+        from {
+            transform: translateX(0);
+            opacity: 1;
+        }
+
+        to {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+    }
+
+    .toast-enter {
+        animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    .toast-exit {
+        animation: fadeOutRight 0.3s ease-in forwards;
+    }
+</style>
+
+<script>
+    function showToast(message, type = 'success', duration = 3000) {
+        const container = document.getElementById('toast-container');
+
+        const toast = document.createElement('div');
+        toast.className = `toast-enter pointer-events-auto flex items-center gap-3 min-w-[300px] max-w-sm px-4 py-3 rounded-lg shadow-xl border bg-white text-slate-700`;
+
+        let iconHtml = '';
+        let borderClass = '';
+
+        if (type === 'success') {
+            borderClass = 'border-emerald-200';
+            iconHtml = '<div class="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600"><i class="ph ph-check-circle text-xl"></i></div>';
+        } else if (type === 'error') {
+            borderClass = 'border-rose-200';
+            iconHtml = '<div class="flex-shrink-0 w-8 h-8 rounded-full bg-rose-100 flex items-center justify-center text-rose-600"><i class="ph ph-warning-circle text-xl"></i></div>';
+        } else if (type === 'info') {
+            borderClass = 'border-blue-200';
+            iconHtml = '<div class="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600"><i class="ph ph-info text-xl"></i></div>';
+        }
+
+        toast.classList.add(borderClass);
+
+        toast.innerHTML = `
+            ${iconHtml}
+            <div class="flex-1">
+                <p class="text-sm font-semibold">${message}</p>
+            </div>
+            <button onclick="this.parentElement.remove()" class="text-slate-400 hover:text-slate-600 focus:outline-none">
+                <i class="ph ph-x text-lg"></i>
+            </button>
+        `;
+
+        container.appendChild(toast);
+
+        setTimeout(() => {
+            if (toast.parentElement) {
+                toast.classList.replace('toast-enter', 'toast-exit');
+                setTimeout(() => toast.remove(), 300); // 300ms is exit anim duration
+            }
+        }, duration);
+    }
+</script>

@@ -1,0 +1,237 @@
+{% extends "layout_admin.html" %}
+
+{% block content %}
+<header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shrink-0">
+    <h2 class="text-lg font-bold text-slate-700 h-full flex items-center">
+        Gestión de Eventos Especiales
+        <span class="ml-3 px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-700 text-xs font-bold">Nuevo</span>
+    </h2>
+    <button onclick="abrirModalNuevo()"
+        class="bg-rose-600 hover:bg-rose-500 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-colors shadow-sm">
+        <i class="ph ph-plus-circle text-lg"></i>
+        Programar Evento
+    </button>
+</header>
+
+<div class="flex-1 overflow-y-auto p-6 space-y-4 flex flex-col h-full">
+    <!-- BUSCADOR -->
+    {% with
+    search_title="Buscar Eventos",
+    search_placeholder="Ingresa el nombre del evento...",
+    base_color="rose"
+    %}
+    {% include "partials/_search_bar.html" %}
+    {% endwith %}
+
+    <!-- TABLA DE RESULTADOS -->
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex-1 flex flex-col min-h-0"
+        id="contenedor-resultados">
+        <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+            <h3 class="font-bold text-slate-700">Listado de Eventos</h3>
+        </div>
+
+        <div class="flex-1 overflow-y-auto">
+            <table class="w-full text-left relative">
+                <thead class="bg-slate-50 text-xs uppercase text-slate-400 font-bold sticky top-0 z-10 shadow-sm">
+                    <tr>
+                        <th class="px-6 py-3">Estado</th>
+                        <th class="px-6 py-3">Nombre del Evento</th>
+                        <th class="px-6 py-3">Sede</th>
+                        <th class="px-6 py-3">Fecha y Hora</th>
+                        <th class="px-6 py-3 text-center">Asistentes</th>
+                        <th class="px-6 py-3 text-center">Invitados Excl.</th>
+                        <th class="px-6 py-3 text-right">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 text-sm" id="tabla-body">
+                </tbody>
+            </table>
+        </div>
+
+        <!-- FOOTER PAGINACION -->
+        {% with base_color="rose" %}
+        {% include "partials/_pagination_footer.html" %}
+        {% endwith %}
+    </div>
+</div>
+
+<!-- MODAL FORMULARIO EVENTO -->
+<div id="modal-evento" class="fixed inset-0 bg-black/60 hidden backdrop-blur-sm flex items-center justify-center z-50">
+    <div class="bg-white p-8 rounded-xl w-full max-w-3xl shadow-2xl animate-scale-up max-h-[90vh] overflow-y-auto">
+        <h3 id="modal-titulo" class="font-bold mb-6 text-xl text-slate-800 flex items-center gap-2">
+            <i class="ph ph-calendar-plus text-rose-600 text-2xl"></i>
+            <span>Nuevo Evento</span>
+        </h3>
+
+        <form id="form-evento" onsubmit="guardarEvento(event)" class="space-y-4">
+            <input type="hidden" id="modal-id">
+
+            <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Datos Generales</p>
+
+            <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Nombre / Título del Evento
+                    *</label>
+                <input type="text" id="modal-nombre" required
+                    class="border border-slate-300 w-full p-2.5 rounded-lg focus:ring-2 focus:ring-rose-500 outline-none transition-all"
+                    placeholder="Ej: Charla Magistral de IA">
+            </div>
+
+            <div class="grid grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Fecha *</label>
+                    <input type="date" id="modal-fecha" required
+                        class="border border-slate-300 w-full p-2.5 rounded-lg focus:ring-2 focus:ring-rose-500 outline-none transition-all">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Hr. Inicio *</label>
+                    <input type="time" id="modal-hora-inicio" required
+                        class="border border-slate-300 w-full p-2.5 rounded-lg focus:ring-2 focus:ring-rose-500 outline-none transition-all text-center font-mono">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Hr. Fin *</label>
+                    <input type="time" id="modal-hora-fin" required
+                        class="border border-slate-300 w-full p-2.5 rounded-lg focus:ring-2 focus:ring-rose-500 outline-none transition-all text-center font-mono">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Lugar (Opcional)</label>
+                <input type="text" id="modal-lugar"
+                    class="border border-slate-300 w-full p-2.5 rounded-lg focus:ring-2 focus:ring-rose-500 outline-none transition-all"
+                    placeholder="Ej: Auditorio Principal, Pabellón A...">
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Sede Destino *</label>
+                {% if session.get('admin_rol') == 'Supervisor' %}
+                <input type="hidden" id="modal-sede" value="{{ session.get('admin_sede') }}">
+                <div
+                    class="border border-slate-200 w-full p-2.5 rounded-lg bg-slate-50 text-slate-500 font-bold uppercase cursor-not-allowed">
+                    <i class="ph ph-map-pin mr-1"></i> {{ session.get('admin_sede') }}
+                </div>
+                {% else %}
+                <select id="modal-sede" required
+                    class="border border-slate-300 w-full p-2.5 rounded-lg focus:ring-2 focus:ring-rose-500 outline-none transition-all bg-white font-bold text-slate-700">
+                    <option value="Central">Sede Central (Pasco)</option>
+                    <option value="Tarma">Filial Tarma</option>
+                    <option value="La Merced">Filial La Merced</option>
+                    <option value="Oxapampa">Filial Oxapampa</option>
+                    <option value="Paucartambo">Filial Paucartambo</option>
+                    <option value="Yanahuanca">Filial Yanahuanca</option>
+                    <option value="Todas">Múltiples (Todas)</option>
+                </select>
+                {% endif %}
+            </div>
+
+            <hr class="border-slate-100 my-4">
+
+            <div>
+                <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">
+                    Reglas de Acceso (¿Quiénes pueden entrar con su Carnet/DNI actual?)
+                </p>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <label
+                        class="flex items-center gap-2 p-3 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
+                        <input type="checkbox" id="chk-alumnos" class="w-4 h-4 text-rose-600 rounded" checked>
+                        <span class="text-sm font-bold text-slate-700">Alumnos</span>
+                    </label>
+                    <label
+                        class="flex items-center gap-2 p-3 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
+                        <input type="checkbox" id="chk-egresados" class="w-4 h-4 text-rose-600 rounded">
+                        <span class="text-sm font-bold text-slate-700">Egresados</span>
+                    </label>
+                    <label
+                        class="flex items-center gap-2 p-3 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
+                        <input type="checkbox" id="chk-personal" class="w-4 h-4 text-rose-600 rounded">
+                        <span class="text-sm font-bold text-slate-700">Administrativo y/o Personal</span>
+                    </label>
+                    <label
+                        class="flex items-center gap-2 p-3 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
+                        <input type="checkbox" id="chk-visitantes" class="w-4 h-4 text-rose-600 rounded">
+                        <span class="text-sm font-bold text-slate-700">Visitantes</span>
+                    </label>
+                    <label class="flex items-center gap-2 border p-3 rounded-xl hover:bg-slate-50 cursor-pointer transition-colors">
+                        <input type="checkbox" name="permite_docentes" id="chk-docentes" class="w-4 h-4 text-sky-600">
+                        <span class="text-sm font-bold text-slate-700">Docentes</span>
+                    </label>
+                </div>
+                <p class="text-xs text-slate-500 mt-2 italic">* Los usuarios que no pertenezcan a los grupos marcados
+                    serán rechazados, a menos que los cargues en la "Lista Exclusiva" de invitados por Excel.</p>
+            </div>
+
+            <div class="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-100 relative">
+                <button type="button" onclick="cerrarModal()"
+                    class="px-5 py-2 text-slate-500 hover:bg-slate-100 rounded-lg font-bold transition-colors">Cancelar</button>
+
+                <button type="submit"
+                    class="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-bold transition-colors shadow-md">
+                    <i class="ph ph-floppy-disk mr-1"></i> Guardar Evento
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- MODAL CARGAR EXCEL (INVITADOS) -->
+<div id="modal-excel" class="fixed inset-0 bg-black/60 hidden backdrop-blur-sm flex items-center justify-center z-50">
+    <div class="bg-white p-8 rounded-xl w-full max-w-md shadow-2xl animate-scale-up">
+        <div class="text-center mb-6">
+            <div class="w-16 h-16 bg-rose-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <i class="ph ph-file-xls text-rose-600 text-3xl"></i>
+            </div>
+            <h3 class="font-bold text-xl text-slate-800">Lista Exclusiva VIP</h3>
+            <p class="text-sm text-slate-500 mt-1" id="excel-evento-nombre">Cargar invitados para...</p>
+        </div>
+
+        <form id="form-excel" onsubmit="uploadExcel(event)" class="space-y-4">
+            <input type="hidden" id="excel-evento-id">
+
+            <div class="p-4 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-600 flex flex-col gap-2">
+                <div class="flex gap-2 items-start">
+                    <i class="ph-fill ph-info text-rose-500 text-xl shrink-0 mt-0.5"></i>
+                    <p>El Excel debe contener obligatoriamente: <br><b><span class="text-slate-800">DNI</span></b> y
+                        <b><span class="text-slate-800">NOMBRES</span></b> (Institución opcional).
+                    </p>
+                </div>
+                <!-- NUEVO MENSAJE DE ACLARACIÓN PARA EL USUARIO -->
+                <div class="flex gap-2 items-start mt-2 border-t border-slate-200 pt-3">
+                    <i class="ph-fill ph-lightbulb text-amber-500 text-xl shrink-0 mt-0.5"></i>
+                    <p class="text-xs"><strong>Tip de uso:</strong> Esta lista es ideal para registrar
+                        <em>transportistas, organizadores, o visitantes externos</em> que asisten puntualmente a este
+                        evento y que <strong>no quieres revolver</strong> en tu padrón general de Visitantes.
+                    </p>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Seleccionar Archivo Excel
+                    (.xlsx)</label>
+                <input type="file" id="archivo-excel" accept=".xlsx,.xls" required class="block w-full text-sm text-slate-500
+                    file:mr-4 file:py-2.5 file:px-4
+                    file:rounded-lg file:border-0
+                    file:text-sm file:font-semibold
+                    file:bg-rose-50 file:text-rose-700
+                    hover:file:bg-rose-100 cursor-pointer border border-slate-200 rounded-lg">
+            </div>
+
+            <div class="flex justify-end gap-3 mt-6">
+                <button type="button" onclick="document.getElementById('modal-excel').classList.add('hidden')"
+                    class="px-5 py-2 text-slate-500 hover:bg-slate-100 rounded-lg font-bold transition-colors">Cancelar</button>
+                <button type="submit" id="btn-upload"
+                    class="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-bold transition-colors shadow-md flex items-center gap-2">
+                    <i class="ph ph-upload-simple"></i> Iniciar Carga
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/eventos.js') }}?v=3.0"></script>
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        inicializarEventos();
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,203 @@
+{% extends "layout_admin.html" %}
+
+{% block content %}
+<header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shrink-0">
+    <h2 class="text-lg font-bold text-slate-700">Gestión de Personal Administrativo</h2>
+    <div class="flex gap-2">
+        {% if session.get('admin_rol') != 'Consultor' %}
+        <button onclick="document.getElementById('modal-upload-personal').classList.remove('hidden')"
+            class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow flex items-center gap-2 transition-colors">
+            <i class="ph ph-file-csv text-lg"></i> Importar Excel
+        </button>
+        <button onclick="abrirModalNuevo()"
+            class="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-colors shadow-sm">
+            <i class="ph ph-plus-circle text-lg"></i>
+            Nuevo Personal
+        </button>
+        {% endif %}
+    </div>
+</header>
+
+<div class="flex-1 overflow-y-auto p-6 space-y-4 flex flex-col h-full">
+    <!-- BUSCADOR Y ACCIONES GLOBALES -->
+    <div class="flex items-center justify-between gap-4">
+        <div class="flex-1">
+            {% with
+            search_title="Buscar Personal Administrativo",
+            search_placeholder="Ingresa DNI o Nombre...",
+            base_color="purple"
+            %}
+            {% include "partials/_search_bar.html" %}
+            {% endwith %}
+        </div>
+
+        <!-- BOTONES GLOBALES DE BASE DE DATOS -->
+        {% if session.get('admin_rol') != 'Consultor' %}
+        <div class="flex gap-2 self-end mb-2 shrink-0">
+            <div class="relative group">
+                <button
+                    class="bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 px-4 py-2 pt-2 rounded-xl text-sm font-bold flex items-center gap-2 shadow-sm transition-all h-[42px]">
+                    <i class="ph ph-globe text-lg text-purple-500"></i> Acciones Globales
+                    <i class="ph-bold ph-caret-down text-slate-400 text-xs ml-1"></i>
+                </button>
+
+                <!-- Menú Desplegable -->
+                <div
+                    class="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 transform origin-top-right scale-95 group-hover:scale-100">
+                    <div class="p-3 border-b border-slate-50 bg-slate-50 rounded-t-xl">
+                        <p
+                            class="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                            <i class="ph-fill ph-warning text-rose-500"></i> Aplica a toda la BD
+                        </p>
+                    </div>
+                    <div class="p-2 flex flex-col gap-1">
+                        <button onclick="accionGlobalPersonal('vaciar')"
+                            class="w-full text-left px-3 py-2.5 text-sm font-bold text-rose-700 hover:bg-rose-50 rounded-lg flex items-center gap-2 transition-colors">
+                            <i class="ph ph-trash text-lg"></i> Vaciar Todos (Peligro)
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- BARRA DE ACCIONES MASIVAS (Oculta por defecto) -->
+    <div id="barra-acciones-personal"
+        class="hidden bg-slate-800 text-white p-4 rounded-xl shadow-lg flex items-center justify-between animate-fade-in shrink-0">
+        <div class="font-bold flex items-center gap-2">
+            <i class="ph ph-check-square text-xl text-purple-400"></i>
+            <span id="contador-seleccionados" class="text-xl">0</span> seleccionados
+        </div>
+        <div class="flex gap-3">
+            <button onclick="accionMasivaPersonal('eliminar')"
+                class="bg-rose-600 hover:bg-rose-500 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors">
+                <i class="ph ph-trash"></i> Eliminar Seleccionados
+            </button>
+        </div>
+    </div>
+
+    <!-- TABLA DE RESULTADOS -->
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex-1 flex flex-col min-h-0"
+        id="contenedor-resultados">
+        <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+            <h3 class="font-bold text-slate-700">Listado de Personal</h3>
+            <span id="info-paginacion"
+                class="text-[11px] font-bold text-slate-400 uppercase tracking-widest bg-white px-3 py-1.5 rounded-full border border-slate-200 shadow-sm hidden md:inline-block"></span>
+        </div>
+
+        <div class="flex-1 overflow-y-auto">
+            <table class="w-full text-left relative">
+                <thead class="bg-slate-50 text-xs uppercase text-slate-400 font-bold sticky top-0 z-10 shadow-sm">
+                    <tr>
+                        {% if session.get('admin_rol') != 'Consultor' %}
+                        <th class="px-6 py-3 w-12 text-center col-acciones">
+                            <input type="checkbox" id="check-todos-personal" onclick="seleccionarTodosPersonal(this)"
+                                class="w-4 h-4 text-purple-600 bg-slate-100 border-slate-300 rounded focus:ring-purple-500 focus:ring-2 cursor-pointer transition-all">
+                        </th>
+                        {% endif %}
+                        <th class="px-6 py-3">DNI</th>
+                        <th class="px-6 py-3">Personal</th>
+                        <th class="px-6 py-3">Oficina</th>
+                        <th class="px-6 py-3">Contacto</th>
+                        {% if session.get('admin_rol') != 'Consultor' %}
+                        <th class="px-6 py-3 text-right col-acciones">Acciones</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 text-sm" id="tabla-body">
+                </tbody>
+            </table>
+        </div>
+
+        <!-- FOOTER PAGINACION -->
+        {% with base_color="purple" %}
+        {% include "partials/_pagination_footer.html" %}
+        {% endwith %}
+    </div>
+</div>
+
+<!-- MODAL FORMULARIO PERSONAL -->
+<div id="modal-personal"
+    class="fixed inset-0 bg-black/60 hidden backdrop-blur-sm flex items-center justify-center z-50">
+    <div class="bg-white p-8 rounded-xl w-full max-w-2xl shadow-2xl animate-scale-up max-h-[90vh] overflow-y-auto">
+        <h3 id="modal-titulo" class="font-bold mb-6 text-xl text-slate-800 flex items-center gap-2">
+            <i class="ph ph-briefcase text-purple-600 text-2xl"></i>
+            <span>Nuevo Personal Administrativo</span>
+        </h3>
+
+        <form id="form-personal" onsubmit="guardarPersonal(event)" class="space-y-4">
+            <input type="hidden" id="modal-id">
+
+            <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Datos Obligatorios</p>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">DNI *</label>
+                    <input type="text" id="modal-dni" required maxlength="8"
+                        class="border border-slate-300 w-full p-2.5 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none transition-all font-mono"
+                        placeholder="8 dígitos">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Apellidos y Nombres *</label>
+                    <input type="text" id="modal-nombre" required
+                        class="border border-slate-300 w-full p-2.5 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none transition-all"
+                        placeholder="Ej: Perez Garcia, Juan...">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Oficina</label>
+                <input type="text" id="modal-oficina"
+                    class="border border-slate-300 w-full p-2.5 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none transition-all"
+                    placeholder="Ej: Dirección Académica">
+            </div>
+
+            <hr class="border-slate-100 my-2">
+            <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Información de Contacto
+                (Opcional)</p>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Correo Institucional</label>
+                    <input type="email" id="modal-correo-inst"
+                        class="border border-slate-300 w-full p-2.5 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none transition-all"
+                        placeholder="@undac.edu.pe">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Correo Personal</label>
+                    <input type="email" id="modal-correo"
+                        class="border border-slate-300 w-full p-2.5 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none transition-all">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Teléfono</label>
+                    <input type="text" id="modal-telefono"
+                        class="border border-slate-300 w-full p-2.5 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none transition-all">
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-100">
+                <button type="button" onclick="cerrarModal()"
+                    class="px-5 py-2 text-slate-500 hover:bg-slate-100 rounded-lg font-bold transition-colors">Cancelar</button>
+                <button type="submit"
+                    class="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold transition-colors shadow-md">
+                    <i class="ph ph-floppy-disk mr-1"></i> Guardar Personal
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/personal.js') }}?v=3.1"></script>
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        inicializarAdminPersonal();
+    });
+</script>
+{% endblock %}

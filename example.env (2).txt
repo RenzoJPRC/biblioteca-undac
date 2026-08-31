@@ -1,0 +1,26 @@
+# ============================================================
+# CONFIGURACIÓN FLASK
+# ============================================================
+
+FLASK_APP=app.py
+FLASK_ENV=development
+
+# Clave secreta para sesiones y seguridad CSRF
+SECRET_KEY=undac_biblioteca_secreto_seguro_2026_cambiar_en_produccion
+
+# Puerto del sistema
+PORT=5000
+
+# En local debe ser False.
+# Solo poner True si usas HTTPS.
+SESSION_COOKIE_SECURE=False
+
+
+# ============================================================
+# CONFIGURACIÓN SQL SERVER
+# ============================================================
+
+DB_DRIVER={ODBC Driver 17 for SQL Server}
+DB_SERVER=RENZO\SQL2025
+DB_DATABASE=BibliotecaUNDAC
+DB_TRUSTED_CONNECTION=yes

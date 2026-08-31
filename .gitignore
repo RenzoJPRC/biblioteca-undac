@@ -1,0 +1,44 @@
+# Entorno virtual
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Variables privadas y llaves
+.env
+.env.*
+*.env
+
+# IDEs
+.vscode/
+.idea/
+
+# Sistema operativo
+Thumbs.db
+.DS_Store
+
+# Logs y backups
+*.log
+*.bak
+*.tmp
+*.temp
+
+# Archivos temporales y datos
+temp_db_analysis/
+scratch/
+*.xlsx
+*.xls
+*.csv
+*.zip
+
+# Cloudflare y credenciales
+URL_PUBLICA.txt
+*.pem
+*.key
+*.crt
+credentials.json
+secrets.json

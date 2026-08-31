@@ -1,0 +1,141 @@
+<aside id="admin-sidebar" class="w-64 bg-slate-900 text-white flex flex-col shadow-2xl shrink-0 transition-transform duration-300 z-50 fixed md:relative inset-y-0 left-0 -translate-x-full md:translate-x-0">
+
+    <style>
+        /* Ocultar barra de scroll en WebKit (Chrome, Safari, Edge) */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+
+        /* Ocultar barra de scroll en Firefox */
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            /* IE and Edge */
+            scrollbar-width: none;
+            /* Firefox */
+        }
+    </style>
+
+    <div class="p-6 border-b border-slate-800 flex flex-col items-center text-center">
+        <img src="{{ url_for('static', filename='logo_2.png') }}" alt="Logo Admin"
+            class="w-16 h-16 mb-3 object-contain">
+        <h1 class="text-xl font-bold text-sky-500 tracking-widest">UNDAC</h1>
+        <p class="text-[10px] text-slate-500 uppercase tracking-wider">Panel de Supervisión</p>
+    </div>
+
+    <nav class="flex-1 overflow-y-auto no-scrollbar py-4 px-3 space-y-6">
+
+        {% if session.get('admin_rol') != 'Consultor' %}
+        <div>
+            <p class="px-3 text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Control de Acceso</p>
+            <div class="space-y-1">
+                <a href="/admin"
+                    class="flex items-center gap-3 px-3 py-2 rounded-lg transition-all {% if request.path == '/admin' %} bg-sky-600 text-white shadow-lg shadow-sky-900/20 {% else %} text-slate-400 hover:text-white hover:bg-slate-800 {% endif %}">
+                    <i class="ph ph-chart-bar text-lg"></i>
+                    <span class="text-sm font-medium">Panel de Control</span>
+                </a>
+                <a href="/admin/eventos"
+                    class="flex items-center gap-3 px-3 py-2 rounded-lg transition-all {% if request.path == '/admin/eventos' %} bg-rose-600 text-white shadow-lg shadow-rose-900/20 {% else %} text-slate-400 hover:text-white hover:bg-slate-800 {% endif %}">
+                    <i class="ph ph-ticket text-lg"></i>
+                    <span class="text-sm font-medium">Eventos Especiales</span>
+                </a>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if session.get('admin_rol') in ['SuperAdmin', 'Consultor'] %}
+        <div>
+            <p class="px-3 text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Gestión de Usuarios</p>
+            <div class="space-y-1">
+                <a href="/admin/carnets"
+                    class="flex items-center gap-3 px-3 py-2 rounded-lg transition-all {% if request.path == '/admin/carnets' %} bg-sky-600 text-white shadow-lg shadow-sky-900/20 {% else %} text-slate-400 hover:text-white hover:bg-slate-800 {% endif %}">
+                    <i class="ph ph-identification-card text-lg"></i>
+                    <span class="text-sm font-medium">Alumnos</span>
+                </a>
+                <a href="/admin/docentes"
+                    class="flex items-center gap-3 px-3 py-2 rounded-lg transition-all {% if request.path == '/admin/docentes' %} bg-sky-600 text-white shadow-lg shadow-sky-900/20 {% else %} text-slate-400 hover:text-white hover:bg-slate-800 {% endif %}">
+                    <i class="ph ph-chalkboard-teacher text-lg"></i>
+                    <span class="text-sm font-medium">Docentes</span>
+                </a>
+                <a href="/admin/egresados"
+                    class="flex items-center gap-3 px-3 py-2 rounded-lg transition-all {% if request.path == '/admin/egresados' %} bg-sky-600 text-white shadow-lg shadow-sky-900/20 {% else %} text-slate-400 hover:text-white hover:bg-slate-800 {% endif %}">
+                    <i class="ph ph-graduation-cap text-lg"></i>
+                    <span class="text-sm font-medium">Egresados</span>
+                </a>
+                <a href="/admin/personal"
+                    class="flex items-center gap-3 px-3 py-2 rounded-lg transition-all {% if request.path == '/admin/personal' %} bg-sky-600 text-white shadow-lg shadow-sky-900/20 {% else %} text-slate-400 hover:text-white hover:bg-slate-800 {% endif %}">
+                    <i class="ph ph-briefcase text-lg"></i>
+                    <span class="text-sm font-medium">Personal Admin.</span>
+                </a>
+                <a href="/admin/visitantes"
+                    class="flex items-center gap-3 px-3 py-2 rounded-lg transition-all {% if request.path == '/admin/visitantes' %} bg-sky-600 text-white shadow-lg shadow-sky-900/20 {% else %} text-slate-400 hover:text-white hover:bg-slate-800 {% endif %}">
+                    <i class="ph ph-users-three text-lg"></i>
+                    <span class="text-sm font-medium">Visitantes</span>
+                </a>
+            </div>
+        </div>
+
+        {% if session.get('admin_rol') != 'Consultor' %}
+        <div>
+            <p class="px-3 text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Sistema y Seguridad</p>
+            <div class="space-y-1">
+                <a href="/admin/accesos"
+                    class="flex items-center gap-3 px-3 py-2 rounded-lg transition-all {% if request.path == '/admin/accesos' %} bg-emerald-600 text-white shadow-lg shadow-emerald-900/20 {% else %} text-slate-400 hover:text-white hover:bg-slate-800 {% endif %}">
+                    <i class="ph ph-shield-check text-lg"></i>
+                    <span class="text-sm font-medium">Gestores (RBAC)</span>
+                </a>
+                <a href="/admin/auditoria"
+                    class="flex items-center gap-3 px-3 py-2 rounded-lg transition-all {% if request.path == '/admin/auditoria' %} bg-indigo-600 text-white shadow-lg shadow-indigo-900/20 {% else %} text-slate-400 hover:text-white hover:bg-slate-800 {% endif %}">
+                    <i class="ph ph-eye text-lg"></i>
+                    <span class="text-sm font-medium">Visor Auditoría</span>
+                </a>
+                <a href="/admin/salas"
+                    class="flex items-center gap-3 px-3 py-2 rounded-lg transition-all {% if request.path == '/admin/salas' %} bg-sky-600 text-white shadow-lg shadow-sky-900/20 {% else %} text-slate-400 hover:text-white hover:bg-slate-800 {% endif %}">
+                    <i class="ph ph-monitor text-lg"></i>
+                    <span class="text-sm font-medium">Gestor de Salas</span>
+                </a>
+                <hr class="border-slate-800 my-2">
+                <a href="/admin/backup"
+                    class="flex items-center gap-3 px-3 py-2 rounded-lg transition-all {% if request.path == '/admin/backup' %} bg-orange-600 text-white shadow-lg shadow-orange-900/20 {% else %} text-slate-400 hover:text-white hover:bg-slate-800 {% endif %}">
+                    <i class="ph ph-hard-drives text-lg"></i>
+                    <span class="text-sm font-medium">Backup Completo</span>
+                </a>
+            </div>
+        </div>
+        {% endif %}
+        {% elif session.get('admin_rol') == 'Supervisor' %}
+        <div class="p-4 bg-sky-900/20 border border-sky-800 rounded-lg mx-2 text-center mt-6">
+            <i class="ph-fill ph-info text-sky-500 text-2xl mb-2"></i>
+            <p class="text-xs text-slate-400">Modo Supervisor</p>
+            <p class="text-[10px] text-slate-500 mt-1">Vistas de edición bloqueadas por seguridad.</p>
+        </div>
+        {% endif %}
+
+        {% if session.get('admin_rol') == 'Consultor' %}
+        <div class="p-4 bg-emerald-900/20 border border-emerald-800 rounded-lg mx-2 text-center mt-6">
+            <i class="ph-fill ph-magnifying-glass text-emerald-500 text-2xl mb-2"></i>
+            <p class="text-xs text-slate-400">Modo Consultor</p>
+            <p class="text-[10px] text-slate-500 mt-1">Acceso de Solo Lectura. Cambios deshabilitados.</p>
+        </div>
+        {% endif %}
+
+    </nav>
+
+    <div class="p-4 border-t border-slate-800 bg-slate-900 flex flex-col gap-2">
+        <div class="flex items-center justify-between text-slate-400 text-xs px-2">
+            <div class="flex items-center gap-2 truncate">
+                <i class="ph-fill ph-user-circle text-2xl text-sky-500"></i>
+                <div class="flex flex-col">
+                    <span class="truncate font-bold text-white">{{ session.get('admin_user', 'Admin') }}</span>
+                    <span class="truncate text-[10px] uppercase text-sky-500">{{ session.get('admin_rol', 'Staff')
+                        }}</span>
+                </div>
+            </div>
+            <a href="/admin/logout"
+                class="bg-rose-500/10 text-rose-500 p-2 rounded-lg hover:bg-rose-500 hover:text-white transition-colors"
+                title="Cerrar Sesión">
+                <i class="ph ph-sign-out text-xl"></i>
+            </a>
+        </div>
+    </div>
+
+</aside>

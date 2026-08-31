@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Acceso Biblioteca UNDAC</title>
+    <link rel="shortcut icon" href="{{ url_for('static', filename='logo.png') }}" type="image/x-icon">
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+        .fade-in {
+            animation: fadeIn 0.4s ease-out forwards;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+</head>
+
+<body
+    class="bg-gradient-to-br from-sky-300 via-sky-200 to-cyan-100 text-slate-800 min-h-screen md:h-screen flex flex-col items-center justify-between md:justify-center overflow-y-auto md:overflow-hidden font-sans select-none relative p-4 md:p-0"
+    onclick="focarInput()">
+
+    <div id="glow-overlay" class="fixed inset-0 pointer-events-none transition-all duration-700 z-50 bg-transparent">
+    </div>
+
+    <!-- NAVEGACIÓN SUPERIOR RESPONSIVA (MÓVIL + DESKTOP) -->
+    <header class="w-full max-w-7xl flex flex-col md:flex-row items-center justify-between gap-4 p-4 md:p-8 md:absolute md:top-0 md:left-0 md:right-0 z-40">
+        
+        <!-- LOGO UNDAC -->
+        <a href="/" class="cursor-pointer focus:outline-none flex flex-col items-center md:items-start text-center md:text-left">
+            <h1 class="text-2xl md:text-3xl font-bold tracking-widest text-sky-600 drop-shadow-sm">UNDAC</h1>
+            <p class="text-[10px] md:text-xs text-slate-500 uppercase tracking-widest mt-0.5">Biblioteca Central</p>
+        </a>
+
+        <!-- ESTACIÓN METEOROLÓGICA CERRO DE PASCO -->
+        <div id="widget-clima-pasco" class="text-xs font-bold text-slate-700 bg-white/90 backdrop-blur-md border border-sky-200 px-4 md:px-5 py-2 md:py-2.5 rounded-full shadow-lg flex items-center gap-2">
+            <i class="ph-bold ph-thermometer text-sky-600 text-base"></i>
+            <span class="text-sky-800 uppercase tracking-wider text-[10px] md:text-[11px] font-extrabold hidden sm:inline">Estación Meteorológica Cerro de Pasco:</span>
+            <span id="txt-clima" class="text-slate-900 font-extrabold text-xs">Cargando clima...</span>
+        </div>
+
+        <!-- INFORMACIÓN DE SALA Y CONTADOR -->
+        <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2 md:gap-3 bg-white/80 border border-sky-200 px-4 md:px-6 py-2 md:py-3 rounded-2xl shadow-xl shadow-sky-100 backdrop-blur-sm">
+                <div class="relative flex h-3.5 w-3.5 md:h-4 md:w-4">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-3.5 w-3.5 md:h-4 md:w-4 bg-emerald-500"></span>
+                </div>
+                <span class="text-emerald-600 font-mono text-sm md:text-lg font-bold uppercase tracking-widest drop-shadow-sm">
+                    {% if piso == 'EVENTO' %}
+                    Terminal Evento
+                    {% else %}
+                    <span class="text-slate-500 text-xs md:text-sm">PISO {{ piso }}</span> • {{ nombre_sala }}
+                    {% endif %}
+                </span>
+            </div>
+
+            <div class="bg-white/80 border border-sky-200 px-3.5 md:px-5 py-1.5 md:py-2 rounded-xl shadow-lg shadow-sky-100 backdrop-blur-sm flex items-center gap-2 md:gap-3 transition-all duration-300">
+                <span class="text-slate-500 text-[10px] md:text-xs uppercase tracking-widest font-bold hidden sm:inline">Ingresos Hoy:</span>
+                <span id="contador-sala" class="text-sky-600 font-mono text-xl md:text-2xl font-bold drop-shadow-sm transition-all duration-300">{{ contador_inicial | default(0) }}</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="w-full max-w-4xl text-center p-4 md:p-8 my-auto">
+
+        <div id="pantalla-espera" class="transition-all duration-300">
+            <div class="mb-10">
+                <svg class="w-16 h-16 mx-auto text-sky-300/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1"
+                        d="M12 4v1m6 11h2m-6 0h-2v4h-4v-4H8m13-4V7a1 1 0 00-1-1H4a1 1 0 00-1 1v3M4 7h16">
+                    </path>
+                </svg>
+            </div>
+
+            <h2 class="text-6xl font-light text-sky-900 mb-4 tracking-tight drop-shadow-sm">Bienvenido</h2>
+            <p class="text-sky-700 text-xl font-light">Acerque su carnet al lector para ingresar</p>
+
+            <div class="mt-8 animate-bounce flex justify-center">
+                <svg class="w-16 h-16 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M19 14l-7 7m0 0l-7-7m7 7V3">
+                    </path>
+                </svg>
+            </div>
+
+            <div class="mt-6 flex flex-col items-center justify-center space-y-2">
+                <input type="text" id="input-lector" placeholder="Escriba su Código o DNI" maxlength="10"
+                    class="w-96 bg-white border-2 border-sky-200 rounded-2xl px-6 py-4 text-center text-3xl font-mono text-sky-800 focus:outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-500/20 transition-all shadow-xl shadow-sky-100 placeholder-black tracking-widest placeholder:tracking-normal placeholder:text-xl placeholder:opacity-80"
+                    autocomplete="off" autofocus>
+
+                <p class="text-sky-500/80 text-sm italic">Presiona ENTER para ingresar</p>
+            </div>
+        </div>
+
+        <div id="pantalla-resultado" class="hidden">
+            <div id="icono-estado" class="mb-8 flex justify-center"></div>
+
+            <h2 id="texto-estado" class="text-5xl font-bold mb-4"></h2>
+
+            <div id="datos-alumno" class="border-t border-sky-200 pt-6 mt-6 hidden">
+                <h3 id="nombre-alumno" class="text-3xl text-sky-950 font-semibold mb-2"></h3>
+
+                <div class="flex justify-center gap-4 text-sky-600 text-xl font-light">
+                    <span id="escuela-alumno"></span>
+                    <span>&bull;</span>
+                    <span id="semestre-alumno"></span>
+                </div>
+
+                <div id="mensaje-extra" class="hidden mt-4 text-rose-500 text-3xl font-bold animate-bounce uppercase">
+                    ⚠️ Renueva tu Carnet ⚠️
+                </div>
+                <div id="mensaje-api-undac" class="hidden mt-4 bg-sky-600 text-white text-lg font-bold px-6 py-2 rounded-full shadow-lg inline-flex items-center gap-2 animate-bounce">
+                    ⚡ AUTENTICADO Y REGISTRADO EN TIEMPO REAL (UNDAC CENTRAL)
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const input = document.getElementById('input-lector');
+        const isEventoStr = "{{ evento_id | default('') }}";
+        const eventoId = isEventoStr ? Number(isEventoStr) : null;
+
+        const salaIdStr = "{{ sala_id }}";
+        const salaId = (salaIdStr && salaIdStr !== "None") ? Number(salaIdStr) : 1;
+
+        let timer;
+
+        function focarInput() {
+            if (input) {
+                input.focus();
+            }
+        }
+
+        window.onload = () => {
+            focarInput();
+            
+            // Intento automático (casi siempre bloqueado por el navegador por seguridad)
+            setTimeout(() => {
+                const docElm = document.documentElement;
+                if (!document.fullscreenElement && docElm.requestFullscreen) {
+                    docElm.requestFullscreen().catch(e => console.log("Auto-Fullscreen bloqueado"));
+                }
+            }, 500);
+
+            if (eventoId) {
+                setInterval(verificarExpiracionEvento, 60000);
+            }
+        };
+
+        // Forzar F11 en la primera interacción (ya sea un clic o el primer número que lea el escáner)
+        document.addEventListener('keydown', (e) => {
+            const docElm = document.documentElement;
+            if (!document.fullscreenElement && docElm.requestFullscreen) {
+                docElm.requestFullscreen().catch(e => {});
+            }
+        }, { once: true });
+        
+        document.addEventListener('click', (e) => {
+            const docElm = document.documentElement;
+            if (!document.fullscreenElement && docElm.requestFullscreen) {
+                docElm.requestFullscreen().catch(e => {});
+            }
+        }, { once: true });
+
+        input.addEventListener('blur', () => {
+            setTimeout(focarInput, 50);
+        });
+
+        input.addEventListener('input', (e) => {
+            // Eliminar cualquier caracter que no sea un dígito (0-9) y limitar a 10 caracteres
+            e.target.value = e.target.value.replace(/[^0-9]/g, '').substring(0, 10);
+        });
+
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+
+                const codigo = input.value.trim();
+
+                if (codigo) {
+                    procesar(codigo);
+                }
+
+                input.value = '';
+            }
+        });
+
+        function playSuccessBeep() {
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+
+                const oscillator = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+
+                oscillator.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+
+                oscillator.type = 'sine';
+                oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
+                gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+
+                oscillator.start();
+                gainNode.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.15);
+                oscillator.stop(audioCtx.currentTime + 0.15);
+            } catch (e) { }
+        }
+
+        function playErrorBeep() {
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+
+                const oscillator = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+
+                oscillator.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+
+                oscillator.type = 'sawtooth';
+                oscillator.frequency.setValueAtTime(150, audioCtx.currentTime);
+                gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
+
+                oscillator.start();
+                gainNode.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.3);
+                oscillator.stop(audioCtx.currentTime + 0.3);
+            } catch (e) { }
+        }
+
+        function playWarningBeep() {
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+
+                const oscillator = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+
+                oscillator.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+
+                oscillator.type = 'square';
+                oscillator.frequency.setValueAtTime(440, audioCtx.currentTime);
+                oscillator.frequency.setValueAtTime(330, audioCtx.currentTime + 0.1);
+                gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+
+                oscillator.start();
+                gainNode.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.2);
+                oscillator.stop(audioCtx.currentTime + 0.2);
+            } catch (e) { }
+        }
+
+        let isScanningBusy = false;
+
+        function procesar(codigo) {
+            if (isScanningBusy) return;
+            isScanningBusy = true;
+
+            let url = '/procesar_ingreso';
+            let bodyData = {
+                codigo: codigo,
+                sala_id: salaId
+            };
+
+            if (eventoId) {
+                url = '/procesar_evento_ingreso';
+                bodyData = {
+                    codigo: codigo,
+                    evento_id: eventoId
+                };
+            }
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+            fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(bodyData),
+                signal: controller.signal
+            })
+                .then(res => {
+                    clearTimeout(timeoutId);
+                    if (!res.ok) throw new Error("HTTP " + res.status);
+                    return res.json();
+                })
+                .then(data => {
+                    isScanningBusy = false;
+                    mostrar(data);
+                })
+                .catch(err => {
+                    isScanningBusy = false;
+                    clearTimeout(timeoutId);
+                    console.error("Fallo de red o timeout en escáner:", err);
+
+                    mostrar({
+                        status: 'error',
+                        msg: '⚠️ ERROR DE CONEXIÓN DE RED LOCAL - ESCANEE OTRA VEZ'
+                    });
+                });
+        }
+
+        function mostrar(data) {
+            const espera = document.getElementById('pantalla-espera');
+            const resultado = document.getElementById('pantalla-resultado');
+            const txtEstado = document.getElementById('texto-estado');
+            const boxDatos = document.getElementById('datos-alumno');
+            const icono = document.getElementById('icono-estado');
+            const msgExtra = document.getElementById('mensaje-extra');
+            const glow = document.getElementById('glow-overlay');
+
+            espera.classList.add('hidden');
+            resultado.classList.remove('hidden');
+            resultado.classList.add('fade-in');
+
+            txtEstado.className = "text-5xl font-bold mb-4";
+            msgExtra.classList.add('hidden');
+            const msgApiUndac = document.getElementById('mensaje-api-undac');
+            if (msgApiUndac) msgApiUndac.classList.add('hidden');
+
+            const esEgresado = data.semestre && data.semestre.toUpperCase() === 'EGRESADO';
+            const esVisitante = data.semestre && data.semestre.toUpperCase() === 'VISITANTE';
+            const esAdministrativo = data.semestre && data.semestre.toUpperCase() === 'ADMINISTRATIVO';
+            const esDocente = data.semestre && data.semestre.toUpperCase() === 'DOCENTE';
+            const esApiSync = data.msg && (data.msg.includes('API UNDAC') || data.msg.includes('Autenticado'));
+
+            if (data.status === 'success') {
+                playSuccessBeep();
+                reproducirSaludoVoz(data.alumno);
+
+                // --- Aumentar el contador ---
+                const contadorEl = document.getElementById('contador-sala');
+                if(contadorEl) {
+                    let actual = parseInt(contadorEl.innerText) || 0;
+                    contadorEl.innerText = actual + 1;
+                    
+                    contadorEl.style.transform = "scale(1.3)";
+                    contadorEl.style.color = "#34d399";
+                    setTimeout(() => {
+                        contadorEl.style.transform = "scale(1)";
+                        contadorEl.style.color = "#38bdf8";
+                    }, 300);
+                }
+
+                txtEstado.innerText = "Acceso Permitido";
+
+                if (esApiSync && msgApiUndac) {
+                    msgApiUndac.classList.remove('hidden');
+                }
+
+                if (esEgresado) {
+                    txtEstado.classList.add("text-cyan-400");
+                    icono.innerHTML = `
+                        <svg class="w-32 h-32 text-cyan-400 drop-shadow-[0_0_15px_rgba(34,211,238,0.6)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z">
+                            </path>
+                        </svg>`;
+                    glow.className = "fixed inset-0 pointer-events-none transition-all duration-300 z-50 shadow-[inset_0_0_250px_rgba(34,211,238,0.25)] bg-cyan-500/5";
+
+                } else if (esVisitante) {
+                    txtEstado.classList.add("text-orange-400");
+                    icono.innerHTML = `
+                        <svg class="w-32 h-32 text-orange-400 drop-shadow-[0_0_15px_rgba(251,146,60,0.6)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z">
+                            </path>
+                        </svg>`;
+                    glow.className = "fixed inset-0 pointer-events-none transition-all duration-300 z-50 shadow-[inset_0_0_250px_rgba(251,146,60,0.25)] bg-orange-500/5";
+
+                } else if (esAdministrativo) {
+                    txtEstado.classList.add("text-fuchsia-400");
+                    icono.innerHTML = `
+                        <svg class="w-32 h-32 text-fuchsia-400 drop-shadow-[0_0_15px_rgba(232,121,249,0.6)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z">
+                            </path>
+                        </svg>`;
+                    glow.className = "fixed inset-0 pointer-events-none transition-all duration-300 z-50 shadow-[inset_0_0_250px_rgba(232,121,249,0.25)] bg-fuchsia-500/5";
+
+                } else if (esDocente) {
+                    txtEstado.classList.add("text-indigo-500");
+                    icono.innerHTML = `
+                        <svg class="w-32 h-32 text-indigo-500 drop-shadow-[0_0_15px_rgba(99,102,241,0.6)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z">
+                            </path>
+                        </svg>`;
+                    glow.className = "fixed inset-0 pointer-events-none transition-all duration-300 z-50 shadow-[inset_0_0_250px_rgba(99,102,241,0.25)] bg-indigo-500/5";
+
+                } else {
+                    txtEstado.classList.add("text-emerald-500");
+                    icono.innerHTML = `
+                        <svg class="w-32 h-32 text-emerald-500 drop-shadow-[0_0_15px_rgba(16,185,129,0.5)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z">
+                            </path>
+                        </svg>`;
+                    glow.className = "fixed inset-0 pointer-events-none transition-all duration-300 z-50 shadow-[inset_0_0_250px_rgba(16,185,129,0.25)] bg-emerald-500/5";
+                }
+
+                if (data.warning === 'carnet_vencido') {
+                    msgExtra.classList.remove('hidden');
+                }
+
+                llenarDatos(data);
+
+            } else if (data.status === 'warning') {
+                playWarningBeep();
+
+                txtEstado.innerText = data.msg || "Ya registrado";
+                txtEstado.classList.add("text-yellow-400");
+
+                icono.innerHTML = `
+                    <svg class="w-32 h-32 text-yellow-500 drop-shadow-[0_0_15px_rgba(234,179,8,0.5)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z">
+                        </path>
+                    </svg>`;
+
+                glow.className = "fixed inset-0 pointer-events-none transition-all duration-300 z-50 shadow-[inset_0_0_350px_rgba(234,179,8,0.4)] bg-yellow-500/10";
+
+                llenarDatos(data);
+
+            } else {
+                playErrorBeep();
+
+                txtEstado.innerText = data.msg || "No Registrado";
+                txtEstado.classList.add("text-rose-500");
+
+                icono.innerHTML = `
+                    <svg class="w-32 h-32 text-rose-500 drop-shadow-[0_0_15px_rgba(244,63,94,0.5)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                            d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z">
+                        </path>
+                    </svg>`;
+
+                glow.className = "fixed inset-0 pointer-events-none transition-all duration-300 z-50 shadow-[inset_0_0_350px_rgba(244,63,94,0.5)] bg-rose-500/10";
+
+                boxDatos.classList.add('hidden');
+            }
+
+            clearTimeout(timer);
+
+            // Extender tiempo de pantalla a 4.5 segundos si fue registrado por API UNDAC para dar tiempo de lectura
+            const tiempoEspera = esApiSync ? 4500 : 3500;
+
+            timer = setTimeout(() => {
+                resultado.classList.add('hidden');
+                espera.classList.remove('hidden');
+                resultado.classList.remove('fade-in');
+
+                glow.className = "fixed inset-0 pointer-events-none transition-all duration-700 z-50 bg-transparent";
+
+                input.value = '';
+                focarInput();
+            }, tiempoEspera);
+        }
+
+        function llenarDatos(data) {
+            const boxDatos = document.getElementById('datos-alumno');
+
+            boxDatos.classList.remove('hidden');
+
+            document.getElementById('nombre-alumno').innerText = data.alumno || "Sin Nombre";
+
+            let escuelaTxt = "Externo";
+
+            if (data.escuela && data.escuela.trim() !== '') {
+                escuelaTxt = data.escuela;
+            } else if (data.semestre === 'ADMINISTRATIVO') {
+                escuelaTxt = "Oficina No Asignada";
+            } else if (data.semestre === 'VISITANTE') {
+                escuelaTxt = "Externo";
+            } else if (data.semestre === 'EGRESADO') {
+                escuelaTxt = "Sin Escuela";
+            } else {
+                escuelaTxt = "Escuela No Registrada";
+            }
+
+            document.getElementById('escuela-alumno').innerText = escuelaTxt;
+
+            const sem = document.getElementById('semestre-alumno');
+
+            if (
+                data.semestre &&
+                data.semestre !== 'EXTERNO' &&
+                data.semestre !== 'VISITANTE' &&
+                data.semestre !== 'EGRESADO' &&
+                data.semestre !== 'ADMINISTRATIVO' &&
+                data.semestre !== 'DOCENTE'
+            ) {
+                sem.innerText = "Semestre " + data.semestre;
+                sem.style.display = 'inline';
+
+            } else if (
+                data.semestre === 'VISITANTE' ||
+                data.semestre === 'EGRESADO' ||
+                data.semestre === 'ADMINISTRATIVO' ||
+                data.semestre === 'DOCENTE'
+            ) {
+                sem.innerText = data.semestre;
+                sem.style.display = 'inline';
+
+            } else {
+                sem.style.display = 'none';
+            }
+        }
+
+        // Precargar la API de síntesis de voz del navegador
+        let vocesDisponibles = [];
+        function cargarVoces() {
+            if ('speechSynthesis' in window) {
+                vocesDisponibles = window.speechSynthesis.getVoices();
+            }
+        }
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.onvoiceschanged = cargarVoces;
+            cargarVoces();
+        }
+
+        function reproducirSaludoVoz(nombre) {
+            if (!('speechSynthesis' in window)) return;
+            try {
+                window.speechSynthesis.cancel();
+                let primerNombre = "Usuario";
+                if (nombre && nombre.trim() !== '') {
+                    if (nombre.includes(',')) {
+                        let partes = nombre.split(',');
+                        primerNombre = partes[1].trim().split(' ')[0];
+                    } else {
+                        primerNombre = nombre.trim().split(' ')[0];
+                    }
+                }
+
+                // Filtrar títulos comunes
+                primerNombre = primerNombre.replace(/^(DR|DRA|ING|LIC|DOC|PROF)\.?$/i, '').trim();
+
+                const texto = `Bienvenido, ${primerNombre}`;
+                const msg = new SpeechSynthesisUtterance(texto);
+                msg.lang = 'es-ES';
+                msg.rate = 1.0;
+                msg.pitch = 1.0;
+
+                // Seleccionar voz en español disponible si existe
+                if (vocesDisponibles.length === 0) cargarVoces();
+                const vozEspanol = vocesDisponibles.find(v => v.lang.startsWith('es'));
+                if (vozEspanol) msg.voice = vozEspanol;
+
+                window.speechSynthesis.speak(msg);
+            } catch (e) {
+                console.error("Error en voz:", e);
+            }
+        }
+
+        function cargarClimaEntrada() {
+            fetch('/api/clima_pasco')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        const elem = document.getElementById('txt-clima');
+                        if (elem) {
+                            elem.innerText = `${data.temperatura} • ${data.condicion}`;
+                        }
+                    }
+                })
+                .catch(err => console.error("Error cargando clima:", err));
+        }
+
+        function verificarExpiracionEvento() {
+            if (!eventoId) return;
+
+            fetch(`/api/evento_estado/${eventoId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success' && data.activo === false) {
+                        window.location.href = '/';
+                    } else if (data.status === 'error') {
+                        window.location.href = '/';
+                    }
+                })
+                .catch(err => console.error("Error validando vida del evento:", err));
+        }
+
+        // Inicialización y refresco periódico del clima cada 15 minutos
+        cargarClimaEntrada();
+        setInterval(cargarClimaEntrada, 900000);
+    </script>
+
+</body>
+
+</html>

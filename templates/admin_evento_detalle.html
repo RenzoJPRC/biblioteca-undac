@@ -1,0 +1,174 @@
+{% extends "layout_admin.html" %}
+
+{% block content %}
+<header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shrink-0">
+    <div class="flex items-center gap-4">
+        <a href="/admin/eventos"
+            class="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors">
+            <i class="ph ph-arrow-left text-lg"></i>
+        </a>
+        <h2 class="text-lg font-bold text-slate-700 h-full flex items-center">
+            Reporte de Asistencia: {{ evento.nombre }}
+        </h2>
+    </div>
+
+    <div class="flex items-center gap-3">
+        <span class="text-xs font-bold px-3 py-1 bg-rose-50 text-rose-600 rounded-lg whitespace-nowrap">
+            <i class="ph ph-calendar-blank mr-1"></i> {{ evento.fecha }}
+        </span>
+        <span class="text-xs font-bold px-3 py-1 bg-indigo-50 text-indigo-600 rounded-lg whitespace-nowrap font-mono">
+            <i class="ph ph-clock mr-1"></i> {{ evento.hora }}
+        </span>
+    </div>
+</header>
+
+<div class="flex-1 overflow-y-auto p-6 flex flex-col h-full bg-slate-50/50">
+
+    <!-- TARJETAS DE ESTADÍSTICAS -->
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6 shrink-0">
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Total Asistentes</p>
+            <h3 class="text-2xl font-bold text-slate-800">{{ asistentes|length }}</h3>
+        </div>
+
+        <div class="bg-sky-50 p-4 rounded-xl shadow-sm border border-sky-100">
+            <p class="text-[10px] font-bold text-sky-600 uppercase tracking-wider mb-1">Alumnos</p>
+            <div class="flex items-end gap-2">
+                <h3 class="text-2xl font-bold text-sky-700">{{ stats.get('Alumno', 0) }}</h3>
+                <i class="ph-fill ph-student text-sky-300 text-2xl ml-auto"></i>
+            </div>
+        </div>
+
+        <div class="bg-emerald-50 p-4 rounded-xl shadow-sm border border-emerald-100">
+            <p class="text-[10px] font-bold text-emerald-600 uppercase tracking-wider mb-1">Egresados</p>
+            <div class="flex items-end gap-2">
+                <h3 class="text-2xl font-bold text-emerald-700">{{ stats.get('Egresado', 0) }}</h3>
+                <i class="ph-fill ph-graduation-cap text-emerald-300 text-2xl ml-auto"></i>
+            </div>
+        </div>
+
+        <div class="bg-purple-50 p-4 rounded-xl shadow-sm border border-purple-100">
+            <p class="text-[10px] font-bold text-purple-600 uppercase tracking-wider mb-1">Personal</p>
+            <div class="flex items-end gap-2">
+                <h3 class="text-2xl font-bold text-purple-700">{{ stats.get('Personal', 0) }}</h3>
+                <i class="ph-fill ph-briefcase text-purple-300 text-2xl ml-auto"></i>
+            </div>
+        </div>
+
+        <div class="bg-indigo-50 p-4 rounded-xl shadow-sm border border-indigo-100">
+            <p class="text-[10px] font-bold text-indigo-600 uppercase tracking-wider mb-1">Docentes</p>
+            <div class="flex items-end gap-2">
+                <h3 class="text-2xl font-bold text-indigo-700">{{ stats.get('Docente', 0) }}</h3>
+                <i class="ph-fill ph-chalkboard-teacher text-indigo-300 text-2xl ml-auto"></i>
+            </div>
+        </div>
+
+        <div class="bg-orange-50 p-4 rounded-xl shadow-sm border border-orange-100">
+            <p class="text-[10px] font-bold text-orange-600 uppercase tracking-wider mb-1">Invitados/Ext</p>
+            <div class="flex items-end gap-2">
+                <h3 class="text-2xl font-bold text-orange-700">{{ stats.get('Visitante', 0) +
+                    stats.get('InvitadoEvento', 0) }}</h3>
+                <i class="ph-fill ph-users-three text-orange-300 text-2xl ml-auto"></i>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- TABLA DE RESULTADOS -->
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex-1 flex flex-col min-h-0">
+        <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
+            <h3 class="font-bold text-slate-700">Registro en Tiempo Real</h3>
+            <button onclick="location.reload()"
+                class="text-xs font-bold text-slate-500 hover:text-rose-600 px-3 py-1.5 rounded bg-slate-100 hover:bg-rose-50 transition-colors flex items-center gap-1.5">
+                <i class="ph-bold ph-arrows-clockwise"></i> Actualizar
+            </button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto">
+            <table class="w-full text-left relative">
+                <thead class="bg-slate-50 text-xs uppercase text-slate-400 font-bold sticky top-0 z-10 shadow-sm">
+                    <tr>
+                        <th class="px-6 py-3">Hora Ingreso</th>
+                        <th class="px-6 py-3">Código/DNI</th>
+                        <th class="px-6 py-3">Asistente</th>
+                        <th class="px-6 py-3">Facultad / Institución</th>
+                        <th class="px-6 py-3 text-right">Grupo</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 text-sm">
+                    {% for p in asistentes %}
+                    <tr class="hover:bg-slate-50 transition-colors group">
+                        <td class="px-6 py-3 text-slate-500 font-mono text-xs">{{ p.hora }}</td>
+                        <td class="px-6 py-3 font-mono text-slate-700">{{ p.codigo }}</td>
+                        <td class="px-6 py-3 font-bold text-slate-800">{{ p.nombre }}</td>
+                        <td class="px-6 py-3 text-slate-500 text-xs truncate max-w-[200px]">{{ p.origen }}</td>
+                        <td class="px-6 py-3 text-right">
+                            {% if p.tipo == 'Alumno' %}
+                            <span
+                                class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-sky-100 text-sky-700">{{
+                                p.tipo }}</span>
+                            {% elif p.tipo == 'Egresado' %}
+                            <span
+                                class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700">{{
+                                p.tipo }}</span>
+                            {% elif p.tipo == 'Personal' %}
+                            <span
+                                class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700">{{
+                                p.tipo }}</span>
+                            {% elif p.tipo == 'Docente' %}
+                            <span
+                                class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-700">{{
+                                p.tipo }}</span>
+                            {% elif p.tipo == 'InvitadoEvento' %}
+                            <span
+                                class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-700 flex ml-auto w-fit">VIP
+                                Lista</span>
+                            {% else %}
+                            <span
+                                class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-700">{{
+                                p.tipo }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="px-6 py-12 text-center text-slate-400 font-medium">
+                            <i class="ph ph-ghost text-4xl mb-2 text-slate-300 block"></i>
+                            Aún no hay registros de asistencia para este evento.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Actualización silenciosa cada 10 segundos para ver nuevos asistentes sin F5 ni perder SCROLL
+    setInterval(() => {
+        fetch(window.location.href)
+            .then(res => res.text())
+            .then(html => {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, "text/html");
+
+                // 1. Actualizar bloque de estadísticas
+                const mainGrid = document.querySelector('.grid.grid-cols-2');
+                const newGrid = doc.querySelector('.grid.grid-cols-2');
+                if (mainGrid && newGrid) {
+                    mainGrid.innerHTML = newGrid.innerHTML;
+                }
+
+                // 2. Actualizar la tabla de asistentes
+                const tbody = document.querySelector('tbody');
+                const newTbody = doc.querySelector('tbody');
+                if (tbody && newTbody) {
+                    tbody.innerHTML = newTbody.innerHTML;
+                }
+            })
+            .catch(err => console.error("Error en actualización silenciosa del evento:", err));
+    }, 10000); // 10s
+</script>
+
+{% endblock %}

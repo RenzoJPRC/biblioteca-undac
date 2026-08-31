@@ -1,0 +1,166 @@
+{% extends "layout_admin.html" %}
+
+{% block content %}
+<header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shrink-0 shadow-sm">
+    <div class="flex flex-col">
+        <h2 class="text-lg font-bold text-slate-700">Equipamiento Terminal</h2>
+        <span class="text-xs text-sky-500 font-bold uppercase tracking-wide">Gestor de Salas</span>
+    </div>
+</header>
+
+<main class="flex-1 overflow-y-auto p-6 bg-slate-50">
+    <div class="max-w-7xl mx-auto space-y-6">
+
+        <div class="mb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+                <h1 class="text-2xl font-bold tracking-tight text-slate-800 flex items-center gap-3">
+                    <svg class="w-8 h-8 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                            d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4">
+                        </path>
+                    </svg>
+                    Gestión de Salas (PC Scanners)
+                </h1>
+                <p class="text-slate-500 mt-1">Crea nuevas salas físicas o desactiva las existentes para controlar las
+                    ubicaciones de ingreso.</p>
+            </div>
+        </div>
+
+        <!-- FORMULARIO CREAR SALA -->
+        <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+            <div class="px-6 py-4 border-b border-slate-200 bg-slate-50/50">
+                <h2 class="text-sm tracking-wide uppercase font-bold text-slate-700">Crear Nueva Sala (Computadora)</h2>
+            </div>
+            <div class="p-6">
+                <form action="{{ url_for('admin_salas.crear') }}" method="POST"
+                    class="flex flex-col md:flex-row gap-4 items-end">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <div class="flex-1 w-full">
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Nombre de la
+                            Sala</label>
+                        <input type="text" name="nombre" placeholder="Ej: Sala de Robótica" required
+                            class="w-full bg-white border border-slate-300 rounded-lg px-4 py-2.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent transition-all shadow-sm">
+                    </div>
+                    <div class="w-full md:w-48">
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Sede</label>
+                        <select name="sede" required
+                            class="w-full bg-white border border-slate-300 rounded-lg px-4 py-2.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all shadow-sm">
+                            <option value="Central">Sede Central</option>
+                            <option value="Tarma">Tarma</option>
+                            <option value="Oxapampa">Oxapampa</option>
+                            <option value="Yanahuanca">Yanahuanca</option>
+                            <option value="Paucartambo">Paucartambo</option>
+                            <option value="La Merced">La Merced</option>
+                        </select>
+                    </div>
+                    <div class="w-full md:w-32">
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Piso</label>
+                        <select name="piso" required
+                            class="w-full bg-white border border-slate-300 rounded-lg px-4 py-2.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all shadow-sm">
+                            <option value="1">Piso 1</option>
+                            <option value="2">Piso 2</option>
+                            <option value="3">Piso 3</option>
+                            <option value="4">Piso 4</option>
+                            <option value="5">Piso 5</option>
+                        </select>
+                    </div>
+                    <div class="w-full md:w-auto">
+                        <button type="submit"
+                            class="w-full px-6 py-2.5 bg-sky-600 text-white font-semibold rounded-lg hover:bg-sky-700 transition-colors shadow-sm whitespace-nowrap">
+                            Añadir Sala
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- LISTA DE SALAS EXISTENTES -->
+        <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-slate-600">
+                    <thead
+                        class="bg-slate-50 border-b border-slate-200 text-[10px] uppercase tracking-widest text-slate-500 font-bold">
+                        <tr>
+                            <th class="px-6 py-4">Ubicación</th>
+                            <th class="px-6 py-4">Sede</th>
+                            <th class="px-6 py-4">Vínculo Web para el Scanner</th>
+                            <th class="px-6 py-4 text-right">Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        {% for sala in salas %}
+                        <tr class="hover:bg-slate-50/80 transition-colors group">
+                            <td class="px-6 py-4">
+                                <div class="flex items-center gap-3">
+                                    <span
+                                        class="w-8 h-8 rounded-full bg-sky-100 flex items-center justify-center text-xs font-bold text-sky-700 font-mono">
+                                        P{{ sala.Piso }}
+                                    </span>
+                                    <div>
+                                        <div class="font-bold text-slate-700">{{ sala.NombreSala }}</div>
+                                        <div class="text-[10px] text-slate-400 font-mono uppercase tracking-widest">ID
+                                            Físico: {{ sala.SalaID }}</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="px-6 py-4">
+                                <span
+                                    class="px-2 py-1 text-[10px] font-bold uppercase tracking-widest bg-slate-100 text-slate-500 border border-slate-200 rounded-md">{{
+                                    sala.Sede }}</span>
+                            </td>
+                            <td class="px-6 py-4">
+                                <a href="/sala/{{ sala.SalaID }}" target="_blank"
+                                    class="text-sky-600 hover:text-sky-500 font-medium text-sm flex items-center gap-2 group-hover:underline">
+                                    /sala/{{ sala.SalaID }}
+                                    <svg class="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity"
+                                        fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14">
+                                        </path>
+                                    </svg>
+                                </a>
+                            </td>
+                            <td class="px-6 py-4 text-right">
+                                <form action="{{ url_for('admin_salas.toggle_estado', sala_id=sala.SalaID) }}"
+                                    method="POST">
+
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                    {% if sala.Activo %}
+                                    <input type="hidden" name="estado" value="0">
+                                    <button type="submit"
+                                        class="px-3 py-1 bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-full text-[10px] font-extrabold uppercase tracking-wide hover:bg-emerald-200 transition-all shadow-sm">
+                                        Habilitada
+                                    </button>
+                                    {% else %}
+                                    <input type="hidden" name="estado" value="1">
+                                    <button type="submit"
+                                        class="px-3 py-1 bg-slate-100 text-slate-500 border border-slate-300 rounded-full text-[10px] font-extrabold uppercase tracking-wide hover:bg-slate-200 transition-all shadow-sm">
+                                        Oculta
+                                    </button>
+                                    {% endif %}
+                                </form>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="4" class="px-6 py-12 text-center text-slate-500">
+                                <div class="flex flex-col items-center justify-center gap-3">
+                                    <svg class="w-12 h-12 text-slate-300" fill="none" stroke="currentColor"
+                                        viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                                            d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6">
+                                        </path>
+                                    </svg>
+                                    <p>No hay salas creadas en el sistema.</p>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+</main>
+{% endblock %}
