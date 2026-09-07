@@ -1,6 +1,6 @@
 # 🗺️ Módulo Autónomo REST API: Google Maps, Geocoding & Geolocalización UNDAC
 
-**Asignatura:** Automatizacion de Procesos
+**Asignatura:** Automatización de Procesos  
 **Docente:** JOSE LUIS SOSA SANCHEZ  
 **Estudiante:** Renzo Juan Pablo Rojas Castillo  
 **Proyecto / Módulo:** Módulo de Geolocalización, Geocodificación y Rutas con APIs REST Externas  
@@ -9,7 +9,7 @@
 
 ## 📌 1. Descripción del Módulo
 
-Este es un **Módulo Independiente, Autocontenido y Reutilizable** desarrollado sobre **Python (Flask)**, **Google Maps JavaScript API v3**, **OpenStreetMap Nominatim REST API**, **OSRM Routing API** y **Open-Meteo Weather REST API**.
+Este es un **Módulo Independiente, Autocontenido y Reutilizable** desarrollado en **Python (Flask)**. Ofrece una solución completa de geolocalización, trazado de rutas vehiculares y geocodificación para la Red de Bibliotecas de la Universidad Nacional Daniel Alcides Carrión (UNDAC).
 
 ### 🚀 Funcionalidades Principales:
 1. 📍 **Geolocalización Institucional de Alta Precisión**:
@@ -36,66 +36,50 @@ Este es un **Módulo Independiente, Autocontenido y Reutilizable** desarrollado 
 
 ## ⚙️ 2. Guía de Instalación y Ejecución Local (Paso a Paso)
 
-Siga estos sencillos pasos para ejecutar el módulo localmente en su computadora:
+Para ejecutar este módulo en su computadora local, siga estos 3 sencillos pasos:
 
-### Paso 1: Clonar o Descomprimir el Proyecto
-```bash
-git clone https://github.com/tu-usuario/modulo-google-maps-undac.git
-cd modulo-google-maps-undac
-```
+### Paso 1: Descomprimir el Proyecto
+Extraiga el contenido del archivo comprimido `.zip` en cualquier carpeta de su equipo.
 
-### Paso 2: Crear y Activar Entorno Virtual (Opcional)
-```bash
-python -m venv .venv
-# En Windows:
-.venv\Scripts\activate
-# En Mac/Linux:
-source .venv/bin/activate
-```
-
-### Paso 3: Instalar Dependencias
+### Paso 2: Instalar Dependencias
+Abra la consola / terminal dentro de la carpeta del proyecto y ejecute:
 ```bash
 pip install -r requirements.txt
 ```
 
-### Paso 4: Configurar la Clave de Google Maps (`.env`)
-Cree un archivo `.env` o copie `.env.example`:
-```env
-GOOGLE_MAPS_API_KEY=TU_CLAVE_DE_GOOGLE_MAPS_AQUI
-```
-*(Nota: Si no se ingresa una clave API, el módulo activa el motor de mapas interactivo de respaldo para garantizar que la aplicación **nunca falle ni se rompa**).*
-
-### Paso 5: Iniciar la Aplicación
+### Paso 3: Iniciar el Servidor Local
+Ejecute el comando principal de inicio:
 ```bash
 python app.py
 ```
-Acceda a la URL: `http://127.0.0.1:5000/mapa`
+
+¡Listo! Abra su navegador e ingrese a la siguiente dirección:
+👉 **`http://127.0.0.1:5000/mapa`**
 
 ---
 
-## ☁️ 3. Guía de Despliegue en la Nube (Render.com + Dominio Propio `bibliotecarenzo.xyz`)
+## 📡 3. Endpoints REST API Disponibles
 
-El módulo viene **100% listo para desplegar en Render.com** con vinculación de dominio propio:
-
-1. **Subir a GitHub**: Suba los archivos al repositorio `https://github.com/RenzoJPRC/biblioteca-undac`.
-2. **Crear Web Service en Render**:
-   - Inicie sesión en [Render.com](https://render.com).
-   - Cree un **Web Service** conectado a su repositorio de GitHub.
-   - **Build Command**: `pip install -r requirements.txt`
-   - **Start Command**: `gunicorn app:app`
-3. **Vincular Dominio Propio (`bibliotecarenzo.xyz`)**:
-   - En Render, ingrese a **Settings** -> **Custom Domains**.
-   - Agregue `bibliotecarenzo.xyz` y `www.bibliotecarenzo.xyz`.
-   - Copie los registros DNS (Registro A / CNAME) a su proveedor de dominios. Render generará automáticamente el certificado de seguridad SSL para `https://bibliotecarenzo.xyz`.
+| Endpoint | Método | Descripción | Ejemplo de Uso |
+| :--- | :---: | :--- | :--- |
+| `/mapa` | `GET` | Vista web interactiva con el mapa de filiales UNDAC. | `http://127.0.0.1:5000/mapa` |
+| `/api/ubicaciones_undac` | `GET` | Colección JSON de las 6 filiales con sus coordenadas y aforos. | `http://127.0.0.1:5000/api/ubicaciones_undac` |
+| `/api/geocodificar` | `GET` | Geocodificación de direcciones a coordenadas (`q=nombre`). | `http://127.0.0.1:5000/api/geocodificar?q=Tarma` |
+| `/api/clima_coordenada` | `GET` | Clima en tiempo real por coordenadas `lat` y `lng`. | `http://127.0.0.1:5000/api/clima_coordenada?lat=-10.668115&lng=-76.253753` |
 
 ---
 
-## 📊 4. Matriz de Cumplimiento de Rúbrica (20 / 20 Puntos)
+## 🧩 4. Integración a Otro Sistema de Información
 
-| Criterio de Evaluación | Puntaje Máximo | Implementación en este Módulo |
-| :--- | :---: | :--- |
-| 📍 **Dominio del tema de Google Maps** | **4 / 4 ptos** | Uso avanzado de `google.maps.Map`, `Marker`, `InfoWindow`, `DirectionsService`, enlace directo a Google Maps App y cambiador de capas (Calles, Satélite HD, Terreno). |
-| 💻 **Manejo y calidad del código fuente** | **4 / 4 ptos** | Código modular desacoplado en Flask (Blueprint `api_external.py`), sin código redundante ni dependencias obsoletas. |
-| 📖 **Claridad en las instrucciones de despliegue** | **4 / 4 ptos** | Guía paso a paso en texto plano y Markdown para entorno local y despliegue cloud en Render.com. |
-| 📝 **Agrega un README** | **4 / 4 ptos** | Documento README profesional con insignias, tablas de endpoints y especificaciones técnicas completas. |
-| 🚀 **Funcionamiento del servicio desplegado** | **4 / 4 ptos** | Ejecución fluida, rápida, sin errores y compatible con Render (WSGI Gunicorn + PORT dinámico). |
+Este módulo fue diseñado bajo la arquitectura modular de **Blueprints de Flask**, lo que permite integrarlo fácilmente a cualquier otra aplicación web en 2 líneas de código:
+
+```python
+from routes.api_external import api_external_bp
+
+# Registrar el módulo en su aplicación Flask principal:
+app.register_blueprint(api_external_bp)
+```
+
+---
+
+&copy; 2026 Renzo Juan Pablo Rojas Castillo - Todos los derechos reservados.
