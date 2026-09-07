@@ -1,4 +1,8 @@
 from datetime import datetime
+import requests
+from db import get_db_connection
+
+BASE_API_UNDAC_URL = "http://127.0.0.1:5000/api/undac/estudiante"
 
 def calcular_semestre_undac(codigo, fecha_ingreso_api=None, semestre_raw=None):
     """Calcula el semestre académico numérico/texto según el código o año de ingreso."""
