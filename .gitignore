@@ -34,6 +34,8 @@ scratch/
 *.xls
 *.csv
 *.zip
+!modulo_google_maps_undac.zip
+!.env.example
 
 # Cloudflare y credenciales
 URL_PUBLICA.txt
