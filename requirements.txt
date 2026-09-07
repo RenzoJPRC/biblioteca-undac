@@ -2,6 +2,7 @@ Flask
 pandas
 openpyxl
 pyodbc
+pymssql
 python-dotenv
 waitress
 requests
