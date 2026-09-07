@@ -10,7 +10,7 @@ def obtener_datos_dashboard(f_inicio, f_fin, sede_filtro=None, hora_inicio=None,
         base_params = [f_inicio, f_fin]
         filtro_label = f"Desde {f_inicio} hasta {f_fin}"
     else:
-        date_where = "CAST(FechaHora AS DATE) = CAST(GETDATE() AS DATE)"
+        date_where = "CAST(FechaHora AS DATE) = CAST(SYSDATETIMEOFFSET() AT TIME ZONE 'SA Pacific Standard Time' AS DATE)"
         base_params = []
         filtro_label = "Datos de Hoy"
 
@@ -189,7 +189,7 @@ def obtener_registros_csv(f_inicio, f_fin, sede_filtro=None, hora_inicio=None, h
             date_where = "CAST(R.FechaHora AS DATE) >= ? AND CAST(R.FechaHora AS DATE) <= ?"
             base_params = [f_inicio, f_fin]
         else:
-            date_where = "CAST(R.FechaHora AS DATE) = CAST(GETDATE() AS DATE)"
+            date_where = "CAST(R.FechaHora AS DATE) = CAST(SYSDATETIMEOFFSET() AT TIME ZONE 'SA Pacific Standard Time' AS DATE)"
 
         if hora_inicio and hora_fin:
             date_where += " AND CAST(R.FechaHora AS TIME) >= ? AND CAST(R.FechaHora AS TIME) <= ?"

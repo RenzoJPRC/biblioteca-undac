@@ -46,7 +46,7 @@ def ingreso_sala(sala_id):
         cursor.execute("""
             SELECT COUNT(*) 
             FROM RegistroIngresos 
-            WHERE SalaID = ? AND CAST(FechaHora AS DATE) = CAST(GETDATE() AS DATE)
+            WHERE SalaID = ? AND CAST(FechaHora AS DATE) = CAST(SYSDATETIMEOFFSET() AT TIME ZONE 'SA Pacific Standard Time' AS DATE)
         """, (sala_id,))
         res = cursor.fetchone()
         if res:
@@ -94,7 +94,7 @@ def filial(sede):
         cursor.execute("""
             SELECT COUNT(*) 
             FROM RegistroIngresos 
-            WHERE SalaID = ? AND CAST(FechaHora AS DATE) = CAST(GETDATE() AS DATE)
+            WHERE SalaID = ? AND CAST(FechaHora AS DATE) = CAST(SYSDATETIMEOFFSET() AT TIME ZONE 'SA Pacific Standard Time' AS DATE)
         """, (sala_id,))
         res = cursor.fetchone()
         if res:

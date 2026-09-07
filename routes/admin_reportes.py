@@ -29,7 +29,7 @@ def descargar_reporte():
     LEFT JOIN PersonalAdministrativo P ON R.PersonalID = P.PersonalID
     LEFT JOIN Docentes D ON R.DocenteID = D.DocenteID
     LEFT JOIN Salas S ON R.SalaID = S.SalaID
-    WHERE CAST(R.FechaHora AS DATE) = CAST(GETDATE() AS DATE) 
+    WHERE CAST(R.FechaHora AS DATE) = CAST(SYSDATETIMEOFFSET() AT TIME ZONE 'SA Pacific Standard Time' AS DATE) 
     ORDER BY R.FechaHora DESC
     """
     df = pd.read_sql(sql, conn)

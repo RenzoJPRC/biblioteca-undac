@@ -14,7 +14,7 @@ def obtener_agenda_eventos_hoy(sede="Central"):
         sql = """
             SELECT EventoID, NombreEvento, HoraInicio, HoraFin, Lugar
             FROM Eventos 
-            WHERE FechaEvento = CAST(GETDATE() AS DATE)
+            WHERE FechaEvento = CAST(SYSDATETIMEOFFSET() AT TIME ZONE 'SA Pacific Standard Time' AS DATE)
             AND Estado != 'Cancelado'
             AND (NombreSede = ? OR NombreSede = 'Todas' OR NombreSede = 'MULTIPLES (TODAS)')
             ORDER BY HoraInicio ASC
@@ -23,7 +23,7 @@ def obtener_agenda_eventos_hoy(sede="Central"):
         rows = cursor.fetchall()
         
         # Necesitamos la hora actual para calcular estados
-        cursor.execute("SELECT CAST(GETDATE() AS TIME)")
+        cursor.execute("SELECT CAST(CAST(SYSDATETIMEOFFSET() AT TIME ZONE 'SA Pacific Standard Time' AS DATETIME) AS TIME)")
         current_time = cursor.fetchone()[0]
         
         agenda = []
