@@ -16,18 +16,17 @@ El sistema está optimizado para funcionar en entornos de red local (intranet) c
   * 👨‍🏫 Docentes
   * 💼 Personal Administrativo
   * 🏛️ Visitantes Externos
-* 📊 **Dashboard en Tiempo Real**: Métricas en vivo, contadores de aforo por sala de lectura y gráficas estadísticas de concurrencia diaria/mensual.
-* ⚡ **Carga Masiva Asíncrona**: Importación de padrones masivos en formato Excel (`.xlsx`, `.xls`) procesados en segundo plano mediante hilos de ejecución (*Background Threads*).
-* 🛡️ **Seguridad y Control de Accesos (RBAC)**: Autenticación de administradores con roles segregados (*SuperAdmin*, *Supervisor*, *Consultor*), protección CSRF nativa y registros automáticos de auditoría (`AdminAuditLog`).
-* 📶 **Resiliencia de Red y Servidor**: Configuración WSGI de alta concurrencia (`Waitress` con 16 hilos) y manejo de desconexiones temporales en terminales cliente.
+* 🗺️ **Geolocalización y Mapas Interactivos (Google Maps & REST APIs)**: Visualización interactiva de las 6 bibliotecas y filiales de la UNDAC (Central Cerro de Pasco, Tarma, La Merced, Oxapampa, Yanahuanca, Paucartambo), geocodificación en tiempo real, trazado de rutas vehiculares por pistas y consulta de clima con Open-Meteo.
+* ☁️ **Despliegue Cloud en Render.com + Dominio Propio**: Configuración lista de producción WSGI Gunicorn (`Procfile`, `render.yaml`) enlazada al dominio personalizado `https://bibliotecarenzo.xyz`.
 
 ---
 
 ## 🛠️ Tecnologías Utilizadas
 
-* **Backend**: Python 3.10+, Flask, Waitress WSGI.
+* **Backend**: Python 3.10+, Flask, Waitress WSGI (Local), Gunicorn WSGI (Cloud Render).
+* **Geolocalización & APIs REST**: Google Maps JavaScript API v3, OpenStreetMap Nominatim REST API, OSRM Routing API, Open-Meteo Weather REST API.
 * **Base de Datos**: Microsoft SQL Server (vía `pyodbc` y Procedimientos Almacenados).
-* **Frontend**: HTML5, CSS3 (Vanilla / TailwindCSS), JavaScript (ES6+), Jinja2.
+* **Frontend**: HTML5, CSS3 (Vanilla / TailwindCSS), JavaScript (ES6+), Leaflet fallback, Jinja2.
 * **Procesamiento de Datos**: Pandas, OpenPyXL.
 * **Iconografía**: Phosphor Icons.
 
@@ -42,9 +41,9 @@ El sistema está optimizado para funcionar en entornos de red local (intranet) c
 └───────────────────────────┬────────────────────────────┘
                             │ (Petición HTTP POST en Intranet)
 ┌───────────────────────────▼────────────────────────────┐
-│         Servidor WSGI Waitress (Multi-Thread 16)       │
+│         Servidor WSGI Waitress / Gunicorn (Render)     │
 │                  Aplicación Flask (app.py)             │
-│  Middleware: CSRF, AuditLog, Control de Sesiones       │
+│  Blueprints: Access Control, REST APIs, AuditLog, Maps │
 └───────────────────────────┬────────────────────────────┘
                             │ (ODBC Driver 17 / Timeout 15s)
 ┌───────────────────────────▼────────────────────────────┐
@@ -62,9 +61,16 @@ SistemaBiblioteca/
 ├── app.py                     # Punto de entrada principal y configuración de Flask/Waitress
 ├── app.bat                    # Script de arranque en un solo clic para Windows Server
 ├── db.py                      # Conector centralizado a Microsoft SQL Server (pyodbc)
-├── requirements.txt           # Dependencias de Python
-├── example.env.txt            # Plantilla de variables de entorno de ejemplo
+├── Procfile                   # Configuración de proceso Web para Render.com (Gunicorn)
+├── render.yaml                # Blueprint 1-click deployment para Render.com
+├── requirements.txt           # Dependencias de Python de producción
+├── README.md                  # Documentación principal del sistema integral
+├── README_API_MAPS.md         # Documentación dedicada del Módulo REST API de Maps
+├── URL_PUBLICA.txt            # Dominio de producción (https://bibliotecarenzo.xyz)
+├── modulo_google_maps_undac/  # Módulo autónomo independiente para evaluación académica
+├── modulo_google_maps_undac.zip # Paquete zip autocontenido comprimido
 ├── routes/                    # Módulos de rutas segregadas por Blueprints
+│   ├── api_external.py        # REST API de Geolocalización, Maps, Geocoding y Clima
 │   ├── ingreso.py             # Control de accesos y escaneo de barras
 │   ├── visitantes.py          # Gestión de visitantes externos
 │   ├── admin_auth.py          # Autenticación y control de login administrativo
@@ -81,8 +87,8 @@ SistemaBiblioteca/
 │   ├── queries_ingreso.py     # Ejecución de Stored Procedures de escaneo
 │   ├── validaciones.py        # Validación de DNIs y duplicados
 │   └── task_manager.py       # Gestor de tareas asíncronas en segundo plano
-├── static/                    # Archivos estáticos (CSS, JS, sonidos de escáner)
-└── templates/                 # Plantillas HTML en Jinja2
+├── static/                    # Archivos estáticos (CSS, JS, sonidos de escáner, logos)
+└── templates/                 # Plantillas HTML en Jinja2 (mapa_filiales.html, etc.)
 ```
 
 ---
@@ -92,14 +98,14 @@ SistemaBiblioteca/
 ### 1. Requisitos Previos
 
 * Python 3.10 o superior instalado.
-* Microsoft SQL Server 2017 o superior.
+* Microsoft SQL Server 2017 o superior (para funcionalidad completa de accesos).
 * `ODBC Driver 17 for SQL Server` instalado en el sistema operativo.
 
 ### 2. Clonar el Repositorio
 
 ```bash
-git clone https://github.com/RenzoJPRC/biblioteca-ingreso-undac.git
-cd biblioteca-ingreso-undac
+git clone https://github.com/RenzoJPRC/biblioteca-undac.git
+cd biblioteca-undac
 ```
 
 ### 3. Crear Entorno Virtual e Instalar Dependencias
