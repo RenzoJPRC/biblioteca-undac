@@ -9,7 +9,7 @@
 
 ## 📌 1. Descripción del Módulo
 
-Este es un **Módulo Independiente, Autocontenido y Reutilizable** desarrollado en **Python (Flask)**. Ofrece una solución completa de geolocalización, trazado de rutas vehiculares y geocodificación para la Red de Bibliotecas de la Universidad Nacional Daniel Alcides Carrión (UNDAC).
+Este es un **Módulo Independiente, Autocontenido y Reutilizable** desarrollado en **Python (Flask)**. Ofrece una solución completa de geolocalización, trazado de rutas y geocodificación para la Red de Bibliotecas de la Universidad Nacional Daniel Alcides Carrión (UNDAC).
 
 ### 🚀 Funcionalidades Principales:
 1. 📍 **Geolocalización Institucional de Alta Precisión**:
@@ -53,19 +53,30 @@ Ejecute el comando principal de inicio:
 python app.py
 ```
 
-¡Listo! Abra su navegador e ingrese a la siguiente dirección:
-👉 **`http://127.0.0.1:5000/mapa`**
+¡Listo! Abra su navegador e ingrese a la siguiente dirección(Recuerde lo esta abriendo de manera Local):
+👉 **`http://127.0.0.1:5000/mapa`** 
 
 ---
 
 ## 📡 3. Endpoints REST API Disponibles
 
-| Endpoint | Método | Descripción | Ejemplo de Uso |
-| :--- | :---: | :--- | :--- |
-| `/mapa` | `GET` | Vista web interactiva con el mapa de filiales UNDAC. | `http://127.0.0.1:5000/mapa` |
-| `/api/ubicaciones_undac` | `GET` | Colección JSON de las 6 filiales con sus coordenadas y aforos. | `http://127.0.0.1:5000/api/ubicaciones_undac` |
-| `/api/geocodificar` | `GET` | Geocodificación de direcciones a coordenadas (`q=nombre`). | `http://127.0.0.1:5000/api/geocodificar?q=Tarma` |
-| `/api/clima_coordenada` | `GET` | Clima en tiempo real por coordenadas `lat` y `lng`. | `http://127.0.0.1:5000/api/clima_coordenada?lat=-10.668115&lng=-76.253753` |
+El módulo ofrece los siguientes 4 servicios REST activos:
+
+* 🗺️ **Vista Web de Mapas Interactivas (`GET /mapa`)**:
+  - **Descripción**: Muestra la interfaz gráfica interactiva con la localización de la Sede Central y las 5 filiales de la UNDAC.
+  - **URL Local de Prueba**: `http://127.0.0.1:5000/mapa`
+
+* 📍 **API REST Ubicaciones UNDAC (`GET /api/ubicaciones_undac`)**:
+  - **Descripción**: Devuelve la colección en formato JSON con la latitud, longitud, aforos, horarios y salas de las 6 filiales.
+  - **URL Local de Prueba**: `http://127.0.0.1:5000/api/ubicaciones_undac`
+
+* 🔍 **API REST Geocodificación Externa (`GET /api/geocodificar?q=...`)**:
+  - **Descripción**: Convierte nombres de lugares o direcciones en coordenadas geográficas `lat` y `lng` en tiempo real.
+  - **URL Local de Prueba**: `http://127.0.0.1:5000/api/geocodificar?q=Tarma`
+
+* 🌦️ **API REST Clima por Coordenada (`GET /api/clima_coordenada?lat=...&lng=...`)**:
+  - **Descripción**: Obtiene la temperatura y condición meteorológica en tiempo real mediante la API REST de Open-Meteo.
+  - **URL Local de Prueba**: `http://127.0.0.1:5000/api/clima_coordenada?lat=-10.668115&lng=-76.253753`
 
 ---
 
@@ -81,5 +92,3 @@ app.register_blueprint(api_external_bp)
 ```
 
 ---
-
-&copy; 2026 Renzo Juan Pablo Rojas Castillo - Todos los derechos reservados.
