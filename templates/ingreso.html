@@ -35,11 +35,11 @@
     </div>
 
     <!-- NAVEGACIÓN SUPERIOR RESPONSIVA (MÓVIL + DESKTOP) -->
-    <header class="w-full max-w-7xl flex flex-col md:flex-row items-center justify-between gap-4 p-4 md:p-8 md:absolute md:top-0 md:left-0 md:right-0 z-40">
+    <header class="w-full max-w-7xl flex flex-col sm:flex-row items-center justify-between gap-4 p-4 md:p-8 md:absolute md:top-0 md:left-0 md:right-0 z-40 mx-auto">
         
         <!-- LOGO UNDAC -->
-        <a href="/" class="cursor-pointer focus:outline-none flex flex-col items-center md:items-start text-center md:text-left">
-            <h1 class="text-2xl md:text-3xl font-bold tracking-widest text-sky-600 drop-shadow-sm">UNDAC</h1>
+        <a href="/" class="cursor-pointer focus:outline-none flex flex-col items-center sm:items-start text-center sm:text-left group">
+            <h1 class="text-2xl md:text-3xl font-bold tracking-widest text-sky-600 drop-shadow-sm group-hover:text-sky-800 transition-colors">UNDAC</h1>
             <p class="text-[10px] md:text-xs text-slate-500 uppercase tracking-widest mt-0.5">Biblioteca Central</p>
         </a>
 
@@ -73,7 +73,7 @@
         </div>
     </header>
 
-    <div class="w-full max-w-4xl text-center p-4 md:p-8 my-auto">
+    <div class="w-full max-w-4xl text-center p-4 md:p-8 my-auto pt-28 md:pt-0">
 
         <div id="pantalla-espera" class="transition-all duration-300">
             <div class="mb-10">
@@ -112,10 +112,10 @@
             <div id="datos-alumno" class="border-t border-sky-200 pt-6 mt-6 hidden">
                 <h3 id="nombre-alumno" class="text-3xl text-sky-950 font-semibold mb-2"></h3>
 
-                <div class="flex justify-center gap-4 text-sky-600 text-xl font-light">
+                <div class="flex justify-center items-center gap-3 text-sky-600 text-xl font-light">
                     <span id="escuela-alumno"></span>
-                    <span>&bull;</span>
-                    <span id="semestre-alumno"></span>
+                    <span id="bullet-separador" class="hidden">&bull;</span>
+                    <span id="semestre-alumno" class="hidden"></span>
                 </div>
 
                 <div id="mensaje-extra" class="hidden mt-4 text-rose-500 text-3xl font-bold animate-bounce uppercase">
@@ -505,29 +505,59 @@
             document.getElementById('escuela-alumno').innerText = escuelaTxt;
 
             const sem = document.getElementById('semestre-alumno');
+            const bullet = document.getElementById('bullet-separador');
+
+            let rawSem = String(data.semestre || '').trim();
 
             if (
-                data.semestre &&
-                data.semestre !== 'EXTERNO' &&
-                data.semestre !== 'VISITANTE' &&
-                data.semestre !== 'EGRESADO' &&
-                data.semestre !== 'ADMINISTRATIVO' &&
-                data.semestre !== 'DOCENTE'
+                rawSem !== '' &&
+                rawSem.toUpperCase() !== 'EXTERNO' &&
+                rawSem.toUpperCase() !== 'VISITANTE' &&
+                rawSem.toUpperCase() !== 'EGRESADO' &&
+                rawSem.toUpperCase() !== 'ADMINISTRATIVO' &&
+                rawSem.toUpperCase() !== 'DOCENTE'
             ) {
-                sem.innerText = "Semestre " + data.semestre;
+                let semOrdinal = rawSem;
+                if (rawSem === '10' || rawSem === '10º') semOrdinal = 'Décimo';
+                else if (rawSem === '9' || rawSem === '9º') semOrdinal = 'Noveno';
+                else if (rawSem === '8' || rawSem === '8º') semOrdinal = 'Octavo';
+                else if (rawSem === '7' || rawSem === '7º') semOrdinal = 'Séptimo';
+                else if (rawSem === '6' || rawSem === '6º') semOrdinal = 'Sexto';
+                else if (rawSem === '5' || rawSem === '5º') semOrdinal = 'Quinto';
+                else if (rawSem === '4' || rawSem === '4º') semOrdinal = 'Cuarto';
+                else if (rawSem === '3' || rawSem === '3º') semOrdinal = 'Tercero';
+                else if (rawSem === '2' || rawSem === '2º') semOrdinal = 'Segundo';
+                else if (rawSem === '1' || rawSem === '1º') semOrdinal = 'Primero';
+
+                sem.innerText = semOrdinal.toLowerCase().includes('semestre') ? semOrdinal : semOrdinal + " Semestre";
                 sem.style.display = 'inline';
+                sem.classList.remove('hidden');
+                if (bullet) {
+                    bullet.style.display = 'inline';
+                    bullet.classList.remove('hidden');
+                }
 
             } else if (
-                data.semestre === 'VISITANTE' ||
-                data.semestre === 'EGRESADO' ||
-                data.semestre === 'ADMINISTRATIVO' ||
-                data.semestre === 'DOCENTE'
+                rawSem.toUpperCase() === 'VISITANTE' ||
+                rawSem.toUpperCase() === 'EGRESADO' ||
+                rawSem.toUpperCase() === 'ADMINISTRATIVO' ||
+                rawSem.toUpperCase() === 'DOCENTE'
             ) {
-                sem.innerText = data.semestre;
+                sem.innerText = rawSem;
                 sem.style.display = 'inline';
+                sem.classList.remove('hidden');
+                if (bullet) {
+                    bullet.style.display = 'inline';
+                    bullet.classList.remove('hidden');
+                }
 
             } else {
                 sem.style.display = 'none';
+                sem.classList.add('hidden');
+                if (bullet) {
+                    bullet.style.display = 'none';
+                    bullet.classList.add('hidden');
+                }
             }
         }
 

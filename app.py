@@ -118,15 +118,15 @@ def requerir_login_admin():
     generar_csrf_token_si_no_existe()
 
     # Proteger métodos que modifican datos
-    metodos_protegidos = ["POST", "PUT", "PATCH", "DELETE"]
+    METODOS_PROTEGIDOS = {"POST", "PUT", "PATCH", "DELETE"}
 
-    if request.method in metodos_protegidos and not request.path.startswith("/admin/api"):
+    if request.method in METODOS_PROTEGIDOS and not request.path.startswith("/admin/api"):
         if not validar_csrf():
             return respuesta_csrf_bloqueado()
 
     # Restricción para rol Supervisor
     if session.get("admin_rol") == "Supervisor":
-        rutas_permitidas = [
+        RUTAS_PERMITIDAS_SUPERVISOR = {
             "/admin",
             "/admin/",
             "/admin/login",
@@ -139,7 +139,7 @@ def requerir_login_admin():
             "/admin/guardar_evento",
             "/admin/importar_invitados_evento",
             "/admin/imprimir_reporte"
-        ]
+        }
 
         es_dinamica = (
             request.path.startswith("/admin/api/dashboard")
@@ -148,7 +148,7 @@ def requerir_login_admin():
             or request.path.startswith("/admin/eventos")
         )
 
-        if request.path not in rutas_permitidas and not es_dinamica:
+        if request.path not in RUTAS_PERMITIDAS_SUPERVISOR and not es_dinamica:
             return """
             <h1>403 Forbidden</h1>
             <p>Tu rol de Supervisor no tiene permisos para visitar este módulo.</p>
@@ -157,10 +157,10 @@ def requerir_login_admin():
 
     # Restricción para rol Consultor
     if session.get("admin_rol") == "Consultor":
-        if request.method in ["POST", "PUT", "PATCH", "DELETE"] and request.path != "/admin/login" and request.path != "/admin/logout":
+        if request.method in METODOS_PROTEGIDOS and request.path != "/admin/login" and request.path != "/admin/logout":
             return jsonify({'status': 'error', 'msg': 'Operación denegada. Rol Consultor (Solo Lectura).'})
 
-        rutas_permitidas = [
+        RUTAS_PERMITIDAS_CONSULTOR = {
             "/admin/login",
             "/admin/logout",
             "/admin/carnets",
@@ -168,11 +168,11 @@ def requerir_login_admin():
             "/admin/docentes",
             "/admin/personal",
             "/admin/visitantes"
-        ]
+        }
 
         es_busqueda = request.path.startswith("/admin/buscar_")
         
-        if request.path not in rutas_permitidas and not es_busqueda and not request.path.startswith("/admin/static"):
+        if request.path not in RUTAS_PERMITIDAS_CONSULTOR and not es_busqueda and not request.path.startswith("/admin/static"):
             return """
             <h1>403 Forbidden</h1>
             <p>Tu rol de Consultor solo tiene acceso de lectura a los módulos de listas.</p>

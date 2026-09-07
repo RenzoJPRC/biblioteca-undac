@@ -36,7 +36,15 @@ function cerrarEventosMenu() {
 }
 
 function toggleMenu(menuId) {
-    const menus = ['main-menu', 'central-menu', 'filial-menu', 'eventos-menu', 'filial-opciones-menu'];
+    const menus = [
+        'main-menu', 
+        'menu-biblioteca-undac', 
+        'menu-herramientas-extras', 
+        'central-menu', 
+        'filial-menu', 
+        'eventos-menu', 
+        'filial-opciones-menu'
+    ];
     menus.forEach(m => {
         const el = document.getElementById(m);
         if (el) {

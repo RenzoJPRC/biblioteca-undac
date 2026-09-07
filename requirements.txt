@@ -5,3 +5,4 @@ pyodbc
 python-dotenv
 waitress
 requests
+gunicorn>=20.1.0

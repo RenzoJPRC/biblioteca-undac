@@ -35,62 +35,127 @@
             <p class="text-slate-500 text-sm font-medium">Universidad Nacional Daniel Alcides Carrión</p>
         </div>
 
-        <!-- MAIN MENU GRID (4 BUTTONS) -->
-        <div id="main-menu" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 w-full transition-all duration-300">
-            <!-- COLUMN 1: CENTRAL BOTÓN -->
-            <button onclick="toggleMenu('central-menu')"
-                class="group flex flex-col items-center justify-center p-6 bg-sky-50/50 rounded-2xl border border-sky-100 hover:bg-sky-600 hover:border-sky-600 transition-all shadow-sm hover:shadow-xl hover:-translate-y-1">
-                <div class="p-4 bg-white rounded-full mb-3 shadow-sm group-hover:bg-sky-500 transition-colors">
-                    <i class="ph-fill ph-buildings text-3xl text-sky-500 group-hover:text-white transition-colors"></i>
+        <!-- MAIN MENU GRID (2 CATEGORY BUTTONS) -->
+        <div id="main-menu" class="grid grid-cols-1 md:grid-cols-2 gap-6 w-full transition-all duration-300">
+            <!-- BOTÓN 1: BIBLIOTECA UNDAC -->
+            <button onclick="toggleMenu('menu-biblioteca-undac')"
+                class="group flex flex-col items-center justify-center p-8 bg-gradient-to-br from-sky-50/80 to-blue-50/50 rounded-3xl border-2 border-sky-100 hover:bg-sky-600 hover:border-sky-600 transition-all shadow-md hover:shadow-2xl hover:-translate-y-1">
+                <div class="p-5 bg-white rounded-2xl mb-4 shadow-md group-hover:bg-white/20 transition-all group-hover:scale-110">
+                    <i class="ph-fill ph-bank text-4xl text-sky-600 group-hover:text-white transition-colors"></i>
                 </div>
-                <h2 class="text-sky-800 font-bold uppercase tracking-wider text-xs group-hover:text-white transition-colors">
-                    Sede Central</h2>
-                <p class="text-[11px] text-slate-400 group-hover:text-sky-100 transition-colors mt-1 font-medium">Control de Ingresos</p>
+                <h2 class="text-sky-900 font-extrabold uppercase tracking-wider text-base group-hover:text-white transition-colors">
+                    Biblioteca UNDAC</h2>
+                <p class="text-xs text-slate-500 group-hover:text-sky-100 transition-colors mt-1 font-semibold text-center">
+                    Sede Central, Filiales & Panel Administrador
+                </p>
             </button>
 
-            <!-- COLUMN 2: FILIALES BOTÓN -->
-            <button onclick="toggleMenu('filial-menu')"
-                class="group flex flex-col items-center justify-center p-6 bg-emerald-50/50 rounded-2xl border border-emerald-100 hover:bg-emerald-600 hover:border-emerald-600 transition-all shadow-sm hover:shadow-xl hover:-translate-y-1">
-                <div class="p-4 bg-white rounded-full mb-3 shadow-sm group-hover:bg-emerald-500 transition-colors">
-                    <i class="ph-fill ph-map-pin text-3xl text-emerald-500 group-hover:text-white transition-colors"></i>
+            <!-- BOTÓN 2: HERRAMIENTAS EXTRAS -->
+            <button onclick="toggleMenu('menu-herramientas-extras')"
+                class="group flex flex-col items-center justify-center p-8 bg-gradient-to-br from-indigo-50/80 to-purple-50/50 rounded-3xl border-2 border-indigo-100 hover:bg-indigo-600 hover:border-indigo-600 transition-all shadow-md hover:shadow-2xl hover:-translate-y-1">
+                <div class="p-5 bg-white rounded-2xl mb-4 shadow-md group-hover:bg-white/20 transition-all group-hover:scale-110">
+                    <i class="ph-fill ph-toolbox text-4xl text-indigo-600 group-hover:text-white transition-colors"></i>
                 </div>
-                <h2 class="text-emerald-800 font-bold uppercase tracking-wider text-xs group-hover:text-white transition-colors">
-                    Filiales</h2>
-                <p class="text-[11px] text-slate-400 group-hover:text-emerald-100 transition-colors mt-1 font-medium">Ingresos Descentralizados</p>
+                <h2 class="text-indigo-900 font-extrabold uppercase tracking-wider text-base group-hover:text-white transition-colors">
+                    Herramientas Extras</h2>
+                <p class="text-xs text-slate-500 group-hover:text-indigo-100 transition-colors mt-1 font-semibold text-center">
+                    Catálogo de Libros & Recursos REST
+                </p>
+            </button>
+        </div>
+
+        <!-- SUB-MENÚ 1: BIBLIOTECA UNDAC (3 BOTONES: SEDE CENTRAL, FILIALES Y ADMINISTRADOR) -->
+        <div id="menu-biblioteca-undac" class="hidden w-full transition-all duration-300 animate-fade-in-up">
+            <button onclick="toggleMenu('main-menu')"
+                class="mb-6 px-4 py-2 bg-white text-sm text-slate-600 hover:text-sky-600 font-bold flex items-center gap-2 transition-all rounded-full shadow-sm hover:shadow-md border border-slate-200 hover:border-sky-300 w-max">
+                <i class="ph-bold ph-arrow-left text-lg"></i> Volver al Menú Principal
             </button>
 
-            <!-- COLUMN 3: RECURSOS ACADÉMICOS & CATÁLOGO LIBROS -->
-            <a href="/catalogo"
-                class="group flex flex-col items-center justify-center p-6 bg-indigo-50/50 rounded-2xl border border-indigo-100 hover:bg-indigo-600 hover:border-indigo-600 transition-all shadow-sm hover:shadow-xl hover:-translate-y-1">
-                <div class="p-4 bg-white rounded-full mb-3 shadow-sm group-hover:bg-indigo-500 transition-colors">
-                    <i class="ph-fill ph-books text-3xl text-indigo-500 group-hover:text-white transition-colors"></i>
-                </div>
-                <h2 class="text-indigo-800 font-bold uppercase tracking-wider text-xs group-hover:text-white transition-colors">
-                    Catálogo Libros</h2>
-                <p class="text-[11px] text-slate-400 group-hover:text-indigo-100 transition-colors mt-1 font-medium">Recursos & API REST</p>
-            </a>
+            <div class="bg-sky-50/60 p-6 rounded-3xl border border-sky-100 shadow-sm">
+                <h2 class="text-sky-900 font-extrabold uppercase tracking-wider text-sm mb-4 flex items-center gap-2">
+                    <i class="ph-fill ph-bank text-lg text-sky-600"></i> Biblioteca UNDAC - Seleccione una Opción
+                </h2>
 
-            <!-- COLUMN 4: ADMIN PANEL -->
-            <a href="/admin"
-                class="group relative overflow-hidden bg-slate-800 rounded-2xl p-6 flex flex-col items-center justify-center text-center hover:bg-slate-900 transition-all shadow-lg hover:shadow-xl hover:-translate-y-1 border border-slate-700">
-                <i class="ph-fill ph-shield-check text-8xl absolute text-slate-700/20 -bottom-6 -right-6 group-hover:text-slate-600/30 transition-all duration-500"></i>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <!-- 1. SEDE CENTRAL -->
+                    <button onclick="toggleMenu('central-menu')"
+                        class="group flex flex-col items-center justify-center p-6 bg-white rounded-2xl border border-sky-200 hover:bg-sky-600 hover:border-sky-600 transition-all shadow-sm hover:shadow-xl hover:-translate-y-1">
+                        <div class="p-4 bg-sky-50 rounded-full mb-3 shadow-sm group-hover:bg-white/20 transition-colors">
+                            <i class="ph-fill ph-buildings text-3xl text-sky-600 group-hover:text-white transition-colors"></i>
+                        </div>
+                        <h3 class="text-sky-900 font-bold uppercase tracking-wider text-xs group-hover:text-white transition-colors">
+                            Sede Central</h3>
+                        <p class="text-[11px] text-slate-400 group-hover:text-sky-100 transition-colors mt-1 font-medium text-center">Control de Ingresos</p>
+                    </button>
 
-                <div class="p-3 bg-slate-700/50 rounded-full group-hover:bg-slate-600/50 transition-colors backdrop-blur-sm z-10 mb-2">
-                    <i class="ph-fill ph-user-gear text-3xl text-sky-400 group-hover:text-sky-300 transition-colors"></i>
-                </div>
+                    <!-- 2. FILIALES -->
+                    <button onclick="toggleMenu('filial-menu')"
+                        class="group flex flex-col items-center justify-center p-6 bg-white rounded-2xl border border-emerald-200 hover:bg-emerald-600 hover:border-emerald-600 transition-all shadow-sm hover:shadow-xl hover:-translate-y-1">
+                        <div class="p-4 bg-emerald-50 rounded-full mb-3 shadow-sm group-hover:bg-white/20 transition-colors">
+                            <i class="ph-fill ph-map-pin text-3xl text-emerald-600 group-hover:text-white transition-colors"></i>
+                        </div>
+                        <h3 class="text-emerald-900 font-bold uppercase tracking-wider text-xs group-hover:text-white transition-colors">
+                            Filiales</h3>
+                        <p class="text-[11px] text-slate-400 group-hover:text-emerald-100 transition-colors mt-1 font-medium text-center">Ingresos Descentralizados</p>
+                    </button>
 
-                <div class="z-10">
-                    <h2 class="text-sm font-bold text-white uppercase tracking-wider mb-0.5">Panel Admin</h2>
-                    <p class="text-slate-400 text-[11px] group-hover:text-slate-300 transition-colors">Gestión & Reportes</p>
+                    <!-- 3. ADMINISTRADOR -->
+                    <a href="/admin"
+                        class="group flex flex-col items-center justify-center p-6 bg-slate-800 rounded-2xl border border-slate-700 hover:bg-slate-900 transition-all shadow-lg hover:shadow-xl hover:-translate-y-1 text-center relative overflow-hidden">
+                        <i class="ph-fill ph-shield-check text-7xl absolute text-slate-700/30 -bottom-5 -right-5 group-hover:text-slate-600/40 transition-all"></i>
+                        <div class="p-3 bg-slate-700/60 rounded-full group-hover:bg-slate-600/60 transition-colors mb-3 z-10">
+                            <i class="ph-fill ph-user-gear text-3xl text-sky-400 group-hover:text-sky-300 transition-colors"></i>
+                        </div>
+                        <h3 class="text-xs font-bold text-white uppercase tracking-wider z-10">Administrador</h3>
+                        <p class="text-slate-400 text-[11px] group-hover:text-slate-300 transition-colors z-10 mt-1">Gestión & Reportes</p>
+                    </a>
                 </div>
-            </a>
+            </div>
+        </div>
+
+        <!-- SUB-MENÚ 2: HERRAMIENTAS EXTRAS (BOTÓN CATÁLOGO LIBROS) -->
+        <div id="menu-herramientas-extras" class="hidden w-full transition-all duration-300 animate-fade-in-up">
+            <button onclick="toggleMenu('main-menu')"
+                class="mb-6 px-4 py-2 bg-white text-sm text-slate-600 hover:text-indigo-600 font-bold flex items-center gap-2 transition-all rounded-full shadow-sm hover:shadow-md border border-slate-200 hover:border-indigo-300 w-max">
+                <i class="ph-bold ph-arrow-left text-lg"></i> Volver al Menú Principal
+            </button>
+
+            <div class="bg-indigo-50/60 p-6 rounded-3xl border border-indigo-100 shadow-sm">
+                <h2 class="text-indigo-900 font-extrabold uppercase tracking-wider text-sm mb-4 flex items-center gap-2">
+                    <i class="ph-fill ph-toolbox text-lg text-indigo-600"></i> Herramientas Extras
+                </h2>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- CATÁLOGO LIBROS -->
+                    <a href="/catalogo"
+                        class="group flex flex-col items-center justify-center p-6 bg-white rounded-2xl border border-indigo-200 hover:bg-indigo-600 hover:border-indigo-600 transition-all shadow-sm hover:shadow-xl hover:-translate-y-1 text-center">
+                        <div class="p-4 bg-indigo-50 rounded-full mb-3 shadow-sm group-hover:bg-white/20 transition-colors">
+                            <i class="ph-fill ph-books text-3xl text-indigo-600 group-hover:text-white transition-colors"></i>
+                        </div>
+                        <h3 class="text-indigo-900 font-bold uppercase tracking-wider text-xs group-hover:text-white transition-colors">
+                            Catálogo Libros</h3>
+                        <p class="text-[11px] text-slate-400 group-hover:text-indigo-100 transition-colors mt-1 font-medium">Recursos Digitales & Citas APA 7</p>
+                    </a>
+
+                    <!-- MAPA & GEOLOCALIZACIÓN GOOGLE MAPS API -->
+                    <a href="/mapa"
+                        class="group flex flex-col items-center justify-center p-6 bg-white rounded-2xl border border-sky-200 hover:bg-sky-600 hover:border-sky-600 transition-all shadow-sm hover:shadow-xl hover:-translate-y-1 text-center">
+                        <div class="p-4 bg-sky-50 rounded-full mb-3 shadow-sm group-hover:bg-white/20 transition-colors">
+                            <i class="ph-fill ph-map-trifold text-3xl text-sky-600 group-hover:text-white transition-colors"></i>
+                        </div>
+                        <h3 class="text-sky-900 font-bold uppercase tracking-wider text-xs group-hover:text-white transition-colors">
+                            Geolocalización & Mapa UNDAC</h3>
+                        <p class="text-[11px] text-slate-400 group-hover:text-sky-100 transition-colors mt-1 font-medium">Google Maps API & Rutas GPS</p>
+                    </a>
+                </div>
+            </div>
         </div>
 
         <!-- SUB MENU CENTRAL -->
         <div id="central-menu" class="hidden w-full transition-all duration-300 animate-fade-in-up">
-            <button onclick="toggleMenu('main-menu')"
+            <button onclick="toggleMenu('menu-biblioteca-undac')"
                 class="mb-6 px-4 py-2 bg-white text-sm text-slate-600 hover:text-sky-600 font-bold flex items-center gap-2 transition-all rounded-full shadow-sm hover:shadow-md border border-slate-200 hover:border-sky-300 w-max"><i
-                    class="ph-bold ph-arrow-left text-lg"></i> Volver al Menú Principal</button>
+                    class="ph-bold ph-arrow-left text-lg"></i> Volver a Biblioteca UNDAC</button>
             <div class="bg-sky-50/50 p-6 rounded-2xl border border-sky-100 shadow-sm">
                 <h2 class="text-sky-800 font-bold uppercase tracking-wider text-sm mb-4 flex items-center gap-2">
                     <i class="ph-fill ph-buildings text-lg"></i> Accesos Sede Central
@@ -178,9 +243,9 @@
 
         <!-- SUB MENU FILIALES -->
         <div id="filial-menu" class="hidden w-full transition-all duration-300 animate-fade-in-up">
-            <button onclick="toggleMenu('main-menu')"
+            <button onclick="toggleMenu('menu-biblioteca-undac')"
                 class="mb-6 px-4 py-2 bg-white text-sm text-slate-600 hover:text-emerald-600 font-bold flex items-center gap-2 transition-all rounded-full shadow-sm hover:shadow-md border border-slate-200 hover:border-emerald-300 w-max"><i
-                    class="ph-bold ph-arrow-left text-lg"></i> Volver al Menú Principal</button>
+                    class="ph-bold ph-arrow-left text-lg"></i> Volver a Biblioteca UNDAC</button>
             <div class="bg-emerald-50/50 p-6 rounded-2xl border border-emerald-100 shadow-sm">
                 <h2 class="text-emerald-800 font-bold uppercase tracking-wider text-sm mb-4 flex items-center gap-2">
                     <i class="ph-fill ph-map-pin text-lg"></i> Accesos Filiales

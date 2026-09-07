@@ -1,7 +1,28 @@
-import requests
-from db import get_db_connection
+from datetime import datetime
 
-BASE_API_UNDAC_URL = "http://api.undac.edu.pe/tasks/a3945a7384cbdcd33f49e8f5b8ec29f5/91f33e2776c526b9cca723a63476f028"
+def calcular_semestre_undac(codigo, fecha_ingreso_api=None, semestre_raw=None):
+    """Calcula el semestre académico numérico/texto según el código o año de ingreso."""
+    if semestre_raw and str(semestre_raw).strip() and str(semestre_raw).strip().lower() not in ('none', 'null', 'regular', '', '0'):
+        return str(semestre_raw).strip()
+    
+    año_ingreso = None
+    if fecha_ingreso_api and str(fecha_ingreso_api).isdigit():
+        año_ingreso = int(fecha_ingreso_api)
+    elif codigo and len(str(codigo).strip()) >= 8:
+        prefijo = str(codigo).strip()[:2]
+        if prefijo.isdigit():
+            val = int(prefijo)
+            if 15 <= val <= 26:
+                año_ingreso = 2000 + val
+    
+    if año_ingreso:
+        año_actual = datetime.now().year
+        diff = año_actual - año_ingreso
+        num_semestre = max(1, min(10, (diff * 2) + 2))
+        return str(num_semestre)
+    
+    return '10'
+
 
 def auto_registrar_alumno_api_undac(codigo):
     """
@@ -25,6 +46,8 @@ def auto_registrar_alumno_api_undac(codigo):
         dni = data.get('Dni', '').strip()
         facultad = data.get('Programa facultad', '').strip()
         
+        semestre_val = calcular_semestre_undac(codigo, data.get('Fecha de Ingreso'), data.get('Semestre'))
+        
         conn = get_db_connection()
         if not conn:
             return False, None
@@ -33,47 +56,30 @@ def auto_registrar_alumno_api_undac(codigo):
         
         # Verificar que no exista por si acaso antes de insertar
         cursor.execute("SELECT AlumnoID FROM Alumnos WHERE CodigoMatricula = ? OR (DNI = ? AND len(DNI) > 4)", (codigo, dni))
-        if cursor.fetchone():
+        row_ex = cursor.fetchone()
+        if row_ex:
+            cursor.execute("UPDATE Alumnos SET Semestre = ? WHERE AlumnoID = ? AND (Semestre IS NULL OR Semestre = '' OR Semestre = 'Regular')", (semestre_val, row_ex[0]))
+            conn.commit()
             conn.close()
             return True, nombre_completo
 
         cursor.execute("""
-            INSERT INTO Alumnos (NombreCompleto, DNI, CodigoMatricula, Escuela, Estado)
-            VALUES (?, ?, ?, ?, 1)
-        """, (nombre_completo, dni, str(codigo).strip(), facultad))
+            INSERT INTO Alumnos (NombreCompleto, DNI, CodigoMatricula, Escuela, Semestre, Estado)
+            VALUES (?, ?, ?, ?, ?, 1)
+        """, (nombre_completo, dni, str(codigo).strip(), facultad, semestre_val))
         conn.commit()
         conn.close()
-        print(f"[API UNDAC AUTO-SYNC] Alumno {codigo} ({nombre_completo}) registrado automáticamente en tiempo real.")
+        print(f"[API UNDAC AUTO-SYNC] Alumno {codigo} ({nombre_completo}) registrado automáticamente en tiempo real con Semestre '{semestre_val}'.")
         return True, nombre_completo
     except Exception as e:
         print(f"[API UNDAC AUTO-SYNC ERROR] {e}")
         return False, None
 
 
-import threading
-from utils.telegram_notify import enviar_notificacion_ingreso_telegram
-
-def _notificar_telegram_async(nombre, sala_id, conn_cursor=None):
-    """Obtiene el piso y la sala para enviar la notificación a Telegram sin demorar la respuesta web."""
-    try:
-        conn = get_db_connection()
-        if conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT NombreSala, Piso FROM Salas WHERE SalaID = ?", (sala_id,))
-            row = cursor.fetchone()
-            conn.close()
-            if row:
-                nombre_sala = row[0]
-                piso = row[1]
-                enviar_notificacion_ingreso_telegram(nombre, piso, nombre_sala)
-    except Exception as e:
-        print(f"[TELEGRAM THREAD ERROR] {e}")
-
-
 def registrar_ingreso_general(codigo, sala_id):
     """
     Ejecuta el stored procedure sp_RegistrarIngreso y retorna el resultado
-    en un formato de diccionario que el endpoint espera. Integrado con Auto-Sync API UNDAC y Telegram Notify.
+    en un formato de diccionario que el endpoint espera. Integrado con Auto-Sync API UNDAC.
     """
     conn = get_db_connection()
     if not conn: 
@@ -116,9 +122,8 @@ def registrar_ingreso_general(codigo, sala_id):
                         escuela = row_retry[2]
                         semestre = row_retry[3]
                         if 'CONCEDIDO' in mensaje or 'NUEVO INGRESO' in mensaje:
-                            # Notificar en segundo plano a Telegram
-                            threading.Thread(target=_notificar_telegram_async, args=(nombre, sala_id), daemon=True).start()
-
+                            if not semestre or str(semestre).strip().lower() in ('none', 'null', '', 'regular'):
+                                semestre = calcular_semestre_undac(codigo)
                             return {
                                 'status': 'success', 
                                 'msg': f"{mensaje} (Autenticado vía API UNDAC)", 
@@ -128,13 +133,18 @@ def registrar_ingreso_general(codigo, sala_id):
                                 'semestre': semestre
                             }
 
+            if not semestre or str(semestre).strip().lower() in ('none', 'null', '', 'regular'):
+                semestre = calcular_semestre_undac(codigo)
+                try:
+                    cursor.execute("UPDATE Alumnos SET Semestre = ? WHERE CodigoMatricula = ? OR DNI = ?", (semestre, codigo, codigo))
+                    conn.commit()
+                except Exception:
+                    pass
+
             if 'CONCEDIDO' in mensaje or 'NUEVO INGRESO' in mensaje: 
                 warning_type = None
                 if 'VENCIDO' in mensaje or 'CARNET VENCIDO' in mensaje:
                     warning_type = 'carnet_vencido'
-
-                # Notificar en segundo plano a Telegram
-                threading.Thread(target=_notificar_telegram_async, args=(nombre, sala_id), daemon=True).start()
 
                 return {
                     'status': 'success', 

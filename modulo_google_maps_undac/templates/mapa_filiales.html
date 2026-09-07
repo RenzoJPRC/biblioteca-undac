@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geolocalización y Rutas - Bibliotecas UNDAC (Google Maps API)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <link rel="shortcut icon" href="{{ url_for('static', filename='logo.png') }}" type="image/png">
+
+    <!-- Leaflet CSS Fallback por si la clave de Google Maps no tiene facturación activa -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        #map-container {
+            width: 100%;
+            height: calc(100vh - 80px);
+            min-height: 500px;
+        }
+
+        .gm-style-iw-c {
+            border-radius: 16px !important;
+            padding: 0 !important;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
+        }
+
+        .gm-style-iw-d {
+            overflow: hidden !important;
+            max-height: none !important;
+        }
+
+        /* Ocultar barra de scroll horizontal fea en filtros */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        /* Scrollbar vertical elegante y discreto en la lista de sedes */
+        #lista-sedes-container::-webkit-scrollbar {
+            width: 6px;
+        }
+        #lista-sedes-container::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.6);
+        }
+        #lista-sedes-container::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 9999px;
+        }
+        #lista-sedes-container::-webkit-scrollbar-thumb:hover {
+            background: #0284c7;
+        }
+    </style>
+</head>
+
+<body class="bg-slate-900 text-slate-100 font-sans min-h-screen flex flex-col overflow-hidden">
+
+    <!-- HEADER DE NAVEGACIÓN -->
+    <header class="h-20 bg-slate-800/90 backdrop-blur-md border-b border-slate-700/80 px-6 flex items-center justify-between z-30 shrink-0">
+        <div class="flex items-center gap-4">
+            <a href="/" class="flex items-center gap-3 group">
+                <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo UNDAC" class="w-10 h-10 object-contain group-hover:scale-105 transition-transform">
+                <div>
+                    <h1 class="font-extrabold text-lg text-white tracking-tight flex items-center gap-2">
+                        Geolocalización & Rutas <span class="bg-sky-500/20 text-sky-400 text-xs px-2.5 py-0.5 rounded-full border border-sky-500/30">Google Maps REST API</span>
+                    </h1>
+                    <p class="text-xs text-slate-400 font-medium">Red de Bibliotecas Sede Central y Filiales UNDAC</p>
+                </div>
+            </a>
+        </div>
+
+        <div class="flex items-center gap-3">
+            <!-- SELECTOR DE CAPA FIJO EN EL HEADER (IMPOSIBLE DE DESAPARECER AL HACER ZOOM) -->
+            <div class="bg-slate-900/90 border border-slate-700/80 p-1 rounded-xl flex items-center gap-1 shadow-inner">
+                <button onclick="cambiarEstiloMapa('roadmap')" class="px-3 py-1.5 bg-sky-600 text-white font-bold text-xs rounded-lg transition-all shadow-sm" id="btn-mapa-calle">Mapa Calles</button>
+                <button onclick="cambiarEstiloMapa('hybrid')" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-lg transition-all" id="btn-mapa-satelite">Satélite</button>
+                <button onclick="cambiarEstiloMapa('terrain')" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-lg transition-all" id="btn-mapa-terreno">Terreno</button>
+            </div>
+
+            <button onclick="obtenerUbicacionGPS()" class="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs rounded-xl shadow-lg flex items-center gap-2 transition-all">
+                <i class="ph-bold ph-navigation-arrow text-base"></i> Mi Ubicación GPS & Ruta
+            </button>
+            <a href="/" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold text-xs rounded-xl transition-all flex items-center gap-1.5">
+                <i class="ph-bold ph-arrow-left text-base"></i> Volver al Portal
+            </a>
+        </div>
+    </header>
+
+    <!-- CUERPO PRINCIPAL (PANEL LATERAL + CONTENEDOR DE MAPA) -->
+    <div class="flex flex-1 relative overflow-hidden h-[calc(100vh-80px)]">
+
+        <!-- PANEL LATERAL DE SEDES (DESPLEGABLE / RESPONSIVO) -->
+        <aside class="w-full md:w-96 bg-slate-800/95 backdrop-blur-xl border-r border-slate-700 flex flex-col z-20 shrink-0 absolute md:relative inset-y-0 left-0 -translate-x-full md:translate-x-0 transition-transform duration-300 shadow-2xl h-full" id="sidebar-sedes">
+            
+            <div class="p-4 border-b border-slate-700/80 bg-slate-800">
+                <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
+                    <span>Sedes & Filiales Registradas</span>
+                    <span id="badge-total-sedes" class="bg-sky-500/20 text-sky-400 text-[10px] px-2 py-0.5 rounded-full">6 Sedes</span>
+                </h2>
+                <div class="relative mt-3 flex items-center gap-1.5">
+                    <div class="relative flex-1">
+                        <i class="ph-bold ph-magnifying-glass absolute left-3 top-3 text-slate-400"></i>
+                        <input type="text" id="input-buscar-sede" onkeyup="filtrarSedes()" onkeypress="if(event.key==='Enter') buscarDireccionGeocodingAPI()" placeholder="Buscar sede, dirección o ciudad..." class="w-full bg-slate-900 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-500">
+                    </div>
+                    <button onclick="buscarDireccionGeocodingAPI()" title="Buscar vía API REST Geocoding Externa" class="px-3 py-2 bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs rounded-xl shadow flex items-center gap-1 shrink-0 transition-colors">
+                        <i class="ph-bold ph-globe-hemisphere-west text-sm"></i> API REST
+                    </button>
+                </div>
+            </div>
+
+            <!-- LISTA DINÁMICA DE SEDES -->
+            <div id="lista-sedes-container" class="flex-1 overflow-y-auto p-3 space-y-2 min-h-0">
+                <div class="text-center py-8 text-slate-500 text-xs">
+                    <i class="ph-bold ph-spinner animate-spin text-2xl text-sky-500 mb-2"></i>
+                    <p>Cargando coordenadas geoespaciales...</p>
+                </div>
+            </div>
+
+            <!-- PIE PANEL - RUTA Y DISTANCIA -->
+            <div id="panel-ruta-info" class="hidden p-4 bg-sky-950/80 border-t border-sky-500/30 text-xs">
+                <div class="flex items-center justify-between font-bold text-sky-300 mb-1">
+                    <span class="flex items-center gap-1.5"><i class="ph-fill ph-path text-base"></i> Ruta Trazada</span>
+                    <span id="txt-distancia-km" class="text-white">-- km</span>
+                </div>
+                <p id="txt-tiempo-estimado" class="text-slate-300 text-[11px]">Calculando tiempo de viaje...</p>
+            </div>
+        </aside>
+
+        <!-- CONTENEDOR PRINCIPAL DEL MAPA -->
+        <main class="flex-1 relative bg-slate-950">
+            
+            <!-- BOTÓN FLOTANTE MÓVIL PANEL -->
+            <button onclick="toggleSidebarMover()" class="md:hidden absolute top-4 left-4 z-30 p-3 bg-slate-800 text-white rounded-xl shadow-lg border border-slate-700">
+                <i class="ph-bold ph-list text-xl"></i>
+            </button>
+
+            <!-- MAPA CANVAS -->
+            <div id="map-container"></div>
+        </main>
+    </div>
+
+    <!-- SCRIPTS DE CARGA Y LOGICA GOOGLE MAPS -->
+    <script>
+        const apiKey = "{{ api_key }}";
+        let googleMap = null;
+        let leafletMap = null;
+        let markersList = [];
+        let sedesData = [];
+        let userLocation = null;
+        let directionsService = null;
+        let directionsRenderer = null;
+        let isUsingGoogleMaps = false;
+
+        // Cargar datos de la API REST de Flask
+        document.addEventListener('DOMContentLoaded', () => {
+            fetch('/api/ubicaciones_undac')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        sedesData = data.sedes;
+                        renderListaSedesSidebar(sedesData);
+                        inicializarMapa();
+                    }
+                })
+                .catch(err => console.error("Error al cargar ubicaciones REST:", err));
+        });
+
+        function inicializarMapa() {
+            // Intentar cargar la SDK de Google Maps si existe API Key válida
+            if (apiKey && apiKey.trim() !== '') {
+                const script = document.createElement('script');
+                script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,geometry&callback=initGoogleMap`;
+                script.async = true;
+                script.defer = true;
+                script.onerror = () => initLeafletFallback();
+                document.head.appendChild(script);
+            } else {
+                initLeafletFallback();
+            }
+        }
+
+        // --- INICIALIZACIÓN DE GOOGLE MAPS API OFICIAL ---
+        window.initGoogleMap = function() {
+            isUsingGoogleMaps = true;
+            const centroPasco = { lat: -10.668115, lng: -76.253753 };
+
+            googleMap = new google.maps.Map(document.getElementById('map-container'), {
+                zoom: 16,
+                center: centroPasco,
+                mapTypeId: 'roadmap',
+                disableDefaultUI: false,
+                zoomControl: true,
+                streetViewControl: true,
+                mapTypeControl: false,
+                styles: [
+                    { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
+                    { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
+                    { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
+                    { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
+                    { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
+                    { featureType: "road", elementType: "geometry", stylers: [{ color: "#38414e" }] },
+                    { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#212a37" }] },
+                    { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#9ca5b3" }] },
+                    { featureType: "water", elementType: "geometry", stylers: [{ color: "#17263c" }] }
+                ]
+            });
+
+            directionsService = new google.maps.DirectionsService();
+            directionsRenderer = new google.maps.DirectionsRenderer({
+                map: googleMap,
+                polylineOptions: { strokeColor: '#0284c7', strokeWeight: 5 }
+            });
+
+            sedesData.forEach(sede => {
+                const marker = new google.maps.Marker({
+                    position: { lat: sede.lat, lng: sede.lng },
+                    map: googleMap,
+                    title: sede.nombre,
+                    animation: google.maps.Animation.DROP,
+                    icon: {
+                        url: sede.id === 'central' 
+                            ? 'https://maps.google.com/mapfiles/ms/icons/red-dot.png'
+                            : 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png'
+                    }
+                });
+
+                const infoWindowHtml = buildInfoWindowHtml(sede);
+                const infoWindow = new google.maps.InfoWindow({ content: infoWindowHtml });
+
+                marker.addListener('click', () => {
+                    infoWindow.open(googleMap, marker);
+                    googleMap.panTo(marker.getPosition());
+                });
+
+                markersList.push({ id: sede.id, marker: marker, infoWindow: infoWindow, data: sede });
+            });
+        };
+
+        let leafletTileLayer = null;
+
+        // --- FALLBACK INTERACTIVO EN CASO DE API KEY LIBRE ---
+        function initLeafletFallback() {
+            isUsingGoogleMaps = false;
+            const centroPasco = [-10.668115, -76.253753];
+
+            leafletMap = L.map('map-container').setView(centroPasco, 16);
+
+            leafletTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; OpenStreetMap & UNDAC API'
+            }).addTo(leafletMap);
+
+            sedesData.forEach(sede => {
+                const marker = L.marker([sede.lat, sede.lng]).addTo(leafletMap);
+                const infoWindowHtml = buildInfoWindowHtml(sede);
+                marker.bindPopup(infoWindowHtml);
+
+                markersList.push({ id: sede.id, marker: marker, data: sede });
+            });
+        }
+
+        // GENERAR TARJETA INFOWINDOW HTML CON INFORMACIÓN DE SALAS Y DATOS
+        function buildInfoWindowHtml(sede) {
+            let salasHtml = sede.salas.map(s => `
+                <li class="flex items-center gap-1.5 text-[11px] text-slate-700 py-0.5">
+                    <span class="w-1.5 h-1.5 rounded-full bg-sky-500"></span> ${s.nombre} (Piso ${s.piso})
+                </li>
+            `).join('');
+
+            const esAbierto = sede.estado_apertura === 'Abierto Ahora';
+            const badgeClase = esAbierto ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-rose-100 text-rose-800 border-rose-300';
+
+            return `
+                <div class="p-4 max-w-xs bg-white text-slate-900 rounded-2xl font-sans">
+                    <div class="flex items-start justify-between gap-2 mb-2">
+                        <div class="flex items-center gap-2">
+                            <span class="p-1.5 bg-sky-100 text-sky-700 rounded-lg"><i class="ph-bold ph-buildings text-lg"></i></span>
+                            <div>
+                                <h3 class="font-bold text-sm text-slate-900 leading-tight">${sede.nombre}</h3>
+                                <span class="text-[10px] font-bold text-sky-600 bg-sky-50 px-2 py-0.5 rounded-full">${sede.tipo}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-between gap-2 mb-2">
+                        <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${badgeClase}">
+                            ${esAbierto ? '🟢 Abierto Ahora' : '🔴 Cerrado'}
+                        </span>
+                        <span class="text-[10px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full">
+                            📚 ${sede.ejemplares_totales.toLocaleString()} libros
+                        </span>
+                    </div>
+
+                    <p class="text-xs text-slate-600 mb-2 flex items-start gap-1">
+                        <i class="ph-fill ph-map-pin text-rose-500 text-sm shrink-0 mt-0.5"></i> ${sede.direccion}
+                    </p>
+                    <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-200 mb-3">
+                        <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Salas Disponibles:</span>
+                        <ul class="space-y-0.5">${salasHtml}</ul>
+                    </div>
+                    <div class="grid grid-cols-2 gap-1.5 pt-1 border-t border-slate-100 text-[11px]">
+                        <button onclick="trazarRutaASede(${sede.lat}, ${sede.lng})" class="px-2 py-1.5 bg-sky-600 text-white font-bold rounded-xl hover:bg-sky-700 transition-colors flex items-center justify-center gap-1">
+                            <i class="ph-bold ph-navigation-arrow"></i> Trazar Ruta
+                        </button>
+                        <a href="https://www.google.com/maps/search/?api=1&query=${sede.lat},${sede.lng}" target="_blank" class="px-2 py-1.5 bg-slate-800 text-white font-bold rounded-xl hover:bg-slate-700 transition-colors flex items-center justify-center gap-1 text-center">
+                            <i class="ph-bold ph-arrow-square-out text-amber-400"></i> Google Maps
+                        </a>
+                    </div>
+                </div>
+            `;
+        }
+
+        // RENDERIZAR LISTA LATERAL
+        function renderListaSedesSidebar(sedes) {
+            const container = document.getElementById('lista-sedes-container');
+            let html = '';
+
+            sedes.forEach(s => {
+                html += `
+                <div onclick="centrarSedeEnMapa('${s.id}')" class="p-3 bg-slate-900/80 border border-slate-700/70 hover:border-sky-500/80 hover:bg-slate-800 rounded-2xl cursor-pointer transition-all group">
+                    <div class="flex items-start justify-between mb-1">
+                        <div class="flex items-center gap-2">
+                            <span class="w-8 h-8 rounded-xl bg-sky-500/20 text-sky-400 flex items-center justify-center font-bold text-sm group-hover:bg-sky-500 group-hover:text-white transition-colors">
+                                <i class="ph-fill ${s.icono}"></i>
+                            </span>
+                            <div>
+                                <h3 class="font-bold text-xs text-slate-200 group-hover:text-sky-300 transition-colors">${s.nombre}</h3>
+                                <span class="text-[10px] text-slate-400 font-medium">${s.tipo}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="text-[11px] text-slate-400 truncate mb-2 pl-10"><i class="ph-fill ph-map-pin text-rose-400"></i> ${s.direccion}</p>
+                    <div class="flex items-center justify-between pl-10 text-[10px] text-slate-400 font-medium border-t border-slate-800/80 pt-2">
+                        <span>Aforo Máx: <strong class="text-slate-200">${s.aforo_max} alumnos</strong></span>
+                        <span class="text-sky-400 font-bold group-hover:translate-x-1 transition-transform inline-flex items-center gap-0.5">Ver en mapa <i class="ph-bold ph-caret-right"></i></span>
+                    </div>
+                </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        function centrarSedeEnMapa(id) {
+            const item = markersList.find(m => m.id === id);
+            if (!item) return;
+
+            if (isUsingGoogleMaps) {
+                googleMap.panTo(item.marker.getPosition());
+                googleMap.setZoom(16);
+                item.infoWindow.open(googleMap, item.marker);
+            } else if (leafletMap) {
+                leafletMap.setView([item.data.lat, item.data.lng], 16);
+                item.marker.openPopup();
+            }
+        }
+
+        let userMarker = null;
+
+        function obtenerUbicacionGPS() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(position => {
+                    userLocation = {
+                        lat: position.coords.latitude,
+                        lng: position.coords.longitude
+                    };
+
+                    if (isUsingGoogleMaps) {
+                        googleMap.panTo(userLocation);
+                        googleMap.setZoom(15);
+
+                        if (userMarker) userMarker.setMap(null);
+                        userMarker = new google.maps.Marker({
+                            position: userLocation,
+                            map: googleMap,
+                            title: "Tu Ubicación GPS Actual",
+                            icon: 'https://maps.google.com/mapfiles/ms/icons/green-dot.png'
+                        });
+                    } else if (leafletMap) {
+                        leafletMap.setView([userLocation.lat, userLocation.lng], 15);
+                        if (userMarker) leafletMap.removeLayer(userMarker);
+                        userMarker = L.marker([userLocation.lat, userLocation.lng]).addTo(leafletMap).bindPopup("📍 Tu Ubicación GPS Actual").openPopup();
+                    }
+                }, err => alert("No se pudo obtener la geolocalización GPS: " + err.message));
+            }
+        }
+
+        let currentPolyline = null;
+
+        function calcularDistanciaHaversine(lat1, lon1, lat2, lon2) {
+            const R = 6371; // Radio de la Tierra en km
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return (R * c).toFixed(2);
+        }
+
+        function trazarRutaASede(destLat, destLng) {
+            if (!userLocation) {
+                userLocation = { lat: -10.6682, lng: -76.2531 }; // Default Cerro de Pasco
+            }
+
+            if (isUsingGoogleMaps && directionsService && directionsRenderer) {
+                directionsService.route({
+                    origin: userLocation,
+                    destination: { lat: destLat, lng: destLng },
+                    travelMode: google.maps.TravelMode.DRIVING
+                }, (response, status) => {
+                    if (status === 'OK') {
+                        directionsRenderer.setDirections(response);
+                        const route = response.routes[0].legs[0];
+
+                        const panelInfo = document.getElementById('panel-ruta-info');
+                        panelInfo.classList.remove('hidden');
+                        document.getElementById('txt-distancia-km').innerText = route.distance.text;
+                        document.getElementById('txt-tiempo-estimado').innerText = "Tiempo estimado de viaje: " + route.duration.text + " (En vehículo)";
+                    }
+                });
+            } else if (leafletMap) {
+                if (currentPolyline) leafletMap.removeLayer(currentPolyline);
+
+                // Consulta la API REST Externa OSRM para obtener el trazado exacto calle por calle
+                const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${userLocation.lng},${userLocation.lat};${destLng},${destLat}?overview=full&geometries=geojson`;
+                
+                fetch(osrmUrl)
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.routes && data.routes.length > 0) {
+                            const coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+                            currentPolyline = L.polyline(coords, {
+                                color: '#0284c7',
+                                weight: 5,
+                                opacity: 0.9,
+                                lineJoin: 'round'
+                            }).addTo(leafletMap);
+
+                            leafletMap.fitBounds(currentPolyline.getBounds(), { padding: [50, 50] });
+
+                            const distKm = (data.routes[0].distance / 1000).toFixed(2);
+                            const mins = Math.round(data.routes[0].duration / 60);
+
+                            const panelInfo = document.getElementById('panel-ruta-info');
+                            panelInfo.classList.remove('hidden');
+                            document.getElementById('txt-distancia-km').innerText = distKm + " km";
+                            document.getElementById('txt-tiempo-estimado').innerText = "Ruta por calles: " + distKm + " km (~" + mins + " min en vehículo)";
+                        } else {
+                            // Fallback si no hay ruta de calles disponible
+                            currentPolyline = L.polyline([[userLocation.lat, userLocation.lng], [destLat, destLng]], {
+                                color: '#0284c7',
+                                weight: 4,
+                                dashArray: '6, 6'
+                            }).addTo(leafletMap);
+                            leafletMap.fitBounds(currentPolyline.getBounds(), { padding: [50, 50] });
+                        }
+                    })
+                    .catch(() => {
+                        currentPolyline = L.polyline([[userLocation.lat, userLocation.lng], [destLat, destLng]], {
+                            color: '#0284c7',
+                            weight: 4,
+                            dashArray: '6, 6'
+                        }).addTo(leafletMap);
+                        leafletMap.fitBounds(currentPolyline.getBounds(), { padding: [50, 50] });
+                    });
+            }
+        }
+
+        function cambiarEstiloMapa(tipo) {
+            const btnCalle = document.getElementById('btn-mapa-calle');
+            const btnSat = document.getElementById('btn-mapa-satelite');
+            const btnTer = document.getElementById('btn-mapa-terreno');
+
+            [btnCalle, btnSat, btnTer].forEach(b => {
+                if (b) {
+                    b.classList.remove('bg-sky-600', 'text-white');
+                    b.classList.add('bg-slate-700', 'text-slate-300');
+                }
+            });
+
+            if (isUsingGoogleMaps && googleMap) {
+                let mapType = 'roadmap';
+                if (tipo === 'hybrid' || tipo === 'satellite') mapType = 'hybrid';
+                if (tipo === 'terrain') mapType = 'terrain';
+
+                googleMap.setMapTypeId(mapType);
+
+                if (tipo === 'roadmap' && btnCalle) btnCalle.classList.add('bg-sky-600', 'text-white');
+                if ((tipo === 'hybrid' || tipo === 'satellite') && btnSat) btnSat.classList.add('bg-sky-600', 'text-white');
+                if (tipo === 'terrain' && btnTer) btnTer.classList.add('bg-sky-600', 'text-white');
+            } else if (leafletMap) {
+                if (leafletTileLayer) leafletMap.removeLayer(leafletTileLayer);
+
+                if (tipo === 'roadmap') {
+                    leafletTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 });
+                    if (btnCalle) btnCalle.classList.add('bg-sky-600', 'text-white');
+                } else if (tipo === 'hybrid' || tipo === 'satellite') {
+                    leafletTileLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 18 });
+                    if (btnSat) btnSat.classList.add('bg-sky-600', 'text-white');
+                } else if (tipo === 'terrain') {
+                    leafletTileLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 17 });
+                    if (btnTer) btnTer.classList.add('bg-sky-600', 'text-white');
+                }
+                leafletTileLayer.addTo(leafletMap);
+            }
+        }
+
+        function filtrarPorSala(tipo) {
+            document.querySelectorAll('.btn-filtro-sala').forEach(btn => {
+                btn.classList.remove('bg-sky-600', 'text-white');
+                btn.classList.add('bg-slate-700', 'text-slate-300');
+            });
+            event.target.classList.remove('bg-slate-700', 'text-slate-300');
+            event.target.classList.add('bg-sky-600', 'text-white');
+
+            if (tipo === 'todas') {
+                renderListaSedesSidebar(sedesData);
+                return;
+            }
+
+            const filtradas = sedesData.filter(s => 
+                s.salas.some(sala => sala.nombre.toLowerCase().includes(tipo.toLowerCase()))
+            );
+            renderListaSedesSidebar(filtradas);
+        }
+
+        function filtrarSedes() {
+            const query = document.getElementById('input-buscar-sede').value.toLowerCase();
+            const filtradas = sedesData.filter(s => 
+                s.nombre.toLowerCase().includes(query) || 
+                s.direccion.toLowerCase().includes(query) ||
+                s.tipo.toLowerCase().includes(query)
+            );
+            renderListaSedesSidebar(filtradas);
+        }
+
+        function buscarDireccionGeocodingAPI() {
+            const query = document.getElementById('input-buscar-sede').value.trim();
+            if (!query) {
+                alert("Ingrese el nombre de un lugar, dirección o ciudad para geocodificar.");
+                return;
+            }
+
+            fetch(`/api/geocodificar?q=${encodeURIComponent(query)}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        const lat = data.lat;
+                        const lng = data.lng;
+                        const titulo = data.direccion_formateada || query;
+
+                        if (isUsingGoogleMaps) {
+                            googleMap.panTo({ lat: lat, lng: lng });
+                            googleMap.setZoom(16);
+                            const marker = new google.maps.Marker({
+                                position: { lat: lat, lng: lng },
+                                map: googleMap,
+                                title: titulo,
+                                animation: google.maps.Animation.DROP,
+                                icon: 'https://maps.google.com/mapfiles/ms/icons/yellow-dot.png'
+                            });
+                            const infoWindow = new google.maps.InfoWindow({
+                                content: `<div class="p-3 font-sans max-w-xs text-xs text-slate-900">
+                                    <strong class="text-sky-700 block mb-1">📍 Geocodificado vía API REST Externa:</strong>
+                                    <p>${titulo}</p>
+                                    <span class="text-[10px] text-slate-500 block mt-1">Fuente: ${data.fuente}</span>
+                                </div>`
+                            });
+                            infoWindow.open(googleMap, marker);
+                        } else if (leafletMap) {
+                            leafletMap.setView([lat, lng], 16);
+                            L.marker([lat, lng]).addTo(leafletMap).bindPopup(`
+                                <div class="p-2 font-sans max-w-xs text-xs text-slate-900">
+                                    <strong class="text-sky-700 block mb-1">📍 Geocodificado vía API REST Externa:</strong>
+                                    <p>${titulo}</p>
+                                    <span class="text-[10px] text-slate-500 block mt-1">Fuente: ${data.fuente}</span>
+                                </div>
+                            `).openPopup();
+                        }
+                    } else {
+                        alert(data.msg || "No se encontraron coordenadas en la API Externa de Geocodificación.");
+                    }
+                })
+                .catch(err => alert("Error al consultar API REST de Geocodificación: " + err));
+        }
+
+        function toggleSidebarMover() {
+            const sidebar = document.getElementById('sidebar-sedes');
+            sidebar.classList.toggle('-translate-x-full');
+        }
+    </script>
+</body>
+
+</html>
