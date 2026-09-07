@@ -1,10 +1,9 @@
 # 🗺️ Módulo Autónomo REST API: Google Maps, Geocoding & Geolocalización UNDAC
 
-**Asignatura:** Sistemas de Información  
+**Asignatura:** Automatizacion de Procesos
 **Docente:** JOSE LUIS SOSA SANCHEZ  
 **Estudiante:** Renzo Juan Pablo Rojas Castillo  
 **Proyecto / Módulo:** Módulo de Geolocalización, Geocodificación y Rutas con APIs REST Externas  
-**Plataforma de Despliegue Cloud:** Render.com / GitHub  
 
 ---
 
@@ -100,7 +99,3 @@ El módulo viene **100% listo para desplegar en Render.com** con vinculación de
 | 📖 **Claridad en las instrucciones de despliegue** | **4 / 4 ptos** | Guía paso a paso en texto plano y Markdown para entorno local y despliegue cloud en Render.com. |
 | 📝 **Agrega un README** | **4 / 4 ptos** | Documento README profesional con insignias, tablas de endpoints y especificaciones técnicas completas. |
 | 🚀 **Funcionamiento del servicio desplegado** | **4 / 4 ptos** | Ejecución fluida, rápida, sin errores y compatible con Render (WSGI Gunicorn + PORT dinámico). |
-
----
-
-&copy; 2026 Renzo Juan Pablo Rojas Castillo - Todos los derechos reservados.
