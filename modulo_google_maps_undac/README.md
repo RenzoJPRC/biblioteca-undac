@@ -74,20 +74,20 @@ Acceda a la URL: `http://127.0.0.1:5000/mapa`
 
 ---
 
-## ☁️ 3. Guía de Despliegue en la Nube (Render.com)
+## ☁️ 3. Guía de Despliegue en la Nube (Render.com + Dominio Propio `bibliotecarenzo.xyz`)
 
-El módulo viene **100% listo para desplegar en Render.com** en 3 simples pasos:
+El módulo viene **100% listo para desplegar en Render.com** con vinculación de dominio propio:
 
-1. **Subir a GitHub**: Cree un repositorio público en GitHub y suba estos archivos.
+1. **Subir a GitHub**: Suba los archivos al repositorio `https://github.com/RenzoJPRC/biblioteca-undac`.
 2. **Crear Web Service en Render**:
    - Inicie sesión en [Render.com](https://render.com).
-   - Haga clic en **New +** -> **Web Service**.
-   - Conecte su repositorio de GitHub `modulo-google-maps-undac`.
-3. **Configuración de Render**:
-   - **Environment**: `Python 3`
+   - Cree un **Web Service** conectado a su repositorio de GitHub.
    - **Build Command**: `pip install -r requirements.txt`
    - **Start Command**: `gunicorn app:app`
-   - Presione **Create Web Service**. ¡Listo! Render generará su enlace web público `https://tu-modulo.onrender.com`.
+3. **Vincular Dominio Propio (`bibliotecarenzo.xyz`)**:
+   - En Render, ingrese a **Settings** -> **Custom Domains**.
+   - Agregue `bibliotecarenzo.xyz` y `www.bibliotecarenzo.xyz`.
+   - Copie los registros DNS (Registro A / CNAME) a su proveedor de dominios. Render generará automáticamente el certificado de seguridad SSL para `https://bibliotecarenzo.xyz`.
 
 ---
 

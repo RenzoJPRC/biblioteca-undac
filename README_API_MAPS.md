@@ -64,30 +64,27 @@ Cree un archivo `.env` o copie `.env.example`:
 ```env
 GOOGLE_MAPS_API_KEY=TU_CLAVE_DE_GOOGLE_MAPS_AQUI
 ```
-*(Nota: Si no se ingresa una clave API, el módulo activa el motor de mapas interactivo de respaldo para garantizar que la aplicación **nunca falle ni se rompa**).*
-
-### Paso 5: Iniciar la Aplicación
-```bash
-python app.py
-```
-Acceda a la URL: `http://127.0.0.1:5000/mapa`
+- 🗺️ **Vista Web de Google Maps:** `https://bibliotecarenzo.xyz/mapa`
+- 🌐 **API REST Geocodificación Externa:** `https://bibliotecarenzo.xyz/api/geocodificar?q=Tarma`
+- 🌦️ **API REST Clima por Coordenada:** `https://bibliotecarenzo.xyz/api/clima_coordenada?lat=-10.668115&lng=-76.253753`
+- 📡 **API REST Ubicaciones UNDAC:** `https://bibliotecarenzo.xyz/api/ubicaciones_undac`
 
 ---
 
-## ☁️ 3. Guía de Despliegue en la Nube (Render.com)
+## ☁️ 3. Guía de Despliegue en la Nube (Render.com + Dominio Propio `bibliotecarenzo.xyz`)
 
-El módulo viene **100% listo para desplegar en Render.com** en 3 simples pasos:
+El módulo viene **100% listo para desplegar en Render.com** con vinculación de dominio propio:
 
-1. **Subir a GitHub**: Cree un repositorio público en GitHub y suba estos archivos.
+1. **Subir a GitHub**: Suba los archivos al repositorio `https://github.com/RenzoJPRC/biblioteca-undac`.
 2. **Crear Web Service en Render**:
    - Inicie sesión en [Render.com](https://render.com).
-   - Haga clic en **New +** -> **Web Service**.
-   - Conecte su repositorio de GitHub `modulo-google-maps-undac`.
-3. **Configuración de Render**:
-   - **Environment**: `Python 3`
+   - Cree un **Web Service** conectado a su repositorio de GitHub.
    - **Build Command**: `pip install -r requirements.txt`
    - **Start Command**: `gunicorn app:app`
-   - Presione **Create Web Service**. ¡Listo! Render generará su enlace web público `https://tu-modulo.onrender.com`.
+3. **Vincular Dominio Propio (`bibliotecarenzo.xyz`)**:
+   - En Render, ingrese a **Settings** -> **Custom Domains**.
+   - Agregue `bibliotecarenzo.xyz` y `www.bibliotecarenzo.xyz`.
+   - Copie los registros DNS (Registro A / CNAME) a su proveedor de dominios. Render generará automáticamente el certificado de seguridad SSL para `https://bibliotecarenzo.xyz`.
 
 ---
 
