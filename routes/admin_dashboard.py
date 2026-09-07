@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, Response, session, send_file
+from flask import Blueprint, render_template, request, Response, session, send_file, jsonify
 from utils.queries_dashboard import obtener_datos_dashboard, obtener_registros_csv
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
