@@ -40,19 +40,26 @@
             scrollbar-width: none;
         }
 
-        /* Scrollbar vertical elegante y discreto en la lista de sedes */
+        /* Scrollbar vertical altamente visible y facil de agarrar */
+        #lista-sedes-container {
+            scrollbar-width: thin;
+            scrollbar-color: #38bdf8 #0f172a;
+            scroll-behavior: smooth;
+        }
         #lista-sedes-container::-webkit-scrollbar {
-            width: 6px;
+            width: 8px;
         }
         #lista-sedes-container::-webkit-scrollbar-track {
-            background: rgba(15, 23, 42, 0.6);
-        }
-        #lista-sedes-container::-webkit-scrollbar-thumb {
-            background: #334155;
+            background: #0f172a;
             border-radius: 9999px;
         }
+        #lista-sedes-container::-webkit-scrollbar-thumb {
+            background: linear-gradient(180deg, #38bdf8, #0284c7);
+            border-radius: 9999px;
+            border: 1px solid #0f172a;
+        }
         #lista-sedes-container::-webkit-scrollbar-thumb:hover {
-            background: #0284c7;
+            background: #38bdf8;
         }
     </style>
 </head>
@@ -113,7 +120,7 @@
             </div>
 
             <!-- LISTA DINÁMICA DE SEDES -->
-            <div id="lista-sedes-container" class="flex-1 overflow-y-auto p-3 space-y-2 min-h-0">
+            <div id="lista-sedes-container" class="flex-1 overflow-y-auto p-3 pb-24 space-y-2.5 min-h-0">
                 <div class="text-center py-8 text-slate-500 text-xs">
                     <i class="ph-bold ph-spinner animate-spin text-2xl text-sky-500 mb-2"></i>
                     <p>Cargando coordenadas geoespaciales...</p>
