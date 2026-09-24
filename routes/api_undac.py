@@ -6,6 +6,7 @@ api_undac_bp = Blueprint('api_undac', __name__, url_prefix='/api/undac')
 BASE_URL = "http://api.undac.edu.pe/tasks/a3945a7384cbdcd33f49e8f5b8ec29f5/91f33e2776c526b9cca723a63476f028"
 
 @api_undac_bp.route('/alumno/<codigo>', methods=['GET'])
+@api_undac_bp.route('/estudiante/<codigo>', methods=['GET'])
 def buscar_alumno_api(codigo):
     if "admin_user" not in session:
         return jsonify({'status': 'error', 'msg': 'Acceso denegado'}), 403

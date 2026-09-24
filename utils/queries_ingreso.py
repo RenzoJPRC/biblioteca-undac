@@ -2,7 +2,7 @@ from datetime import datetime
 import requests
 from db import get_db_connection
 
-BASE_API_UNDAC_URL = "http://127.0.0.1:5000/api/undac/estudiante"
+DIRECT_API_UNDAC_URL = "http://api.undac.edu.pe/tasks/a3945a7384cbdcd33f49e8f5b8ec29f5/91f33e2776c526b9cca723a63476f028"
 
 def calcular_semestre_undac(codigo, fecha_ingreso_api=None, semestre_raw=None):
     """Calcula el semestre académico numérico/texto según el código o año de ingreso."""
@@ -34,8 +34,9 @@ def auto_registrar_alumno_api_undac(codigo):
     Si la API institucional confirma la validez del alumno, lo inserta automáticamente en la tabla Alumnos.
     """
     try:
-        url = f"{BASE_API_UNDAC_URL}/{str(codigo).strip()}"
-        resp = requests.get(url, timeout=4)
+        codigo_clean = str(codigo).strip()
+        url = f"{DIRECT_API_UNDAC_URL}/{codigo_clean}"
+        resp = requests.get(url, timeout=5)
         if resp.status_code != 200:
             return False, None
             
