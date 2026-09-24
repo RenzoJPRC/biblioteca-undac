@@ -141,19 +141,37 @@ def procesar_ingreso_evento(codigo, evento_id):
         else:
             # B) ES ALUMNO (Por Código Matrícula o DNI)?
             cursor.execute("""
-                SELECT a.NombreCompleto, e.NombreEscuela, s.NombreSemestre, a.DNI, a.CodigoMatricula
+                SELECT a.NombreCompleto, e.NombreEscuela, s.NombreSemestre, a.DNI, a.CodigoMatricula, a.Escuela, a.Semestre
                 FROM Alumnos a
                 LEFT JOIN Escuelas e ON a.EscuelaID = e.EscuelaID
                 LEFT JOIN Semestres s ON a.SemestreID = s.SemestreID
                 WHERE a.CodigoMatricula = ? OR a.DNI = ?
             """, (codigo, codigo))
             alum = cursor.fetchone()
+
+            # Fallback auto-sync si no existe localmente
+            if not alum and len(str(codigo).strip()) >= 8:
+                try:
+                    from utils.queries_ingreso import auto_registrar_alumno_api_undac
+                    exito_sync, _ = auto_registrar_alumno_api_undac(codigo)
+                    if exito_sync:
+                        cursor.execute("""
+                            SELECT a.NombreCompleto, e.NombreEscuela, s.NombreSemestre, a.DNI, a.CodigoMatricula, a.Escuela, a.Semestre
+                            FROM Alumnos a
+                            LEFT JOIN Escuelas e ON a.EscuelaID = e.EscuelaID
+                            LEFT JOIN Semestres s ON a.SemestreID = s.SemestreID
+                            WHERE a.CodigoMatricula = ? OR a.DNI = ?
+                        """, (codigo, codigo))
+                        alum = cursor.fetchone()
+                except Exception as ex_sync:
+                    print(f"[EVENTO AUTO-SYNC NOTICE] {ex_sync}")
+
             if alum:
                 if p_alum:
                     tipo_persona = 'Alumno'
                     nombre_persona = alum[0]
-                    escuela_persona = alum[1] if alum[1] else 'Sin Escuela'
-                    semestre_persona = alum[2] if alum[2] else ''
+                    escuela_persona = alum[1] or alum[5] or 'Sede Central UNDAC'
+                    semestre_persona = alum[2] or alum[6] or ''
                     # IMPORTANTE: Validamos ambos códigos para evitar doble ingreso
                     identificadores_a_verificar = [x for x in [alum[3], alum[4]] if x]
                 else:
