@@ -1,0 +1,469 @@
+{% extends "layout_admin.html" %}
+
+{% block content %}
+
+<header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-8 shrink-0">
+    <div>
+        <h2 class="text-lg font-bold text-slate-700">
+            Predicción de Afluencia
+        </h2>
+        <p class="text-xs text-indigo-500 font-bold uppercase tracking-wide">
+            Módulo de Machine Learning
+        </p>
+    </div>
+
+    <div class="hidden sm:flex items-center gap-2 text-xs text-slate-500">
+        <i class="ph ph-brain text-2xl text-indigo-500"></i>
+        <span>Modelo predictivo UNDAC</span>
+    </div>
+</header>
+
+<div class="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
+
+    <!-- Descripción -->
+    <section class="bg-indigo-50 border border-indigo-200 rounded-xl p-5">
+        <div class="flex items-start gap-4">
+            <div class="bg-indigo-600 text-white p-3 rounded-xl shrink-0">
+                <i class="ph ph-brain text-2xl"></i>
+            </div>
+
+            <div>
+                <h3 class="font-bold text-indigo-900">
+                    Estimación del nivel de ingresos
+                </h3>
+                <p class="text-sm text-indigo-700 mt-1">
+                    El modelo analiza el historial de ingresos de la biblioteca,
+                    patrones horarios, promedios históricos y tendencias recientes
+                    para estimar si la afluencia será baja, media o alta.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+
+        <!-- Formulario -->
+        <section class="xl:col-span-1 bg-white border border-slate-200 rounded-xl shadow-sm">
+            <div class="p-5 border-b border-slate-100">
+                <h3 class="font-bold text-slate-700 flex items-center gap-2">
+                    <i class="ph ph-sliders-horizontal text-indigo-500 text-xl"></i>
+                    Datos de consulta
+                </h3>
+            </div>
+
+            <form id="form-prediccion" class="p-5 space-y-5">
+
+                <div>
+                    <label for="fecha" class="block text-xs font-bold text-slate-500 uppercase mb-2">
+                        Fecha objetivo
+                    </label>
+
+                    <input type="date" id="fecha" value="{{ fecha_hoy }}" required class="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm
+                               focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+                </div>
+
+                <div>
+                    <label for="hora" class="block text-xs font-bold text-slate-500 uppercase mb-2">
+                        Hora
+                    </label>
+
+                    <select id="hora" required class="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm
+                               bg-white focus:ring-2 focus:ring-indigo-500 outline-none">
+
+                        {% for hora in range(8, 21) %}
+                        <option value="{{ hora }}" {% if hora==10 %}selected{% endif %}>
+                            {{ "%02d:00"|format(hora) }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div>
+                    <label for="sede" class="block text-xs font-bold text-slate-500 uppercase mb-2">
+                        Sede
+                    </label>
+
+                    <select id="sede" required {% if session.get('admin_rol')=='Supervisor' %}disabled{% endif %} class="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm
+                               bg-white focus:ring-2 focus:ring-indigo-500 outline-none
+                               disabled:bg-slate-100 disabled:text-slate-500">
+
+                        {% for sede in sedes %}
+                        <option value="{{ sede }}" {% if sede==sede_asignada %}selected{% endif %}>
+                            {{ sede }}
+                        </option>
+                        {% endfor %}
+                    </select>
+
+                    {% if session.get('admin_rol') == 'Supervisor' %}
+                    <p class="text-[11px] text-slate-400 mt-2">
+                        La sede está determinada por la cuenta del supervisor.
+                    </p>
+                    {% endif %}
+                </div>
+
+                <button type="submit" id="btn-predecir" class="w-full flex justify-center items-center gap-2 bg-indigo-600
+                           hover:bg-indigo-500 text-white font-bold py-3 rounded-lg
+                           transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
+
+                    <i class="ph ph-sparkle text-xl"></i>
+                    <span>Generar predicción</span>
+                </button>
+            </form>
+        </section>
+
+        <!-- Resultados -->
+        <section class="xl:col-span-2 bg-white border border-slate-200 rounded-xl shadow-sm">
+            <div class="p-5 border-b border-slate-100 flex justify-between items-center">
+                <h3 class="font-bold text-slate-700 flex items-center gap-2">
+                    <i class="ph ph-chart-donut text-indigo-500 text-xl"></i>
+                    Resultado del modelo
+                </h3>
+
+                <span id="estado-modelo" class="text-[10px] font-bold uppercase bg-slate-100 text-slate-500
+                           px-3 py-1 rounded-full">
+                    Esperando consulta
+                </span>
+            </div>
+
+            <!-- Estado inicial -->
+            <div id="resultado-vacio" class="min-h-[390px] flex flex-col justify-center items-center text-center p-8">
+                <div class="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mb-4">
+                    <i class="ph ph-chart-line-up text-4xl text-slate-400"></i>
+                </div>
+
+                <h4 class="font-bold text-slate-600">
+                    Todavía no se ha generado una predicción
+                </h4>
+
+                <p class="text-sm text-slate-400 max-w-md mt-2">
+                    Seleccione una fecha, una hora y una sede para consultar
+                    el nivel estimado de afluencia.
+                </p>
+            </div>
+
+            <!-- Resultado generado -->
+            <div id="resultado-contenido" class="hidden p-5">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                    <div class="flex flex-col items-center justify-center text-center">
+                        <p class="text-xs font-bold text-slate-400 uppercase">
+                            Nivel estimado
+                        </p>
+
+                        <div id="circulo-nivel" class="w-36 h-36 rounded-full flex flex-col items-center
+                                   justify-center mt-4 border-8">
+                            <i id="icono-nivel" class="ph ph-users-three text-3xl"></i>
+                            <span id="nivel-predicho" class="text-2xl font-black mt-1">
+                                —
+                            </span>
+                        </div>
+
+                        <p id="descripcion-nivel" class="text-sm text-slate-500 mt-4 max-w-xs">
+                        </p>
+                    </div>
+
+                    <div class="relative min-h-[260px]">
+                        <canvas id="grafico-probabilidades"></canvas>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-6">
+                    <div class="bg-slate-50 rounded-lg p-4 border border-slate-100">
+                        <p class="text-[10px] font-bold uppercase text-slate-400">
+                            Fecha consultada
+                        </p>
+                        <p id="dato-fecha" class="font-bold text-slate-700 mt-1">—</p>
+                    </div>
+
+                    <div class="bg-slate-50 rounded-lg p-4 border border-slate-100">
+                        <p class="text-[10px] font-bold uppercase text-slate-400">
+                            Historial utilizado
+                        </p>
+                        <p id="dato-historial" class="font-bold text-slate-700 mt-1">—</p>
+                    </div>
+
+                    <div class="bg-slate-50 rounded-lg p-4 border border-slate-100">
+                        <p class="text-[10px] font-bold uppercase text-slate-400">
+                            Último registro
+                        </p>
+                        <p id="dato-ultima-fecha" class="font-bold text-slate-700 mt-1">—</p>
+                    </div>
+                </div>
+
+                <div class="mt-5 bg-amber-50 border border-amber-200 rounded-lg p-4
+                            flex items-start gap-3">
+                    <i class="ph ph-warning-circle text-amber-600 text-xl shrink-0"></i>
+                    <p id="advertencia-modelo" class="text-xs text-amber-800"></p>
+                </div>
+            </div>
+
+            <!-- Error -->
+            <div id="resultado-error" class="hidden min-h-[390px] flex-col justify-center items-center text-center p-8">
+                <div class="w-20 h-20 bg-rose-100 rounded-full flex items-center justify-center mb-4">
+                    <i class="ph ph-warning text-4xl text-rose-500"></i>
+                </div>
+
+                <h4 class="font-bold text-rose-700">
+                    No se pudo generar la predicción
+                </h4>
+
+                <p id="mensaje-error" class="text-sm text-rose-500 mt-2"></p>
+            </div>
+        </section>
+    </div>
+
+    <!-- Información del modelo -->
+    <section class="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
+        <h3 class="font-bold text-slate-700 flex items-center gap-2">
+            <i class="ph ph-info text-indigo-500 text-xl"></i>
+            Información técnica
+        </h3>
+
+        <div id="informacion-modelo" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-5">
+
+            <div class="bg-slate-50 p-4 rounded-lg animate-pulse">
+                <p class="text-xs text-slate-400">Cargando información…</p>
+            </div>
+        </div>
+    </section>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let graficoProbabilidades = null;
+
+    document.addEventListener("DOMContentLoaded", function () {
+        cargarInformacionModelo();
+
+        document
+            .getElementById("form-prediccion")
+            .addEventListener("submit", ejecutarPrediccion);
+    });
+
+    async function cargarInformacionModelo() {
+        const contenedor = document.getElementById("informacion-modelo");
+
+        try {
+            const respuesta = await fetch("/admin/api/ml/informacion");
+            const datos = await respuesta.json();
+
+            if (!respuesta.ok || datos.status !== "success") {
+                throw new Error(datos.mensaje || "No se pudo cargar el modelo.");
+            }
+
+            const modelo = datos.modelo;
+            const metricas = modelo.metricas || {};
+
+            contenedor.innerHTML = `
+                ${crearDatoTecnico("Modelo", modelo.nombre || "No disponible")}
+                ${crearDatoTecnico("Algoritmo", modelo.algoritmo || "No disponible")}
+                ${crearDatoTecnico("Versión", modelo.version || "No disponible")}
+                ${crearDatoTecnico(
+                "Recall nivel alto",
+                metricas.recall_alto !== undefined
+                    ? (metricas.recall_alto * 100).toFixed(2) + "%"
+                    : "No disponible"
+            )}
+            `;
+        } catch (error) {
+            contenedor.innerHTML = `
+                <div class="col-span-full bg-rose-50 border border-rose-200
+                            text-rose-700 p-4 rounded-lg text-sm">
+                    ${escaparHTML(error.message)}
+                </div>
+            `;
+        }
+    }
+
+    function crearDatoTecnico(titulo, valor) {
+        return `
+            <div class="bg-slate-50 border border-slate-100 p-4 rounded-lg">
+                <p class="text-[10px] uppercase font-bold text-slate-400">
+                    ${escaparHTML(titulo)}
+                </p>
+                <p class="text-sm font-bold text-slate-700 mt-1">
+                    ${escaparHTML(String(valor))}
+                </p>
+            </div>
+        `;
+    }
+
+    async function ejecutarPrediccion(evento) {
+        evento.preventDefault();
+
+        const boton = document.getElementById("btn-predecir");
+        const sede = document.getElementById("sede");
+
+        boton.disabled = true;
+        boton.innerHTML = `
+            <i class="ph ph-spinner animate-spin text-xl"></i>
+            <span>Analizando historial...</span>
+        `;
+
+        document.getElementById("estado-modelo").textContent = "Procesando";
+
+        try {
+            const respuesta = await fetch(
+                "/admin/api/ml/predecir-afluencia",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        fecha: document.getElementById("fecha").value,
+                        hora: Number(document.getElementById("hora").value),
+                        sede: sede.value
+                    })
+                }
+            );
+
+            const datos = await respuesta.json();
+
+            if (!respuesta.ok || datos.status !== "success") {
+                throw new Error(
+                    datos.mensaje ||
+                    "La predicción no pudo completarse."
+                );
+            }
+
+            mostrarResultado(datos);
+        } catch (error) {
+            mostrarError(error.message);
+        } finally {
+            boton.disabled = false;
+            boton.innerHTML = `
+                <i class="ph ph-sparkle text-xl"></i>
+                <span>Generar predicción</span>
+            `;
+        }
+    }
+
+    function mostrarResultado(datos) {
+        document.getElementById("resultado-vacio").classList.add("hidden");
+        document.getElementById("resultado-error").classList.add("hidden");
+        document.getElementById("resultado-error").classList.remove("flex");
+        document.getElementById("resultado-contenido").classList.remove("hidden");
+
+        const nivel = datos.prediccion.nivel;
+        const probabilidades = datos.prediccion.probabilidades;
+
+        document.getElementById("nivel-predicho").textContent = nivel;
+        document.getElementById("estado-modelo").textContent = "Predicción generada";
+        document.getElementById("dato-fecha").textContent =
+            `${datos.consulta.fecha} - ${String(datos.consulta.hora).padStart(2, "0")}:00`;
+        document.getElementById("dato-historial").textContent =
+            `${datos.consulta.fechas_historicas} fechas`;
+        document.getElementById("dato-ultima-fecha").textContent =
+            datos.consulta.ultima_fecha_disponible || "No disponible";
+        document.getElementById("advertencia-modelo").textContent =
+            datos.advertencia;
+
+        aplicarEstiloNivel(nivel);
+        actualizarGrafico(probabilidades);
+    }
+
+    function aplicarEstiloNivel(nivel) {
+        const circulo = document.getElementById("circulo-nivel");
+        const descripcion = document.getElementById("descripcion-nivel");
+
+        circulo.className =
+            "w-36 h-36 rounded-full flex flex-col items-center " +
+            "justify-center mt-4 border-8";
+
+        if (nivel === "Alto") {
+            circulo.classList.add(
+                "bg-rose-50",
+                "border-rose-200",
+                "text-rose-600"
+            );
+            descripcion.textContent =
+                "Se estima una concentración elevada de ingresos. " +
+                "Conviene preparar la atención y los espacios.";
+        } else if (nivel === "Medio") {
+            circulo.classList.add(
+                "bg-amber-50",
+                "border-amber-200",
+                "text-amber-600"
+            );
+            descripcion.textContent =
+                "Se espera una afluencia intermedia dentro del horario consultado.";
+        } else {
+            circulo.classList.add(
+                "bg-emerald-50",
+                "border-emerald-200",
+                "text-emerald-600"
+            );
+            descripcion.textContent =
+                "Se estima una afluencia reducida para el horario consultado.";
+        }
+    }
+
+    function actualizarGrafico(probabilidades) {
+        const contexto = document
+            .getElementById("grafico-probabilidades")
+            .getContext("2d");
+
+        if (graficoProbabilidades) {
+            graficoProbabilidades.destroy();
+        }
+
+        graficoProbabilidades = new Chart(contexto, {
+            type: "doughnut",
+            data: {
+                labels: ["Bajo", "Medio", "Alto"],
+                datasets: [{
+                    data: [
+                        (probabilidades.Bajo || 0) * 100,
+                        (probabilidades.Medio || 0) * 100,
+                        (probabilidades.Alto || 0) * 100
+                    ],
+                    backgroundColor: [
+                        "#10b981",
+                        "#f59e0b",
+                        "#f43f5e"
+                    ],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: "65%",
+                plugins: {
+                    legend: {
+                        position: "bottom"
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function (contexto) {
+                                return `${contexto.label}: ${contexto.raw.toFixed(2)}%`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    function mostrarError(mensaje) {
+        document.getElementById("resultado-vacio").classList.add("hidden");
+        document.getElementById("resultado-contenido").classList.add("hidden");
+
+        const error = document.getElementById("resultado-error");
+        error.classList.remove("hidden");
+        error.classList.add("flex");
+
+        document.getElementById("mensaje-error").textContent = mensaje;
+        document.getElementById("estado-modelo").textContent = "Error";
+    }
+
+    function escaparHTML(valor) {
+        const elemento = document.createElement("div");
+        elemento.textContent = valor;
+        return elemento.innerHTML;
+    }
+</script>
+{% endblock %}

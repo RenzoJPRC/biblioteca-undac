@@ -31,7 +31,7 @@ from routes.admin_backup import admin_backup_bp
 from routes.admin_salas import admin_salas_bp
 from routes.api_undac import api_undac_bp
 from routes.api_external import api_external_bp
-
+from routes.admin_ml import admin_ml_bp
 
 app = Flask(__name__)
 
@@ -267,7 +267,7 @@ app.register_blueprint(admin_backup_bp)
 app.register_blueprint(admin_salas_bp)
 app.register_blueprint(api_undac_bp)
 app.register_blueprint(api_external_bp)
-
+app.register_blueprint(admin_ml_bp)
 # ============================================================
 # ARRANQUE DEL SERVIDOR
 # ============================================================

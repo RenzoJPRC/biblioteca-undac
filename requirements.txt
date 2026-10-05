@@ -7,3 +7,5 @@ python-dotenv
 waitress
 requests
 gunicorn>=20.1.0
+scikit-learn==1.6.1
+joblib>=1.3,<2.0

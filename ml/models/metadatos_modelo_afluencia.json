@@ -1,0 +1,55 @@
+{
+    "nombre": "Modelo de predicción de afluencia UNDAC",
+    "version": "1.0.0",
+    "algoritmo": "RandomForestClassifier",
+    "finalidad": "Predecir el nivel de afluencia por fecha y hora",
+    "variables": [
+        "Hora",
+        "DiaSemana",
+        "Mes",
+        "DiaMes",
+        "SemanaAnio",
+        "EsLunes",
+        "EsViernes",
+        "IngresosDiaAnterior",
+        "IngresosCincoDiasAntes",
+        "PromedioMovil5",
+        "PromedioHistoricoHora",
+        "TendenciaReciente"
+    ],
+    "clases": [
+        "Alto",
+        "Bajo",
+        "Medio"
+    ],
+    "limites_afluencia": {
+        "bajo_hasta": 7,
+        "medio_hasta": 35,
+        "alto_desde": 36
+    },
+    "configuracion": {
+        "numero_arboles": 300,
+        "profundidad_maxima": 6,
+        "minimo_registros_hoja": 2,
+        "peso_bajo": 1.0,
+        "peso_medio": 1.0,
+        "peso_alto": 3.0,
+        "random_state": 42
+    },
+    "metricas_prueba_septiembre": {
+        "accuracy": 0.5506,
+        "f1_macro": 0.5398,
+        "recall_alto": 0.5333,
+        "precision_alto": 0.4878,
+        "casos_altos_detectados": 40,
+        "casos_altos_reales": 75
+    },
+    "periodo_entrenamiento": {
+        "inicio": "2026-05-13",
+        "fin": "2026-09-28"
+    },
+    "cantidad_registros": 1183,
+    "version_sklearn": "1.6.1",
+    "fecha_exportacion": "2026-10-05T11:01:26.373816-05:00",
+    "advertencia": "Modelo de apoyo. La predicción no representa una garantía exacta de afluencia."
+}

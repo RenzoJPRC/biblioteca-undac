@@ -42,6 +42,21 @@
         </div>
         {% endif %}
 
+        <!-- INTELIGENCIA ARTIFICIAL -->
+        <div>
+            <p class="px-3 text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">
+                Inteligencia Artificial
+            </p>
+
+            <div class="space-y-1">
+                <a href="/admin/ml"
+                    class="flex items-center gap-3 px-3 py-2 rounded-lg transition-all {% if request.path == '/admin/ml' %} bg-indigo-600 text-white shadow-lg shadow-indigo-900/20 {% else %} text-slate-400 hover:text-white hover:bg-slate-800 {% endif %}">
+                    <i class="ph ph-brain text-lg"></i>
+                    <span class="text-sm font-medium">Predicción de Afluencia</span>
+                </a>
+            </div>
+        </div>
+
         {% if session.get('admin_rol') in ['SuperAdmin', 'Consultor'] %}
         <div>
             <p class="px-3 text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Gestión de Usuarios</p>
