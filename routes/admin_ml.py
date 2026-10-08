@@ -1,4 +1,5 @@
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from flask import Blueprint, jsonify, render_template, request, session
 
@@ -44,7 +45,7 @@ def vista_machine_learning():
         "admin_ml.html",
         sedes=sedes,
         sede_asignada=sede_asignada,
-        fecha_hoy=datetime.now().date().isoformat()
+        fecha_hoy=datetime.now(ZoneInfo("America/Lima")).date().isoformat()
     )
 
 

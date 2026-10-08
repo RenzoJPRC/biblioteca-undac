@@ -60,7 +60,7 @@ def obtener_historial_agrupado(
             Hora ASC
     """
 
-    with get_db_cursor() as (_, cursor):
+    with get_db_cursor(autocommit=True) as (_, cursor):
         if cursor is None:
             raise ConnectionError(
                 "No fue posible conectarse a SQL Server."

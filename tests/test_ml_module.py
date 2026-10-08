@@ -1,0 +1,235 @@
+import unittest
+from unittest.mock import patch
+from app import app
+from ml.services.predictor_afluencia import obtener_predictor_afluencia
+
+
+class TestModuloMachineLearning(unittest.TestCase):
+
+    def setUp(self):
+        self.app = app
+        self.client = self.app.test_client()
+
+    def test_01_usuario_sin_sesion_redirigido(self):
+        """Usuario sin sesión accediendo a /admin/ml debe ser redirigido a login (302)."""
+        respuesta = self.client.get("/admin/ml")
+        self.assertEqual(respuesta.status_code, 302)
+        self.assertIn("/admin/login", respuesta.headers["Location"])
+
+    def test_02_superadmin_acceso_pantalla(self):
+        """SuperAdmin debe poder acceder a /admin/ml (200 OK)."""
+        with self.client.session_transaction() as sesion:
+            sesion["admin_user"] = "admin_test"
+            sesion["admin_rol"] = "SuperAdmin"
+            sesion["csrf_token"] = "token_prueba_123"
+
+        respuesta = self.client.get("/admin/ml")
+        self.assertEqual(respuesta.status_code, 200)
+
+    def test_03_supervisor_acceso_pantalla(self):
+        """Supervisor debe poder acceder a /admin/ml (200 OK)."""
+        with self.client.session_transaction() as sesion:
+            sesion["admin_user"] = "super_test"
+            sesion["admin_rol"] = "Supervisor"
+            sesion["admin_sede"] = "Tarma"
+            sesion["csrf_token"] = "token_prueba_123"
+
+        respuesta = self.client.get("/admin/ml")
+        self.assertEqual(respuesta.status_code, 200)
+
+    def test_04_supervisor_sede_forzada(self):
+        """Supervisor de Central enviando 'Tarma' en JSON debe ser forzado a su sede asignada 'Central'."""
+        with self.client.session_transaction() as sesion:
+            sesion["admin_user"] = "super_central"
+            sesion["admin_rol"] = "Supervisor"
+            sesion["admin_sede"] = "Central"
+            sesion["csrf_token"] = "token_valido_999"
+
+        headers = {"X-CSRFToken": "token_valido_999"}
+        datos = {"fecha": "2026-09-29", "hora": 10, "sede": "Tarma"}
+
+        respuesta = self.client.post(
+            "/admin/api/ml/predecir-afluencia",
+            json=datos,
+            headers=headers
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        json_data = respuesta.get_json()
+        self.assertEqual(json_data["status"], "success")
+        self.assertEqual(json_data["consulta"]["sede"], "Central")
+
+    def test_05_consultor_acceso_solo_lectura(self):
+        """Consultor puede acceder a la vista GET y realizar consultas predictivas en la API."""
+        with self.client.session_transaction() as sesion:
+            sesion["admin_user"] = "consultor_test"
+            sesion["admin_rol"] = "Consultor"
+            sesion["csrf_token"] = "token_valido_999"
+
+        respuesta_get = self.client.get("/admin/ml")
+        self.assertEqual(respuesta_get.status_code, 200)
+
+        headers = {"X-CSRFToken": "token_valido_999"}
+        datos = {"fecha": "2026-09-29", "hora": 10, "sede": "Central"}
+        respuesta_post = self.client.post(
+            "/admin/api/ml/predecir-afluencia",
+            json=datos,
+            headers=headers
+        )
+        self.assertEqual(respuesta_post.status_code, 200)
+
+    def test_06_post_sin_csrf_rechazado(self):
+        """Petición POST a la API ML sin cabecera CSRF debe ser rechazada (403 Forbidden)."""
+        with self.client.session_transaction() as sesion:
+            sesion["admin_user"] = "admin_test"
+            sesion["admin_rol"] = "SuperAdmin"
+            sesion["csrf_token"] = "token_valido_999"
+
+        datos = {"fecha": "2026-09-29", "hora": 10, "sede": "Central"}
+        respuesta = self.client.post(
+            "/admin/api/ml/predecir-afluencia",
+            json=datos
+        )
+        self.assertEqual(respuesta.status_code, 403)
+        self.assertEqual(respuesta.get_json()["mensaje"], "Token CSRF inválido o expirado.")
+
+    def test_07_post_csrf_invalido_rechazado(self):
+        """Petición POST con token CSRF incorrecto debe ser rechazada (403 Forbidden)."""
+        with self.client.session_transaction() as sesion:
+            sesion["admin_user"] = "admin_test"
+            sesion["admin_rol"] = "SuperAdmin"
+            sesion["csrf_token"] = "token_valido_999"
+
+        headers = {"X-CSRFToken": "token_falso_888"}
+        datos = {"fecha": "2026-09-29", "hora": 10, "sede": "Central"}
+        respuesta = self.client.post(
+            "/admin/api/ml/predecir-afluencia",
+            json=datos,
+            headers=headers
+        )
+        self.assertEqual(respuesta.status_code, 403)
+        self.assertEqual(respuesta.get_json()["mensaje"], "Token CSRF inválido o expirado.")
+
+    def test_08_post_csrf_valido_exitoso(self):
+        """Petición POST con token CSRF válido debe procesarse correctamente (200 OK)."""
+        with self.client.session_transaction() as sesion:
+            sesion["admin_user"] = "admin_test"
+            sesion["admin_rol"] = "SuperAdmin"
+            sesion["csrf_token"] = "token_valido_999"
+
+        headers = {"X-CSRFToken": "token_valido_999"}
+        datos = {"fecha": "2026-09-29", "hora": 10, "sede": "Central"}
+        respuesta = self.client.post(
+            "/admin/api/ml/predecir-afluencia",
+            json=datos,
+            headers=headers
+        )
+        self.assertEqual(respuesta.status_code, 200)
+
+    def test_09_fecha_invalida(self):
+        """Fecha con formato o fecha inválida debe retornar 400 Bad Request."""
+        with self.client.session_transaction() as sesion:
+            sesion["admin_user"] = "admin_test"
+            sesion["admin_rol"] = "SuperAdmin"
+            sesion["csrf_token"] = "token_valido_999"
+
+        headers = {"X-CSRFToken": "token_valido_999"}
+        datos = {"fecha": "2026-13-99", "hora": 10, "sede": "Central"}
+        respuesta = self.client.post(
+            "/admin/api/ml/predecir-afluencia",
+            json=datos,
+            headers=headers
+        )
+        self.assertEqual(respuesta.status_code, 400)
+
+    def test_10_hora_fuera_de_rango(self):
+        """Hora menor que 8 o mayor que 20 debe retornar 400 Bad Request."""
+        with self.client.session_transaction() as sesion:
+            sesion["admin_user"] = "admin_test"
+            sesion["admin_rol"] = "SuperAdmin"
+            sesion["csrf_token"] = "token_valido_999"
+
+        headers = {"X-CSRFToken": "token_valido_999"}
+        datos = {"fecha": "2026-09-29", "hora": 22, "sede": "Central"}
+        respuesta = self.client.post(
+            "/admin/api/ml/predecir-afluencia",
+            json=datos,
+            headers=headers
+        )
+        self.assertEqual(respuesta.status_code, 400)
+
+    def test_11_sede_inexistente(self):
+        """Sede inexistente sin datos históricos debe retornar 400 Bad Request."""
+        with self.client.session_transaction() as sesion:
+            sesion["admin_user"] = "admin_test"
+            sesion["admin_rol"] = "SuperAdmin"
+            sesion["csrf_token"] = "token_valido_999"
+
+        headers = {"X-CSRFToken": "token_valido_999"}
+        datos = {"fecha": "2026-09-29", "hora": 10, "sede": "SedeInexistente"}
+        respuesta = self.client.post(
+            "/admin/api/ml/predecir-afluencia",
+            json=datos,
+            headers=headers
+        )
+        self.assertEqual(respuesta.status_code, 400)
+
+    def test_12_error_conexion_bd(self):
+        """Manejo controlado cuando no se puede conectar a la BD (503 Service Unavailable)."""
+        with self.client.session_transaction() as sesion:
+            sesion["admin_user"] = "admin_test"
+            sesion["admin_rol"] = "SuperAdmin"
+            sesion["csrf_token"] = "token_valido_999"
+
+        headers = {"X-CSRFToken": "token_valido_999"}
+        datos = {"fecha": "2026-09-29", "hora": 10, "sede": "Central"}
+
+        with patch("ml.services.datos_afluencia.get_db_cursor") as mock_db:
+            mock_db.side_effect = ConnectionError("Fallo simulado de conexión")
+            respuesta = self.client.post(
+                "/admin/api/ml/predecir-afluencia",
+                json=datos,
+                headers=headers
+            )
+            self.assertEqual(respuesta.status_code, 503)
+
+    def test_13_historial_insuficiente(self):
+        """Manejo controlado cuando hay menos de 5 fechas históricas (400 Bad Request)."""
+        with self.client.session_transaction() as sesion:
+            sesion["admin_user"] = "admin_test"
+            sesion["admin_rol"] = "SuperAdmin"
+            sesion["csrf_token"] = "token_valido_999"
+
+        headers = {"X-CSRFToken": "token_valido_999"}
+        datos = {"fecha": "2026-09-29", "hora": 10, "sede": "Central"}
+
+        with patch("ml.services.datos_afluencia.obtener_historial_agrupado") as mock_hist:
+            import pandas as pd
+            # Simular historial con solo 2 filas
+            mock_hist.return_value = pd.DataFrame([
+                {"Fecha": "2026-09-01", "Hora": 10, "CantidadIngresos": 5},
+                {"Fecha": "2026-09-02", "Hora": 10, "CantidadIngresos": 3}
+            ])
+            respuesta = self.client.post(
+                "/admin/api/ml/predecir-afluencia",
+                json=datos,
+                headers=headers
+            )
+            self.assertEqual(respuesta.status_code, 400)
+
+    def test_14_modelo_singleton_lru_cache(self):
+        """Comprobar que el predictor se carga en memoria una sola vez vía lru_cache."""
+        p1 = obtener_predictor_afluencia()
+        p2 = obtener_predictor_afluencia()
+        self.assertIs(p1, p2)
+
+    def test_15_rutas_ml_registradas(self):
+        """Comprobar que las 3 rutas del módulo ML se encuentran correctamente registradas en Flask."""
+        rutas = [str(r) for r in self.app.url_map.iter_rules() if "ml" in str(r)]
+        self.assertIn("/admin/ml", rutas)
+        self.assertIn("/admin/api/ml/informacion", rutas)
+        self.assertIn("/admin/api/ml/predecir-afluencia", rutas)
+
+
+if __name__ == "__main__":
+    unittest.main()
