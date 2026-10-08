@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 from app import app
 from ml.services.predictor_afluencia import obtener_predictor_afluencia
 
@@ -252,6 +252,131 @@ class TestModuloMachineLearning(unittest.TestCase):
         self.assertEqual(umbrales.get("medio_minimo"), 8)
         self.assertEqual(umbrales.get("medio_maximo"), 35)
         self.assertEqual(umbrales.get("alto_minimo"), 36)
+
+    def test_17_historial_sin_sesion_redirige(self):
+        """Acceso a /admin/api/ml/historial-afluencia sin sesión debe redirigir a login (302)."""
+        respuesta = self.client.get("/admin/api/ml/historial-afluencia")
+        self.assertEqual(respuesta.status_code, 302)
+
+    def test_18_historial_superadmin_7_dias(self):
+        """SuperAdmin consultando 7 días debe obtener status success, periodo 7 y referencia horaria."""
+        with self.client.session_transaction() as sesion:
+            sesion["admin_user"] = "admin_test"
+            sesion["admin_rol"] = "SuperAdmin"
+
+        respuesta = self.client.get("/admin/api/ml/historial-afluencia?sede=Central&dias=7")
+        self.assertEqual(respuesta.status_code, 200)
+
+        datos = respuesta.get_json()
+        self.assertEqual(datos["status"], "success")
+        self.assertEqual(datos["sede"], "Central")
+        self.assertEqual(datos["periodo_dias"], 7)
+        self.assertIn("referencia_horaria", datos)
+
+    def test_19_historial_superadmin_30_dias(self):
+        """SuperAdmin consultando 30 días debe obtener status success y periodo 30."""
+        with self.client.session_transaction() as sesion:
+            sesion["admin_user"] = "admin_test"
+            sesion["admin_rol"] = "SuperAdmin"
+
+        respuesta = self.client.get("/admin/api/ml/historial-afluencia?sede=Central&dias=30")
+        self.assertEqual(respuesta.status_code, 200)
+
+        datos = respuesta.get_json()
+        self.assertEqual(datos["status"], "success")
+        self.assertEqual(datos["periodo_dias"], 30)
+
+    def test_20_historial_dias_invalido_400(self):
+        """Parámetro dias distinto de 7 o 30 debe retornar 400 Bad Request."""
+        with self.client.session_transaction() as sesion:
+            sesion["admin_user"] = "admin_test"
+            sesion["admin_rol"] = "SuperAdmin"
+
+        respuesta = self.client.get("/admin/api/ml/historial-afluencia?sede=Central&dias=15")
+        self.assertEqual(respuesta.status_code, 400)
+
+        datos = respuesta.get_json()
+        self.assertEqual(datos["status"], "error")
+
+    def test_21_historial_supervisor_sede_forzada(self):
+        """Supervisor con sede 'Tarma' enviando 'Central' debe recibir respuesta para su sede 'Tarma'."""
+        with self.client.session_transaction() as sesion:
+            sesion["admin_user"] = "super_tarma"
+            sesion["admin_rol"] = "Supervisor"
+            sesion["admin_sede"] = "Tarma"
+
+        respuesta = self.client.get("/admin/api/ml/historial-afluencia?sede=Central&dias=30")
+        self.assertEqual(respuesta.status_code, 200)
+
+        datos = respuesta.get_json()
+        self.assertEqual(datos["status"], "success")
+        self.assertEqual(datos["sede"], "Tarma")
+
+    def test_22_historial_sin_datos_respuesta_exitosa(self):
+        """Sede sin registros debe responder 200 OK con arreglos vacíos y fechas con datos en 0."""
+        with self.client.session_transaction() as sesion:
+            sesion["admin_user"] = "admin_test"
+            sesion["admin_rol"] = "SuperAdmin"
+
+        with patch("ml.services.datos_afluencia.get_db_cursor") as mock_db:
+            mock_cursor = MagicMock()
+            mock_db.return_value.__enter__.return_value = (MagicMock(), mock_cursor)
+            mock_cursor.fetchone.return_value = None
+
+            respuesta = self.client.get("/admin/api/ml/historial-afluencia?sede=Yanahuanca&dias=30")
+            self.assertEqual(respuesta.status_code, 200)
+
+            datos = respuesta.get_json()
+            self.assertEqual(datos["status"], "success")
+            self.assertEqual(datos["fechas_con_datos"], 0)
+            self.assertEqual(datos["total_ingresos_periodo"], 0)
+            self.assertEqual(datos["horas"], [])
+            self.assertEqual(datos["totales"], [])
+            self.assertEqual(datos["promedios"], [])
+
+    def test_23_historial_error_conexion_bd(self):
+        """Error de conexión a la BD durante la consulta del historial debe responder 503."""
+        with self.client.session_transaction() as sesion:
+            sesion["admin_user"] = "admin_test"
+            sesion["admin_rol"] = "SuperAdmin"
+
+        with patch("ml.services.datos_afluencia.get_db_cursor") as mock_db:
+            mock_db.side_effect = ConnectionError("Error de conexión simulado")
+
+            respuesta = self.client.get("/admin/api/ml/historial-afluencia?sede=Central&dias=30")
+            self.assertEqual(respuesta.status_code, 503)
+
+            datos = respuesta.get_json()
+            self.assertEqual(datos["status"], "error")
+
+    def test_24_historial_sin_datos_personales(self):
+        """Verificar que la respuesta del historial no exponga nombres, DNI, emails o usuarios."""
+        with self.client.session_transaction() as sesion:
+            sesion["admin_user"] = "admin_test"
+            sesion["admin_rol"] = "SuperAdmin"
+
+        respuesta = self.client.get("/admin/api/ml/historial-afluencia?sede=Central&dias=30")
+        self.assertEqual(respuesta.status_code, 200)
+
+        json_str = respuesta.get_data(as_text=True).lower()
+        for campo_pii in ["dni", "nombre_usuario", "email", "usuario", "nombres", "apellidos"]:
+            self.assertNotIn(f'"{campo_pii}"', json_str)
+
+    def test_25_historial_formato_campos(self):
+        """Verificar tipos y consistencia de horas, totales y promedios."""
+        with self.client.session_transaction() as sesion:
+            sesion["admin_user"] = "admin_test"
+            sesion["admin_rol"] = "SuperAdmin"
+
+        respuesta = self.client.get("/admin/api/ml/historial-afluencia?sede=Central&dias=30")
+        self.assertEqual(respuesta.status_code, 200)
+
+        datos = respuesta.get_json()
+        self.assertIsInstance(datos["horas"], list)
+        self.assertIsInstance(datos["totales"], list)
+        self.assertIsInstance(datos["promedios"], list)
+        self.assertEqual(len(datos["horas"]), len(datos["totales"]))
+        self.assertEqual(len(datos["horas"]), len(datos["promedios"]))
 
 
 if __name__ == "__main__":

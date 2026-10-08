@@ -243,6 +243,66 @@
         </section>
     </div>
 
+    <!-- Comportamiento histórico por hora -->
+    <section class="bg-white border border-slate-200 rounded-xl shadow-sm">
+        <div class="p-5 border-b border-slate-100 flex flex-wrap justify-between items-center gap-4">
+            <h3 class="font-bold text-slate-700 flex items-center gap-2">
+                <i class="ph ph-chart-bar text-indigo-500 text-xl"></i>
+                Comportamiento histórico por hora
+            </h3>
+
+            <div class="flex items-center gap-3">
+                <label for="selector-dias-historial" class="text-xs font-bold text-slate-500 uppercase">
+                    Periodo:
+                </label>
+                <select id="selector-dias-historial" class="border border-slate-300 rounded-lg px-3 py-1.5 text-xs bg-white focus:ring-2 focus:ring-indigo-500 outline-none">
+                    <option value="30" selected>Últimos 30 días</option>
+                    <option value="7">Últimos 7 días</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="p-5 space-y-5">
+            <div id="metricas-historial" class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div class="bg-slate-50 border border-slate-100 p-3.5 rounded-lg">
+                    <p class="text-[10px] font-bold uppercase text-slate-400">Periodo analizado</p>
+                    <p id="historial-dato-periodo" class="text-xs font-bold text-slate-700 mt-1">—</p>
+                </div>
+                <div class="bg-slate-50 border border-slate-100 p-3.5 rounded-lg">
+                    <p class="text-[10px] font-bold uppercase text-slate-400">Fechas con datos</p>
+                    <p id="historial-dato-fechas" class="text-xs font-bold text-slate-700 mt-1">—</p>
+                </div>
+                <div class="bg-slate-50 border border-slate-100 p-3.5 rounded-lg">
+                    <p class="text-[10px] font-bold uppercase text-slate-400">Total ingresos</p>
+                    <p id="historial-dato-total" class="text-xs font-bold text-slate-700 mt-1">—</p>
+                </div>
+                <div class="bg-slate-50 border border-slate-100 p-3.5 rounded-lg">
+                    <p class="text-[10px] font-bold uppercase text-slate-400">Sede</p>
+                    <p id="historial-dato-sede" class="text-xs font-bold text-slate-700 mt-1">—</p>
+                </div>
+            </div>
+
+            <div id="contenedor-grafico-historial" class="relative min-h-[300px] w-full">
+                <canvas id="grafico-historial-afluencia"></canvas>
+            </div>
+
+            <div id="historial-vacio" class="hidden min-h-[250px] flex flex-col justify-center items-center text-center p-6 bg-slate-50 border border-slate-200 rounded-xl">
+                <i class="ph ph-folder-open text-4xl text-slate-400 mb-2"></i>
+                <h4 class="font-bold text-slate-600">No existen registros históricos para esta sede en el periodo seleccionado</h4>
+                <p class="text-xs text-slate-400 mt-1">Seleccione otra sede o intente consultar nuevamente más adelante.</p>
+            </div>
+
+            <div id="historial-advertencia-limitado" class="hidden bg-amber-50 border border-amber-200 rounded-lg p-3.5 flex items-start gap-3">
+                <i class="ph ph-warning-circle text-amber-600 text-lg shrink-0 mt-0.5"></i>
+                <p class="text-xs text-amber-800 font-medium">El historial disponible es limitado; la distribución debe interpretarse de forma referencial.</p>
+            </div>
+
+            <p class="text-[11px] text-slate-400 italic">
+                La gráfica utiliza la hora almacenada en la base de datos para mantener compatibilidad con el modelo entrenado.
+            </p>
+        </div>
+    </section>
+
     <!-- Información del modelo -->
     <section class="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
         <h3 class="font-bold text-slate-700 flex items-center gap-2">
@@ -264,13 +324,23 @@
 {% block scripts %}
 <script>
     let graficoProbabilidades = null;
+    let graficoHistorial = null;
 
     document.addEventListener("DOMContentLoaded", function () {
         cargarInformacionModelo();
+        cargarHistorialAfluencia();
 
         document
             .getElementById("form-prediccion")
             .addEventListener("submit", ejecutarPrediccion);
+
+        document
+            .getElementById("selector-dias-historial")
+            .addEventListener("change", cargarHistorialAfluencia);
+
+        document
+            .getElementById("sede")
+            .addEventListener("change", cargarHistorialAfluencia);
     });
 
     async function cargarInformacionModelo() {
@@ -633,6 +703,125 @@
         const elemento = document.createElement("div");
         elemento.textContent = valor;
         return elemento.innerHTML;
+    }
+
+    async function cargarHistorialAfluencia() {
+        const sede = document.getElementById("sede").value;
+        const selectorDias = document.getElementById("selector-dias-historial");
+        const dias = selectorDias ? selectorDias.value : "30";
+
+        try {
+            const respuesta = await fetch(`/admin/api/ml/historial-afluencia?sede=${encodeURIComponent(sede)}&dias=${dias}`);
+            const datos = await respuesta.json();
+
+            if (!respuesta.ok || datos.status !== "success") {
+                throw new Error(datos.mensaje || "No se pudo cargar el historial.");
+            }
+
+            renderizarHistorial(datos);
+        } catch (error) {
+            console.error("Error cargando historial de afluencia:", error);
+        }
+    }
+
+    function renderizarHistorial(datos) {
+        const fechasConDatos = datos.fechas_con_datos || 0;
+        const contenedorGrafico = document.getElementById("contenedor-grafico-historial");
+        const contenedorVacio = document.getElementById("historial-vacio");
+        const advLimitado = document.getElementById("historial-advertencia-limitado");
+
+        const elPeriodo = document.getElementById("historial-dato-periodo");
+        if (elPeriodo) {
+            elPeriodo.textContent = (datos.fecha_inicio && datos.fecha_fin)
+                ? `${datos.fecha_inicio} a ${datos.fecha_fin}`
+                : "Sin datos";
+        }
+
+        const elFechas = document.getElementById("historial-dato-fechas");
+        if (elFechas) elFechas.textContent = `${fechasConDatos} fechas`;
+
+        const elTotal = document.getElementById("historial-dato-total");
+        if (elTotal) elTotal.textContent = `${datos.total_ingresos_periodo || 0} ingresos`;
+
+        const elSede = document.getElementById("historial-dato-sede");
+        if (elSede) elSede.textContent = datos.sede || "—";
+
+        if (advLimitado) {
+            if (fechasConDatos > 0 && fechasConDatos < 15) {
+                advLimitado.classList.remove("hidden");
+            } else {
+                advLimitado.classList.add("hidden");
+            }
+        }
+
+        if (!datos.horas || datos.horas.length === 0 || fechasConDatos === 0) {
+            if (contenedorGrafico) contenedorGrafico.classList.add("hidden");
+            if (contenedorVacio) contenedorVacio.classList.remove("hidden");
+            if (graficoHistorial) {
+                graficoHistorial.destroy();
+                graficoHistorial = null;
+            }
+            return;
+        }
+
+        if (contenedorGrafico) contenedorGrafico.classList.remove("hidden");
+        if (contenedorVacio) contenedorVacio.classList.add("hidden");
+
+        const elCanvas = document.getElementById("grafico-historial-afluencia");
+        if (!elCanvas) return;
+        const contexto = elCanvas.getContext("2d");
+
+        if (graficoHistorial) {
+            graficoHistorial.destroy();
+        }
+
+        const etiquetasHoras = datos.horas.map(h => `${String(h).padStart(2, "0")}:00`);
+
+        graficoHistorial = new Chart(contexto, {
+            type: "bar",
+            data: {
+                labels: etiquetasHoras,
+                datasets: [{
+                    label: "Total de ingresos",
+                    data: datos.totales,
+                    backgroundColor: "#6366f1",
+                    hoverBackgroundColor: "#4f46e5",
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function (contextoItem) {
+                                const indice = contextoItem.dataIndex;
+                                const total = datos.totales[indice];
+                                const promedio = datos.promedios[indice];
+                                return [
+                                    ` Total ingresos: ${total}`,
+                                    ` Promedio por fecha con datos: ${promedio} / día`
+                                ];
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: { font: { size: 11 } }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        ticks: { precision: 0 }
+                    }
+                }
+            }
+        });
     }
 </script>
 {% endblock %}

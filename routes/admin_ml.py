@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo
 from flask import Blueprint, jsonify, render_template, request, session
 
 from ml.services.servicio_afluencia import (
+    obtener_historial_afluencia_periodo,
     obtener_informacion_modelo,
     predecir_afluencia_desde_bd
 )
@@ -69,6 +70,46 @@ def api_informacion_modelo():
             "No se pudo obtener la información del modelo.",
             500
         )
+
+
+@admin_ml_bp.route("/api/ml/historial-afluencia", methods=["GET"])
+def api_historial_afluencia():
+    """
+    Devuelve la agregación histórica de afluencia por hora para la sede y periodo indicado (7 o 30 días).
+    Ruta protegida por sesión administrativa. No requiere CSRF (GET).
+    """
+    dias_param = request.args.get("dias", "30")
+    try:
+        dias = int(dias_param)
+    except (ValueError, TypeError):
+        return respuesta_error("El parámetro dias debe ser 7 o 30.", 400)
+
+    if dias not in (7, 30):
+        return respuesta_error("El parámetro dias debe ser 7 o 30.", 400)
+
+    sede_solicitada = str(request.args.get("sede", "Central")).strip()
+
+    rol = session.get("admin_rol")
+    sede_administrador = str(session.get("admin_sede", "")).strip()
+
+    if rol == "Supervisor":
+        if not sede_administrador:
+            return respuesta_error("El usuario supervisor no tiene una sede asignada.", 403)
+        sede = sede_administrador
+    else:
+        sede = sede_solicitada if sede_solicitada else "Central"
+
+    try:
+        resultado = obtener_historial_afluencia_periodo(sede=sede, dias=dias)
+        return jsonify(resultado)
+    except ValueError as error:
+        return respuesta_error(str(error), 400)
+    except ConnectionError as error:
+        print(f"Error de conexión al obtener historial ML: {error}")
+        return respuesta_error("No se pudo conectar con la base de datos.", 503)
+    except Exception as error:
+        print(f"Error inesperado al obtener historial ML: {error}")
+        return respuesta_error("No fue posible obtener el historial de afluencia.", 500)
 
 
 @admin_ml_bp.route("/api/ml/predecir-afluencia", methods=["POST"])

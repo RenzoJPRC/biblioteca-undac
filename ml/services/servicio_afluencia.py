@@ -1,5 +1,6 @@
 from ml.services.datos_afluencia import (
-    construir_variables_afluencia
+    construir_variables_afluencia,
+    obtener_historial_afluencia_periodo
 )
 from ml.services.predictor_afluencia import (
     obtener_predictor_afluencia

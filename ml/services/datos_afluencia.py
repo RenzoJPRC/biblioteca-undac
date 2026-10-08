@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 import pandas as pd
 
@@ -269,6 +269,135 @@ def construir_variables_afluencia(
     }
 
     return variables, contexto
+
+
+def obtener_historial_afluencia_periodo(sede="Central", dias=30):
+    """
+    Obtiene el comportamiento histórico agrupado por hora para una sede
+    durante los últimos 7 o 30 días basándose en la última fecha registrada.
+
+    No realiza escrituras ni modifica datos.
+    Retorna exclusivamente datos agregados sin PII.
+    """
+    if dias not in (7, 30):
+        raise ValueError("El parámetro dias debe ser 7 o 30.")
+
+    SEDES_PERMITIDAS = {
+        "Central",
+        "Tarma",
+        "La Merced",
+        "Oxapampa",
+        "Paucartambo",
+        "Yanahuanca"
+    }
+    if sede not in SEDES_PERMITIDAS:
+        raise ValueError("La sede especificada no es válida.")
+
+    consulta_ultima_fecha = """
+        SELECT MAX(CAST(R.FechaHora AS DATE)) AS UltimaFecha
+        FROM RegistroIngresos R
+        WHERE ISNULL(R.Sede, 'Central') = ?
+    """
+
+    with get_db_cursor(autocommit=True) as (_, cursor):
+        if cursor is None:
+            raise ConnectionError("No fue posible conectarse a SQL Server.")
+
+        cursor.execute(consulta_ultima_fecha, (sede,))
+        fila = cursor.fetchone()
+        ultima_fecha = fila[0] if fila and fila[0] else None
+
+        if not ultima_fecha:
+            return {
+                "status": "success",
+                "sede": sede,
+                "periodo_dias": dias,
+                "fecha_inicio": None,
+                "fecha_fin": None,
+                "fechas_con_datos": 0,
+                "total_ingresos_periodo": 0,
+                "horas": [],
+                "totales": [],
+                "promedios": [],
+                "referencia_horaria": "Hora almacenada en la base de datos"
+            }
+
+        if isinstance(ultima_fecha, datetime):
+            fecha_fin = ultima_fecha.date()
+        elif isinstance(ultima_fecha, str):
+            fecha_fin = datetime.strptime(ultima_fecha, "%Y-%m-%d").date()
+        else:
+            fecha_fin = ultima_fecha
+
+        fecha_inicio = fecha_fin - timedelta(days=dias - 1)
+
+        consulta_ingresos = """
+            SELECT
+                CAST(R.FechaHora AS DATE) AS Fecha,
+                DATEPART(HOUR, R.FechaHora) AS Hora,
+                COUNT(*) AS CantidadIngresos
+            FROM RegistroIngresos R
+            WHERE ISNULL(R.Sede, 'Central') = ?
+              AND CAST(R.FechaHora AS DATE) BETWEEN ? AND ?
+            GROUP BY
+                CAST(R.FechaHora AS DATE),
+                DATEPART(HOUR, R.FechaHora)
+            ORDER BY
+                Hora ASC
+        """
+
+        cursor.execute(
+            consulta_ingresos,
+            (sede, fecha_inicio.isoformat(), fecha_fin.isoformat())
+        )
+        filas = cursor.fetchall()
+
+    if not filas:
+        return {
+            "status": "success",
+            "sede": sede,
+            "periodo_dias": dias,
+            "fecha_inicio": fecha_inicio.isoformat(),
+            "fecha_fin": fecha_fin.isoformat(),
+            "fechas_con_datos": 0,
+            "total_ingresos_periodo": 0,
+            "horas": [],
+            "totales": [],
+            "promedios": [],
+            "referencia_horaria": "Hora almacenada en la base de datos"
+        }
+
+    fechas_unicas = set(f[0] for f in filas)
+    fechas_con_datos = len(fechas_unicas)
+
+    horas_registradas = set(int(f[1]) for f in filas)
+    horas = sorted(list(set(range(8, 21)).union(horas_registradas)))
+
+    totales = []
+    promedios = []
+
+    for h in horas:
+        total_h = sum(int(f[2]) for f in filas if int(f[1]) == h)
+        promedio_h = round(total_h / fechas_con_datos, 2) if fechas_con_datos > 0 else 0.0
+        totales.append(total_h)
+        promedios.append(promedio_h)
+
+    total_ingresos_periodo = sum(totales)
+
+    return {
+        "status": "success",
+        "sede": sede,
+        "periodo_dias": dias,
+        "fecha_inicio": fecha_inicio.isoformat(),
+        "fecha_fin": fecha_fin.isoformat(),
+        "fechas_con_datos": fechas_con_datos,
+        "total_ingresos_periodo": total_ingresos_periodo,
+        "horas": horas,
+        "totales": totales,
+        "promedios": promedios,
+        "referencia_horaria": "Hora almacenada en la base de datos"
+    }
+
 
 
 if __name__ == "__main__":
