@@ -142,8 +142,8 @@
             </div>
 
             <!-- Resultado generado -->
-            <div id="resultado-contenido" class="hidden p-5">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div id="resultado-contenido" class="hidden p-5 space-y-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
 
                     <div class="flex flex-col items-center justify-center text-center">
                         <p class="text-xs font-bold text-slate-400 uppercase">
@@ -167,7 +167,30 @@
                     </div>
                 </div>
 
-                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-6">
+                <!-- Probabilidad estimada por el modelo -->
+                <div class="bg-slate-50 border border-slate-200 rounded-xl p-5">
+                    <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 flex items-center justify-between">
+                        <span>Probabilidad estimada por el modelo</span>
+                    </h4>
+
+                    <div id="barras-probabilidad" class="space-y-3">
+                        <!-- Generado dinámicamente -->
+                    </div>
+                </div>
+
+                <!-- Factores considerados -->
+                <div class="bg-slate-50 border border-slate-200 rounded-xl p-5">
+                    <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                        <i class="ph ph-list-checks text-indigo-500 text-lg"></i>
+                        <span>Factores considerados</span>
+                    </h4>
+
+                    <div id="factores-considerados" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                        <!-- Generado dinámicamente -->
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div class="bg-slate-50 rounded-lg p-4 border border-slate-100">
                         <p class="text-[10px] font-bold uppercase text-slate-400">
                             Fecha consultada
@@ -190,10 +213,18 @@
                     </div>
                 </div>
 
-                <div class="mt-5 bg-amber-50 border border-amber-200 rounded-lg p-4
-                            flex items-start gap-3">
-                    <i class="ph ph-warning-circle text-amber-600 text-xl shrink-0"></i>
-                    <p id="advertencia-modelo" class="text-xs text-amber-800"></p>
+                <!-- Advertencia cuando fechas_historicas < 15 -->
+                <div id="contenedor-advertencia-historial" class="hidden bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
+                    <i class="ph ph-warning-circle text-amber-600 text-xl shrink-0 mt-0.5"></i>
+                    <p class="text-xs text-amber-800 font-medium">
+                        La predicción utiliza un historial limitado y debe interpretarse de manera referencial.
+                    </p>
+                </div>
+
+                <!-- Advertencia general del modelo -->
+                <div class="bg-indigo-50 border border-indigo-200 rounded-lg p-4 flex items-start gap-3">
+                    <i class="ph ph-info text-indigo-600 text-xl shrink-0"></i>
+                    <p id="advertencia-modelo" class="text-xs text-indigo-800"></p>
                 </div>
             </div>
 
@@ -255,17 +286,21 @@
 
             const modelo = datos.modelo;
             const metricas = modelo.metricas || {};
+            const umbrales = modelo.umbrales || {
+                bajo_maximo: 7,
+                medio_minimo: 8,
+                medio_maximo: 35,
+                alto_minimo: 36
+            };
 
             contenedor.innerHTML = `
                 ${crearDatoTecnico("Modelo", modelo.nombre || "No disponible")}
                 ${crearDatoTecnico("Algoritmo", modelo.algoritmo || "No disponible")}
                 ${crearDatoTecnico("Versión", modelo.version || "No disponible")}
                 ${crearDatoTecnico(
-                "Recall nivel alto",
-                metricas.recall_alto !== undefined
-                    ? (metricas.recall_alto * 100).toFixed(2) + "%"
-                    : "No disponible"
-            )}
+                    "Umbrales de Clasificación",
+                    `Bajo: 0-${umbrales.bajo_maximo} | Medio: ${umbrales.medio_minimo}-${umbrales.medio_maximo} | Alto: ${umbrales.alto_minimo}+`
+                )}
             `;
         } catch (error) {
             contenedor.innerHTML = `
@@ -349,20 +384,154 @@
 
         const nivel = datos.prediccion.nivel;
         const probabilidades = datos.prediccion.probabilidades;
+        const variables = datos.variables_modelo || {};
+        const consulta = datos.consulta || {};
 
         document.getElementById("nivel-predicho").textContent = nivel;
         document.getElementById("estado-modelo").textContent = "Predicción generada";
         document.getElementById("dato-fecha").textContent =
-            `${datos.consulta.fecha} - ${String(datos.consulta.hora).padStart(2, "0")}:00`;
+            `${consulta.fecha} - ${String(consulta.hora).padStart(2, "0")}:00`;
         document.getElementById("dato-historial").textContent =
-            `${datos.consulta.fechas_historicas} fechas`;
+            `${consulta.fechas_historicas} fechas`;
         document.getElementById("dato-ultima-fecha").textContent =
-            datos.consulta.ultima_fecha_disponible || "No disponible";
+            consulta.ultima_fecha_disponible || "No disponible";
+
+        // Advertencia por historial limitado (< 15 fechas)
+        const advHistorial = document.getElementById("contenedor-advertencia-historial");
+        if (advHistorial) {
+            if (consulta.fechas_historicas < 15) {
+                advHistorial.classList.remove("hidden");
+            } else {
+                advHistorial.classList.add("hidden");
+            }
+        }
+
+        // Advertencia general del modelo
         document.getElementById("advertencia-modelo").textContent =
-            datos.advertencia;
+            datos.advertencia || "Modelo de apoyo. La predicción no representa una garantía exacta de afluencia.";
 
         aplicarEstiloNivel(nivel);
         actualizarGrafico(probabilidades);
+        renderizarBarrasProbabilidad(probabilidades, nivel);
+        renderizarFactoresConsiderados(variables);
+    }
+
+    function renderizarBarrasProbabilidad(probabilidades, nivelEstimado) {
+        const contenedor = document.getElementById("barras-probabilidad");
+        if (!contenedor) return;
+
+        const nivelesConfig = [
+            {
+                clave: "Bajo",
+                etiqueta: "Bajo",
+                rango: "0 a 7 ingresos por hora",
+                colorBarra: "bg-emerald-500",
+                colorBadge: "bg-emerald-100 text-emerald-800 border-emerald-300",
+                borderHighlight: "border-emerald-500 bg-emerald-50/50 shadow-xs"
+            },
+            {
+                clave: "Medio",
+                etiqueta: "Medio",
+                rango: "8 a 35 ingresos por hora",
+                colorBarra: "bg-amber-500",
+                colorBadge: "bg-amber-100 text-amber-800 border-amber-300",
+                borderHighlight: "border-amber-500 bg-amber-50/50 shadow-xs"
+            },
+            {
+                clave: "Alto",
+                etiqueta: "Alto",
+                rango: "36 o más ingresos por hora",
+                colorBarra: "bg-rose-500",
+                colorBadge: "bg-rose-100 text-rose-800 border-rose-300",
+                borderHighlight: "border-rose-500 bg-rose-50/50 shadow-xs"
+            }
+        ];
+
+        let mayorClave = nivelEstimado;
+        let maxProb = -1;
+        nivelesConfig.forEach(item => {
+            const prob = probabilidades[item.clave] || 0;
+            if (prob > maxProb) {
+                maxProb = prob;
+                if (!nivelEstimado) mayorClave = item.clave;
+            }
+        });
+
+        contenedor.innerHTML = nivelesConfig.map(item => {
+            const prob = probabilidades[item.clave] || 0;
+            const porcentaje = (prob * 100).toFixed(2);
+            const esSeleccionado = (item.clave === mayorClave);
+
+            return `
+                <div class="p-3.5 rounded-xl border transition-all ${
+                    esSeleccionado
+                        ? item.borderHighlight + " ring-1 ring-offset-1 ring-indigo-200"
+                        : "border-slate-200 bg-white"
+                }">
+                    <div class="flex items-center justify-between text-xs font-bold mb-1.5">
+                        <div class="flex items-center gap-2">
+                            <span class="text-slate-800 font-bold text-sm">${item.etiqueta}</span>
+                            <span class="text-[11px] font-normal text-slate-500">(${item.rango})</span>
+                            ${esSeleccionado ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${item.colorBadge}">Nivel estimado</span>` : ""}
+                        </div>
+                        <span class="text-sm font-extrabold text-slate-700">${porcentaje}%</span>
+                    </div>
+
+                    <div class="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
+                        <div class="${item.colorBarra} h-3 rounded-full transition-all duration-500" style="width: ${porcentaje}%"></div>
+                    </div>
+                </div>
+            `;
+        }).join("");
+    }
+
+    function renderizarFactoresConsiderados(variables) {
+        const contenedor = document.getElementById("factores-considerados");
+        if (!contenedor) return;
+
+        const factores = [
+            {
+                clave: "IngresosDiaAnterior",
+                titulo: "Ingresos del día anterior",
+                formato: (val) => Math.round(val) + " ingresos"
+            },
+            {
+                clave: "IngresosCincoDiasAntes",
+                titulo: "Ingresos de cinco días antes",
+                formato: (val) => Math.round(val) + " ingresos"
+            },
+            {
+                clave: "PromedioMovil5",
+                titulo: "Promedio de los últimos cinco días",
+                formato: (val) => val.toFixed(1) + " / día"
+            },
+            {
+                clave: "PromedioHistoricoHora",
+                titulo: "Promedio histórico de esa hora",
+                formato: (val) => val.toFixed(1) + " / hora"
+            },
+            {
+                clave: "TendenciaReciente",
+                titulo: "Tendencia reciente",
+                formato: (val) => (val >= 0 ? "+" : "") + val.toFixed(1)
+            }
+        ];
+
+        contenedor.innerHTML = factores.map(f => {
+            const val = variables[f.clave] !== undefined ? Number(variables[f.clave]) : 0;
+            const valorFormateado = f.formato(val);
+
+            return `
+                <div class="bg-white border border-slate-200 rounded-lg p-3.5">
+                    <p class="text-[11px] font-bold uppercase text-slate-400 tracking-tight line-clamp-1" title="${escaparHTML(f.titulo)}">
+                        ${escaparHTML(f.titulo)}
+                    </p>
+                    <p class="text-base font-extrabold text-slate-800 mt-1">
+                        ${escaparHTML(valorFormateado)}
+                    </p>
+                </div>
+            `;
+        }).join("");
     }
 
     function aplicarEstiloNivel(nivel) {

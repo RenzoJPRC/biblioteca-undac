@@ -27,6 +27,13 @@
         "medio_hasta": 35,
         "alto_desde": 36
     },
+    "umbrales": {
+        "bajo_maximo": 7,
+        "medio_minimo": 8,
+        "medio_maximo": 35,
+        "alto_minimo": 36,
+        "metodo": "Percentiles 33 y 66 del conjunto real de entrenamiento"
+    },
     "configuracion": {
         "numero_arboles": 300,
         "profundidad_maxima": 6,

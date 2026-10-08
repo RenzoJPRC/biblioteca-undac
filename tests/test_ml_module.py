@@ -230,6 +230,29 @@ class TestModuloMachineLearning(unittest.TestCase):
         self.assertIn("/admin/api/ml/informacion", rutas)
         self.assertIn("/admin/api/ml/predecir-afluencia", rutas)
 
+    def test_16_api_informacion_devuelve_umbrales(self):
+        """Comprobar que GET /admin/api/ml/informacion devuelve los umbrales 7, 8, 35 y 36 y datos del modelo."""
+        with self.client.session_transaction() as sesion:
+            sesion["admin_user"] = "admin_test"
+            sesion["admin_rol"] = "SuperAdmin"
+
+        respuesta = self.client.get("/admin/api/ml/informacion")
+        self.assertEqual(respuesta.status_code, 200)
+
+        datos = respuesta.get_json()
+        self.assertEqual(datos["status"], "success")
+
+        modelo = datos["modelo"]
+        self.assertIn("nombre", modelo)
+        self.assertIn("algoritmo", modelo)
+        self.assertIn("version", modelo)
+
+        umbrales = modelo.get("umbrales", {})
+        self.assertEqual(umbrales.get("bajo_maximo"), 7)
+        self.assertEqual(umbrales.get("medio_minimo"), 8)
+        self.assertEqual(umbrales.get("medio_maximo"), 35)
+        self.assertEqual(umbrales.get("alto_minimo"), 36)
+
 
 if __name__ == "__main__":
     unittest.main()
