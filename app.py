@@ -117,11 +117,18 @@ def requerir_login_admin():
     # Crear token CSRF
     generar_csrf_token_si_no_existe()
 
-    # Proteger métodos que modifican datos
+    # Proteger métodos que modifican datos o la API predictiva específica de ML
     METODOS_PROTEGIDOS = {"POST", "PUT", "PATCH", "DELETE"}
 
-    if request.method in METODOS_PROTEGIDOS and not request.path.startswith("/admin/api"):
+    debe_validar_csrf = (
+        (request.method in METODOS_PROTEGIDOS and not request.path.startswith("/admin/api"))
+        or (request.method == "POST" and request.path == "/admin/api/ml/predecir-afluencia")
+    )
+
+    if debe_validar_csrf:
         if not validar_csrf():
+            if request.path.startswith("/admin/api"):
+                return jsonify({'status': 'error', 'mensaje': 'Token CSRF inválido o expirado.'}), 403
             return respuesta_csrf_bloqueado()
 
     # Restricción para rol Supervisor
@@ -131,6 +138,10 @@ def requerir_login_admin():
             "/admin/",
             "/admin/login",
             "/admin/logout",
+            "/admin/ml",
+            "/admin/api/ml/informacion",
+            "/admin/api/ml/historial-afluencia",
+            "/admin/api/ml/predecir-afluencia",
             "/admin/api/dashboard_data",
             "/admin/reporte_rango",
             "/admin/exportar_ingresos_excel",
@@ -143,6 +154,7 @@ def requerir_login_admin():
 
         es_dinamica = (
             request.path.startswith("/admin/api/dashboard")
+            or request.path.startswith("/admin/api/ml")
             or request.path.startswith("/admin/evento_detalle")
             or request.path.startswith("/admin/eliminar_evento")
             or request.path.startswith("/admin/eventos")
@@ -157,12 +169,19 @@ def requerir_login_admin():
 
     # Restricción para rol Consultor
     if session.get("admin_rol") == "Consultor":
-        if request.method in METODOS_PROTEGIDOS and request.path != "/admin/login" and request.path != "/admin/logout":
+        # La consulta predictiva de ML es de solo lectura (SELECT + Inferencia ML)
+        es_consulta_ml = (request.method == "POST" and request.path == "/admin/api/ml/predecir-afluencia")
+
+        if request.method in METODOS_PROTEGIDOS and request.path not in ["/admin/login", "/admin/logout"] and not es_consulta_ml:
             return jsonify({'status': 'error', 'msg': 'Operación denegada. Rol Consultor (Solo Lectura).'})
 
         RUTAS_PERMITIDAS_CONSULTOR = {
             "/admin/login",
             "/admin/logout",
+            "/admin/ml",
+            "/admin/api/ml/informacion",
+            "/admin/api/ml/historial-afluencia",
+            "/admin/api/ml/predecir-afluencia",
             "/admin/carnets",
             "/admin/egresados",
             "/admin/docentes",
@@ -170,7 +189,7 @@ def requerir_login_admin():
             "/admin/visitantes"
         }
 
-        es_busqueda = request.path.startswith("/admin/buscar_")
+        es_busqueda = request.path.startswith("/admin/buscar_") or request.path.startswith("/admin/api/ml")
         
         if request.path not in RUTAS_PERMITIDAS_CONSULTOR and not es_busqueda and not request.path.startswith("/admin/static"):
             return """

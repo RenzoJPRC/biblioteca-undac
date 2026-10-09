@@ -52,11 +52,35 @@ class PredictorAfluencia:
         self.modelo = paquete["modelo"]
         self.metadatos = paquete["metadatos"]
 
+        ruta_metadatos_json = (
+            ruta_ml / "models" / "metadatos_modelo_afluencia.json"
+        )
+        self.metadatos_json = {}
+        if ruta_metadatos_json.exists():
+            import json
+            try:
+                with open(ruta_metadatos_json, "r", encoding="utf-8") as archivo_json:
+                    self.metadatos_json = json.load(archivo_json)
+            except Exception:
+                self.metadatos_json = {}
+
         self.variables = list(
             self.metadatos["variables"]
         )
 
     def obtener_informacion(self):
+        umbrales_defecto = {
+            "bajo_maximo": 7,
+            "medio_minimo": 8,
+            "medio_maximo": 35,
+            "alto_minimo": 36,
+            "metodo": "Percentiles 33 y 66 del conjunto real de entrenamiento"
+        }
+        umbrales = (
+            self.metadatos_json.get("umbrales")
+            or self.metadatos.get("umbrales")
+            or umbrales_defecto
+        )
         return {
             "nombre": self.metadatos.get("nombre"),
             "version": self.metadatos.get("version"),
@@ -73,6 +97,7 @@ class PredictorAfluencia:
                 "metricas_prueba_septiembre",
                 {}
             ),
+            "umbrales": umbrales,
             "advertencia": self.metadatos.get(
                 "advertencia"
             )
