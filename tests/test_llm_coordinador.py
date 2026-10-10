@@ -1,0 +1,401 @@
+import unittest
+from unittest.mock import patch, MagicMock
+from datetime import datetime, date
+
+from llm.services.coordinador_asistente import procesar_pregunta
+
+
+class TestCoordinadorAsistente(unittest.TestCase):
+
+    # 1. PREGUNTA VACÍA
+    def test_01_pregunta_vacia(self):
+        res = procesar_pregunta("", rol="SuperAdmin")
+        self.assertEqual(res["status"], "error")
+        self.assertIn("obligatoria", res["mensaje"])
+
+        res_spaces = procesar_pregunta("   ", rol="SuperAdmin")
+        self.assertEqual(res_spaces["status"], "error")
+
+    # 2. PREGUNTA MAYOR DE 500 CARACTERES
+    def test_02_pregunta_mayor_500_caracteres(self):
+        pregunta_larga = "hola " * 120
+        res = procesar_pregunta(pregunta_larga, rol="SuperAdmin")
+        self.assertEqual(res["status"], "error")
+        self.assertIn("500", res["mensaje"])
+
+    # 3. ROL NONE O DESCONOCIDO
+    def test_03_rol_none_o_desconocido(self):
+        res1 = procesar_pregunta("Resumen de ingresos", rol=None)
+        self.assertEqual(res1["status"], "error")
+        self.assertIn("denegado", res1["mensaje"].lower())
+
+        res2 = procesar_pregunta("Resumen de ingresos", rol="AdministradorFalso")
+        self.assertEqual(res2["status"], "error")
+        self.assertIn("denegado", res2["mensaje"].lower())
+
+    # 4. CONSULTOR BLOQUEADO EN CONSULTA PERSONAL
+    @patch("llm.services.coordinador_asistente.clasificar_intencion")
+    def test_04_consultor_bloqueado_en_consulta_personal(self, mock_intencion):
+        mock_intencion.return_value = {
+            "intencion": "historial_persona",
+            "parametros": {"texto_persona": "Juan Perez"},
+            "origen": "regla_local"
+        }
+        res = procesar_pregunta("Historial de Juan Perez", rol="Consultor")
+        self.assertEqual(res["status"], "error")
+        self.assertIn("Consultor", res["mensaje"])
+
+    # 5. PERSONA SIN COINCIDENCIAS
+    @patch("llm.services.coordinador_asistente.buscar_personas")
+    def test_05_persona_sin_coincidencias(self, mock_buscar):
+        mock_buscar.return_value = []
+        res = procesar_pregunta("¿Cuántas veces ingresó Inexistente Persona?", rol="SuperAdmin")
+        self.assertEqual(res["status"], "success")
+        self.assertIn("No se encontró", res["mensaje"])
+        self.assertEqual(res["datos"]["coincidencias"], [])
+
+    # 6. PERSONA CON UNA COINCIDENCIA
+    @patch("llm.services.coordinador_asistente.obtener_historial_persona")
+    @patch("llm.services.coordinador_asistente.buscar_personas")
+    def test_06_persona_con_una_coincidencia(self, mock_buscar, mock_historial):
+        mock_buscar.return_value = [
+            {"tipo_persona": "Alumno", "persona_id": 1, "nombre": "Juan Perez", "codigo_mascarado": "20******00"}
+        ]
+        mock_historial.return_value = {
+            "status": "success",
+            "tipo_persona": "Alumno",
+            "persona_id": 1,
+            "total_ingresos": 2,
+            "registros": [
+                {"registro_id": 10, "fecha_hora": "2026-10-01T10:00:00", "sede": "Central"}
+            ]
+        }
+        res = procesar_pregunta("¿Cuántas veces ingresó Juan Perez?", rol="SuperAdmin")
+        self.assertEqual(res["status"], "success")
+        self.assertIn("2 ingresos", res["mensaje"])
+        self.assertFalse(res["requiere_aclaracion"])
+
+    # 7. PERSONA CON VARIAS COINCIDENCIAS REQUIERE ACLARACIÓN
+    @patch("llm.services.coordinador_asistente.buscar_personas")
+    def test_07_persona_varias_coincidencias_requiere_aclaracion(self, mock_buscar):
+        mock_buscar.return_value = [
+            {"tipo_persona": "Alumno", "persona_id": 1, "nombre": "Juan Perez Ramos", "codigo_mascarado": "20******01"},
+            {"tipo_persona": "Docente", "persona_id": 5, "nombre": "Juan Perez Gomez", "codigo_mascarado": None}
+        ]
+        res = procesar_pregunta("¿Cuántas veces ingresó Juan Perez?", rol="SuperAdmin")
+        self.assertEqual(res["status"], "requires_input")
+        self.assertTrue(res["requiere_aclaracion"])
+        self.assertEqual(len(res["opciones"]), 2)
+
+    # 8. SELECCIÓN VÁLIDA DE CANDIDATO
+    @patch("llm.services.coordinador_asistente.obtener_historial_persona")
+    @patch("llm.services.coordinador_asistente.buscar_personas")
+    def test_08_seleccion_valida_candidato(self, mock_buscar, mock_historial):
+        mock_buscar.return_value = [
+            {"tipo_persona": "Alumno", "persona_id": 1, "nombre": "Juan Perez Ramos", "codigo_mascarado": "20******01"},
+            {"tipo_persona": "Docente", "persona_id": 5, "nombre": "Juan Perez Gomez", "codigo_mascarado": None}
+        ]
+        mock_historial.return_value = {
+            "status": "success",
+            "total_ingresos": 1,
+            "registros": [{"registro_id": 12, "fecha_hora": "2026-10-02T11:00:00", "sede": "Central"}]
+        }
+        seleccion = {"tipo_persona": "Docente", "persona_id": 5}
+        res = procesar_pregunta("¿Cuántas veces ingresó Juan Perez?", rol="SuperAdmin", seleccion_persona=seleccion)
+        self.assertEqual(res["status"], "success")
+        self.assertFalse(res["requiere_aclaracion"])
+        mock_historial.assert_called_once_with(tipo_persona="Docente", persona_id=5, rol="SuperAdmin", sede_permitida=None)
+
+    # 9. SELECCIÓN MANIPULADA O INEXISTENTE RECHAZADA
+    @patch("llm.services.coordinador_asistente.buscar_personas")
+    def test_09_seleccion_manipulada_rechazada(self, mock_buscar):
+        mock_buscar.return_value = [
+            {"tipo_persona": "Alumno", "persona_id": 1, "nombre": "Juan Perez Ramos", "codigo_mascarado": "20******01"}
+        ]
+        seleccion_falsa = {"tipo_persona": "SuperAdmin", "persona_id": 9999}
+        res = procesar_pregunta("¿Cuántas veces ingresó Juan Perez?", rol="SuperAdmin", seleccion_persona=seleccion_falsa)
+        self.assertEqual(res["status"], "error")
+        self.assertIn("no pertenece a los candidatos válidos", res["mensaje"])
+
+    # 10. HISTORIAL VACÍO
+    @patch("llm.services.coordinador_asistente.obtener_historial_persona")
+    @patch("llm.services.coordinador_asistente.buscar_personas")
+    def test_10_historial_vacio(self, mock_buscar, mock_historial):
+        mock_buscar.return_value = [
+            {"tipo_persona": "Alumno", "persona_id": 1, "nombre": "Maria Lopez", "codigo_mascarado": "20******02"}
+        ]
+        mock_historial.return_value = {
+            "status": "success",
+            "total_ingresos": 0,
+            "registros": []
+        }
+        res = procesar_pregunta("¿Cuántas veces ingresó Maria Lopez?", rol="SuperAdmin")
+        self.assertEqual(res["status"], "success")
+        self.assertIn("no registra ningún ingreso", res["mensaje"])
+
+    # 11. ÚLTIMO INGRESO CORRECTO
+    @patch("llm.services.coordinador_asistente.obtener_historial_persona")
+    @patch("llm.services.coordinador_asistente.buscar_personas")
+    def test_11_ultimo_ingreso_correcto(self, mock_buscar, mock_historial):
+        mock_buscar.return_value = [
+            {"tipo_persona": "Alumno", "persona_id": 1, "nombre": "Maria Lopez", "codigo_mascarado": "20******02"}
+        ]
+        mock_historial.return_value = {
+            "status": "success",
+            "total_ingresos": 3,
+            "registros": [
+                {"registro_id": 99, "fecha_hora": "2026-10-05T14:30:00", "sede": "Central"}
+            ]
+        }
+        res = procesar_pregunta("¿Cuándo fue el último ingreso de Maria Lopez?", rol="SuperAdmin")
+        self.assertEqual(res["status"], "success")
+        self.assertIn("2026-10-05T14:30:00", res["mensaje"])
+
+    # 12. RESUMEN AGREGADO PARA CONSULTOR
+    @patch("llm.services.coordinador_asistente.obtener_resumen_ingresos")
+    def test_12_resumen_agregado_para_consultor(self, mock_resumen):
+        mock_resumen.return_value = {
+            "status": "success",
+            "fecha_inicio": "2026-09-01",
+            "fecha_fin": "2026-09-30",
+            "total_ingresos": 150
+        }
+        res = procesar_pregunta("Resumen de ingresos del mes pasado", rol="Consultor", fecha_inicio="2026-09-01", fecha_fin="2026-09-30")
+        self.assertEqual(res["status"], "success")
+        self.assertIn("150 ingresos", res["mensaje"])
+
+    # 13. SUPERVISOR FORZADO A SU SEDE EN RESUMEN
+    @patch("llm.services.coordinador_asistente.obtener_resumen_ingresos")
+    def test_13_supervisor_forzado_sede_en_resumen(self, mock_resumen):
+        mock_resumen.return_value = {"status": "success", "fecha_inicio": "2026-09-01", "fecha_fin": "2026-09-30", "total_ingresos": 40}
+        res = procesar_pregunta("Resumen de ingresos", rol="Supervisor", sede_permitida="Tarma", fecha_inicio="2026-09-01", fecha_fin="2026-09-30")
+        self.assertEqual(res["status"], "success")
+        mock_resumen.assert_called_once_with(fecha_inicio="2026-09-01", fecha_fin="2026-09-30", rol="Supervisor", sede_permitida="Tarma")
+
+    # 14. HORAS DE MAYOR AFLUENCIA
+    @patch("llm.services.coordinador_asistente.obtener_horas_mayor_afluencia")
+    def test_14_horas_mayor_afluencia(self, mock_horas):
+        mock_horas.return_value = {
+            "status": "success",
+            "fecha_inicio": "2026-09-01",
+            "fecha_fin": "2026-09-30",
+            "horas_top": [{"hora": 10, "hora_formato": "10:00 - 11:00", "total_ingresos": 50}]
+        }
+        res = procesar_pregunta("Horas de mayor afluencia", rol="SuperAdmin", fecha_inicio="2026-09-01", fecha_fin="2026-09-30")
+        self.assertEqual(res["status"], "success")
+        self.assertEqual(res["origen"], "consulta_segura")
+
+    # 15. PREDICCIÓN CONECTADA CON SERVICIO ML USANDO MOCKS
+    @patch("llm.services.coordinador_asistente.predecir_afluencia_desde_bd")
+    def test_15_prediccion_conectada_ml_mocks(self, mock_ml):
+        mock_ml.return_value = {
+            "status": "success",
+            "prediccion": {"nivel": "Medio", "probabilidades": {"Bajo": 0.2, "Medio": 0.7, "Alto": 0.1}},
+            "advertencia": "Modelo entrenado con datos históricos"
+        }
+        res = procesar_pregunta("Generar predicción de afluencia", rol="SuperAdmin", fecha="2026-10-15", hora=10, sede="Central")
+        self.assertEqual(res["status"], "success")
+        self.assertEqual(res["origen"], "machine_learning")
+        self.assertIn("Medio", res["mensaje"])
+
+    # 16. SUPERVISOR FORZADO A SU SEDE EN PREDICCIÓN
+    @patch("llm.services.coordinador_asistente.predecir_afluencia_desde_bd")
+    def test_16_supervisor_forzado_sede_en_prediccion(self, mock_ml):
+        mock_ml.return_value = {
+            "status": "success",
+            "prediccion": {"nivel": "Alto"},
+            "advertencia": "Advertencia simulada"
+        }
+        res = procesar_pregunta("Predicción de afluencia para mañana", rol="Supervisor", sede_permitida="Tarma", fecha="2026-10-15", hora=11, sede="Central")
+        self.assertEqual(res["status"], "success")
+        mock_ml.assert_called_once_with(fecha="2026-10-15", hora=11, sede="Tarma")
+
+    # 17. PARÁMETROS FALTANTES SIN EJECUTAR BD NI ML
+    @patch("llm.services.coordinador_asistente.predecir_afluencia_desde_bd")
+    @patch("llm.services.coordinador_asistente.obtener_resumen_ingresos")
+    def test_17_parametros_faltantes_sin_ejecutar_bd_ni_ml(self, mock_resumen, mock_ml):
+        res = procesar_pregunta("Generar predicción de afluencia", rol="SuperAdmin")
+        self.assertEqual(res["status"], "requires_input")
+        self.assertTrue(res["requiere_parametros"])
+        mock_ml.assert_not_called()
+        mock_resumen.assert_not_called()
+
+    # 18. INTENCIÓN DESCONOCIDA SIN EJECUTAR BD
+    @patch("llm.services.coordinador_asistente.buscar_personas")
+    def test_18_intencion_desconocida_sin_ejecutar_bd(self, mock_buscar):
+        res = procesar_pregunta("¿Cuál es la receta del pastel de manzana?", rol="SuperAdmin")
+        self.assertEqual(res["status"], "requires_input")
+        self.assertEqual(res["intencion"], "intencion_desconocida")
+        self.assertTrue(len(res["opciones"]) > 0)
+        mock_buscar.assert_not_called()
+
+    # 19. AUSENCIA DE DNI, CORREO Y TELÉFONO EN TODAS LAS RESPUESTAS
+    @patch("llm.services.coordinador_asistente.obtener_historial_persona")
+    @patch("llm.services.coordinador_asistente.buscar_personas")
+    def test_19_ausencia_datos_sensibles(self, mock_buscar, mock_historial):
+        mock_buscar.return_value = [
+            {"tipo_persona": "Alumno", "persona_id": 1, "nombre": "Test User", "codigo_mascarado": "20******99"}
+        ]
+        mock_historial.return_value = {
+            "status": "success",
+            "total_ingresos": 1,
+            "registros": [{"registro_id": 1, "fecha_hora": "2026-10-01T10:00:00", "sede": "Central"}]
+        }
+        res = procesar_pregunta("¿Cuántas veces ingresó Test User?", rol="SuperAdmin")
+        texto_res = str(res)
+        self.assertNotIn("dni", texto_res.lower())
+        self.assertNotIn("email", texto_res.lower())
+        self.assertNotIn("telefono", texto_res.lower())
+
+    # 20. ERROR DE CONEXIÓN CONVERTIDO EN RESPUESTA SEGURA
+    @patch("llm.services.coordinador_asistente.buscar_personas")
+    def test_20_error_conexion_respuesta_segura(self, mock_buscar):
+        mock_buscar.side_effect = ConnectionError("No se pudo conectar a SQL Server")
+        res = procesar_pregunta("¿Cuántas veces ingresó Juan Perez?", rol="SuperAdmin")
+        self.assertEqual(res["status"], "error")
+        self.assertIn("error", res["mensaje"].lower())
+        self.assertNotIn("pyodbc", res["mensaje"].lower())
+
+    # 21. CONFIRMAR QUE EL COORDINADOR NO CONTIENE SQL
+    def test_21_coordinador_sin_sql(self):
+        import inspect
+        import llm.services.coordinador_asistente as mod_coord
+        src = inspect.getsource(mod_coord)
+        self.assertNotIn("SELECT", src)
+        self.assertNotIn("INSERT", src)
+        self.assertNotIn("UPDATE", src)
+        self.assertNotIn("DELETE", src)
+        self.assertNotIn("FROM RegistroIngresos", src)
+
+    # 22. CONFIRMAR QUE NO REALIZA LLAMADAS HTTP EXTERNAS
+    def test_22_sin_llamadas_http_externas(self):
+        import inspect
+        import llm.services.coordinador_asistente as mod_coord
+        src = inspect.getsource(mod_coord)
+        self.assertNotIn("requests.", src)
+        self.assertNotIn("urllib.", src)
+        self.assertNotIn("httpx.", src)
+
+    # 23. SUPERVISOR NO RECIBE CANDIDATO SIN INGRESOS EN SU SEDE
+    @patch("llm.services.coordinador_asistente.obtener_historial_persona")
+    @patch("llm.services.coordinador_asistente.buscar_personas")
+    def test_23_supervisor_no_recibe_candidato_sin_ingresos_en_su_sede(self, mock_buscar, mock_historial):
+        mock_buscar.return_value = [
+            {"tipo_persona": "Alumno", "persona_id": 1, "nombre": "Juan ConIngresos", "codigo_mascarado": "20******01"},
+            {"tipo_persona": "Alumno", "persona_id": 2, "nombre": "Juan SinIngresos", "codigo_mascarado": "20******02"}
+        ]
+
+        def side_effect_hist(tipo_persona, persona_id, rol, sede_permitida, limite=1):
+            if persona_id == 1:
+                return {"status": "success", "total_ingresos": 3, "registros": [{"registro_id": 1, "fecha_hora": "2026-10-01", "sede": "Tarma"}]}
+            return {"status": "success", "total_ingresos": 0, "registros": []}
+
+        mock_historial.side_effect = side_effect_hist
+
+        res = procesar_pregunta("¿Cuántas veces ingresó Juan?", rol="Supervisor", sede_permitida="Tarma")
+        self.assertEqual(res["status"], "success")
+        self.assertIn("Juan ConIngresos", res["mensaje"])
+        self.assertNotIn("Juan SinIngresos", str(res))
+
+    # 24. SUPERVISOR SÍ RECIBE CANDIDATO CON INGRESOS EN SU SEDE
+    @patch("llm.services.coordinador_asistente.obtener_historial_persona")
+    @patch("llm.services.coordinador_asistente.buscar_personas")
+    def test_24_supervisor_recibe_candidato_con_ingresos_en_su_sede(self, mock_buscar, mock_historial):
+        mock_buscar.return_value = [
+            {"tipo_persona": "Alumno", "persona_id": 10, "nombre": "Pedro Tarma", "codigo_mascarado": "20******10"}
+        ]
+        mock_historial.return_value = {"status": "success", "total_ingresos": 5, "registros": [{"registro_id": 5, "fecha_hora": "2026-10-02", "sede": "Tarma"}]}
+
+        res = procesar_pregunta("¿Cuántas veces ingresó Pedro?", rol="Supervisor", sede_permitida="Tarma")
+        self.assertEqual(res["status"], "success")
+        self.assertIn("Pedro Tarma", res["mensaje"])
+
+    # 25. SUPERADMIN CONSERVA BÚSQUEDA GLOBAL
+    @patch("llm.services.coordinador_asistente.obtener_historial_persona")
+    @patch("llm.services.coordinador_asistente.buscar_personas")
+    def test_25_superadmin_conserva_busqueda_global(self, mock_buscar, mock_historial):
+        mock_buscar.return_value = [
+            {"tipo_persona": "Alumno", "persona_id": 1, "nombre": "Juan Uno", "codigo_mascarado": "20******01"},
+            {"tipo_persona": "Docente", "persona_id": 2, "nombre": "Juan Dos", "codigo_mascarado": None}
+        ]
+        res = procesar_pregunta("¿Cuántas veces ingresó Juan?", rol="SuperAdmin")
+        self.assertEqual(res["status"], "requires_input")
+        self.assertEqual(len(res["opciones"]), 2)
+
+    # 26. PERSONA_ID NO APARECE EN MENSAJE
+    @patch("llm.services.coordinador_asistente.obtener_historial_persona")
+    @patch("llm.services.coordinador_asistente.buscar_personas")
+    def test_26_persona_id_no_aparece_en_mensaje(self, mock_buscar, mock_historial):
+        mock_buscar.return_value = [
+            {"tipo_persona": "Alumno", "persona_id": 987654, "nombre": "Carlos Perez", "codigo_mascarado": "20******55"}
+        ]
+        mock_historial.return_value = {"status": "success", "total_ingresos": 1, "registros": [{"registro_id": 1, "fecha_hora": "2026-10-01", "sede": "Central"}]}
+
+        res = procesar_pregunta("¿Cuántas veces ingresó Carlos Perez?", rol="SuperAdmin")
+        self.assertNotIn("987654", res["mensaje"])
+
+    # 27. ERRORES TÉCNICOS NO SE CONFUNDEN CON AUSENCIA DE PERSONA
+    @patch("llm.services.coordinador_asistente.buscar_personas")
+    def test_27_errores_tecnicos_no_se_confunden_con_ausencia_persona(self, mock_buscar):
+        mock_buscar.side_effect = TimeoutError("Timeout en la consulta SQL")
+
+        res = procesar_pregunta("¿Cuántas veces ingresó Carlos Perez?", rol="SuperAdmin")
+        self.assertEqual(res["status"], "error")
+        self.assertNotIn("No se encontró ninguna persona", res["mensaje"])
+
+    # 28. ADVERTENCIA ML SE CONSERVA EXACTAMENTE
+    @patch("llm.services.coordinador_asistente.predecir_afluencia_desde_bd")
+    def test_28_advertencia_ml_se_conserva_exactamente(self, mock_ml):
+        mock_ml.return_value = {
+            "status": "success",
+            "prediccion": {"nivel": "Bajo", "probabilidades": {"Bajo": 0.9}},
+            "advertencia": "ADVERTENCIA_OFICIAL_MODELO_ML_VERBATIM"
+        }
+        res = procesar_pregunta("Generar predicción de afluencia", rol="SuperAdmin", fecha="2026-10-15", hora=10, sede="Central")
+        self.assertEqual(res["status"], "success")
+        self.assertEqual(res["datos"]["advertencia"], "ADVERTENCIA_OFICIAL_MODELO_ML_VERBATIM")
+
+    # 29. SUPERVISOR ERROR DURANTE FILTRADO NO SE CONVIERTE EN PERSONA NO ENCONTRADA
+    @patch("llm.services.coordinador_asistente.obtener_historial_persona")
+    @patch("llm.services.coordinador_asistente.buscar_personas")
+    def test_29_supervisor_error_durante_filtrado_no_se_convierte_en_persona_no_encontrada(self, mock_buscar, mock_historial):
+        mock_buscar.return_value = [
+            {"tipo_persona": "Alumno", "persona_id": 1, "nombre": "Juan Valido", "codigo_mascarado": "20******01"}
+        ]
+        mock_historial.side_effect = ConnectionError("detalle sensible simulado")
+
+        res = procesar_pregunta("¿Cuántas veces ingresó Juan?", rol="Supervisor", sede_permitida="Tarma")
+        self.assertEqual(res["status"], "error")
+        self.assertNotIn("no se encontró", res["mensaje"].lower())
+        self.assertNotIn("detalle sensible simulado", res["mensaje"])
+
+    # 30. SUPERVISOR ERROR TIMEOUT DURANTE FILTRADO
+    @patch("llm.services.coordinador_asistente.obtener_historial_persona")
+    @patch("llm.services.coordinador_asistente.buscar_personas")
+    def test_30_supervisor_error_timeout_durante_filtrado(self, mock_buscar, mock_historial):
+        mock_buscar.return_value = [
+            {"tipo_persona": "Alumno", "persona_id": 1, "nombre": "Juan Valido", "codigo_mascarado": "20******01"}
+        ]
+        mock_historial.side_effect = TimeoutError("Query timeout expired")
+
+        res = procesar_pregunta("¿Cuántas veces ingresó Juan?", rol="Supervisor", sede_permitida="Tarma")
+        self.assertEqual(res["status"], "error")
+        self.assertNotIn("no se encontró", res["mensaje"].lower())
+        self.assertNotIn("query timeout expired", res["mensaje"].lower())
+
+    # 31. SUPERVISOR ERROR PERMISOS DURANTE FILTRADO
+    @patch("llm.services.coordinador_asistente.obtener_historial_persona")
+    @patch("llm.services.coordinador_asistente.buscar_personas")
+    def test_31_supervisor_error_permisos_durante_filtrado(self, mock_buscar, mock_historial):
+        mock_buscar.return_value = [
+            {"tipo_persona": "Alumno", "persona_id": 1, "nombre": "Juan Valido", "codigo_mascarado": "20******01"}
+        ]
+        mock_historial.side_effect = PermissionError("SELECT permission denied")
+
+        res = procesar_pregunta("¿Cuántas veces ingresó Juan?", rol="Supervisor", sede_permitida="Tarma")
+        self.assertEqual(res["status"], "error")
+        self.assertNotIn("no se encontró", res["mensaje"].lower())
+        self.assertNotIn("permission denied", res["mensaje"].lower())
+
+if __name__ == "__main__":
+    unittest.main()
