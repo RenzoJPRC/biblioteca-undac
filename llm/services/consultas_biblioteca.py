@@ -551,6 +551,7 @@ def obtener_horas_mayor_afluencia(fecha_inicio, fecha_fin, rol, sede_permitida=N
         "status": "success",
         "fecha_inicio": f_inicio.isoformat(),
         "fecha_fin": f_fin.isoformat(),
+        "dias_con_registros": len(fechas_con_datos),
         "limite": limite,
         "horas_top": horas_top,
         "referencia_horaria": "Hora almacenada en la base de datos"

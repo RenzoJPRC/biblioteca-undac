@@ -454,6 +454,82 @@ class TestModuloLLMConsultas(unittest.TestCase):
             with self.assertRaises(PermissionError):
                 obtener_horas_mayor_afluencia("2026-10-01", "2026-10-05", rol="SuperAdmin")
 
+    # 6. AMPLIACIÓN DE PREDICCIÓN Y PREVENCIÓN DE FALSOS POSITIVOS
+    def test_34_ampliacion_prediccion_afluencia_frases_minimas(self):
+        """El motor local debe reconocer las 10 frases mínimas requeridas de predicción."""
+        frases_prediccion = [
+            "Predicción de afluencia",
+            "Predecir la afluencia",
+            "¿Cuál será la afluencia?",
+            "¿Cuál será el nivel de afluencia?",
+            "Afluencia esperada",
+            "Nivel de afluencia esperado",
+            "¿Habrá mucha gente?",
+            "¿Estará llena la biblioteca?",
+            "Pronóstico de afluencia",
+            "Estimar afluencia",
+            # Variaciones complementarias
+            "¿Cuál es el pronóstico de afluencia para mañana?",
+            "¿Habrá bastante gente en la biblioteca?",
+            "Afluencia estimada para las 10",
+        ]
+        for f in frases_prediccion:
+            res = clasificar_intencion(f)
+            self.assertEqual(
+                res["intencion"],
+                "prediccion_afluencia",
+                f"La frase '{f}' debería clasificarse como 'prediccion_afluencia', se obtuvo '{res['intencion']}'"
+            )
+
+    def test_35_evitar_falsos_positivos_expresiones_pasadas(self):
+        """Expresiones en pasado o históricas NO deben clasificarse como predicción."""
+        casos = [
+            ("¿Cuáles fueron las horas de mayor afluencia?", "horas_mayor_afluencia"),
+            ("Resumen de afluencia del mes pasado", "resumen_ingresos"),
+            ("¿Cuántas personas ingresaron?", "resumen_ingresos"),
+            ("Historial de ingresos de Juan Pérez", "historial_persona"),
+            ("¿Cuál fue la afluencia de ayer?", "resumen_ingresos"),
+            ("¿Ayer hubo afluencia?", "intencion_desconocida"),
+        ]
+        for frase, intencion_esperada in casos:
+            res = clasificar_intencion(frase)
+            self.assertNotEqual(
+                res["intencion"],
+                "prediccion_afluencia",
+                f"La frase '{frase}' NO debe clasificarse como 'prediccion_afluencia'"
+            )
+            self.assertEqual(
+                res["intencion"],
+                intencion_esperada,
+                f"La frase '{frase}' esperaba intención '{intencion_esperada}', se obtuvo '{res['intencion']}'"
+            )
+
+    def test_36_promedio_diario_dias_con_registros(self):
+        """obtener_horas_mayor_afluencia calcula el promedio dividiendo entre fechas con registros y retorna dias_con_registros."""
+        with patch("llm.services.consultas_biblioteca.get_db_cursor") as mock_db:
+            mock_cursor = MagicMock()
+            mock_db.return_value.__enter__.return_value = (MagicMock(), mock_cursor)
+
+            # Simular 4 registros en 2 fechas distintas (2026-10-01 y 2026-10-03)
+            # Ambos a las 10 hrs
+            mock_cursor.fetchall.side_effect = [
+                [
+                    (10, date(2026, 10, 1)),
+                    (10, date(2026, 10, 1)),
+                    (10, date(2026, 10, 3)),
+                    (10, date(2026, 10, 3)),
+                ],
+                []  # tabla histórica vacía
+            ]
+
+            res = obtener_horas_mayor_afluencia("2026-10-01", "2026-10-10", rol="SuperAdmin")
+            self.assertEqual(res["status"], "success")
+            self.assertEqual(res["dias_con_registros"], 2)
+            self.assertEqual(len(res["horas_top"]), 1)
+            # 4 ingresos entre 2 días con registros = 2.0 de promedio por día con registros
+            self.assertEqual(res["horas_top"][0]["total_ingresos"], 4)
+            self.assertEqual(res["horas_top"][0]["promedio_diario"], 2.0)
+
 
 if __name__ == "__main__":
     unittest.main()

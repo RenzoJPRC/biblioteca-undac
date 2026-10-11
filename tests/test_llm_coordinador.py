@@ -397,5 +397,72 @@ class TestCoordinadorAsistente(unittest.TestCase):
         self.assertNotIn("no se encontró", res["mensaje"].lower())
         self.assertNotIn("permission denied", res["mensaje"].lower())
 
+    # 32. PREGUNTA "¿CUÁL SERÁ EL NIVEL DE AFLUENCIA?" SE RECONOCE COMO PREDICCIÓN Y PIDE PARÁMETROS
+    @patch("llm.services.coordinador_asistente.predecir_afluencia_desde_bd")
+    def test_32_cual_sera_el_nivel_de_afluencia_requiere_parametros_superadmin(self, mock_ml):
+        res = procesar_pregunta("¿Cuál será el nivel de afluencia?", rol="SuperAdmin")
+        self.assertEqual(res["status"], "requires_input")
+        self.assertEqual(res["intencion"], "prediccion_afluencia")
+        self.assertTrue(res["requiere_parametros"])
+        self.assertIn("fecha", res["parametros_faltantes"])
+        self.assertIn("hora", res["parametros_faltantes"])
+        self.assertIn("sede", res["parametros_faltantes"])
+        mock_ml.assert_not_called()
+
+    # 33. SUPERVISOR TIENE SEDE FIJA, SOLO LE FALTAN FECHA Y HORA
+    @patch("llm.services.coordinador_asistente.predecir_afluencia_desde_bd")
+    def test_33_cual_sera_el_nivel_de_afluencia_supervisor_sin_sede_en_faltantes(self, mock_ml):
+        res = procesar_pregunta("¿Cuál será el nivel de afluencia?", rol="Supervisor", sede_permitida="Tarma")
+        self.assertEqual(res["status"], "requires_input")
+        self.assertEqual(res["intencion"], "prediccion_afluencia")
+        self.assertTrue(res["requiere_parametros"])
+        self.assertEqual(res["sede_aplicada"], "Tarma")
+        self.assertIn("fecha", res["parametros_faltantes"])
+        self.assertIn("hora", res["parametros_faltantes"])
+        self.assertNotIn("sede", res["parametros_faltantes"])
+        mock_ml.assert_not_called()
+
+    # 34. PREDICCIÓN CON PARÁMETROS COMPLETOS LLAMA A ML Y RETORNA SUCCESS
+    @patch("llm.services.coordinador_asistente.predecir_afluencia_desde_bd")
+    def test_34_prediccion_con_parametros_completos_llama_ml(self, mock_ml):
+        mock_ml.return_value = {
+            "status": "success",
+            "prediccion": {"nivel": "Medio", "probabilidades": {"Bajo": 0.2, "Medio": 0.7, "Alto": 0.1}},
+            "advertencia": "Advertencia oficial del modelo"
+        }
+        res = procesar_pregunta(
+            "¿Cuál será el nivel de afluencia?",
+            rol="SuperAdmin",
+            fecha="2026-10-15",
+            hora=10,
+            sede="Central"
+        )
+        self.assertEqual(res["status"], "success")
+        self.assertEqual(res["intencion"], "prediccion_afluencia")
+        self.assertEqual(res["sede_aplicada"], "Central")
+        self.assertIn("Nivel Medio", res["mensaje"])
+        mock_ml.assert_called_once_with(fecha="2026-10-15", hora=10, sede="Central")
+
+    # 35. CONSULTAS EN TIEMPO PASADO NO ACTIVAN PREDICCIÓN ML
+    @patch("llm.services.coordinador_asistente.predecir_afluencia_desde_bd")
+    @patch("llm.services.coordinador_asistente.obtener_horas_mayor_afluencia")
+    @patch("llm.services.coordinador_asistente.obtener_resumen_ingresos")
+    def test_35_consultas_pasadas_no_activan_ml(self, mock_resumen, mock_horas, mock_ml):
+        mock_horas.return_value = {"status": "success", "horas_top": []}
+        mock_resumen.return_value = {"status": "success", "total_ingresos": 10}
+
+        # 1. ¿Cuáles fueron las horas de mayor afluencia?
+        r1 = procesar_pregunta("¿Cuáles fueron las horas de mayor afluencia?", rol="SuperAdmin", fecha_inicio="2026-03-01", fecha_fin="2026-03-10")
+        self.assertEqual(r1["intencion"], "horas_mayor_afluencia")
+        mock_horas.assert_called_once()
+        mock_ml.assert_not_called()
+
+        # 2. Resumen de afluencia del mes pasado
+        r2 = procesar_pregunta("Resumen de afluencia del mes pasado", rol="SuperAdmin", fecha_inicio="2026-03-01", fecha_fin="2026-03-10")
+        self.assertEqual(r2["intencion"], "resumen_ingresos")
+        mock_resumen.assert_called_once()
+        mock_ml.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -31,11 +31,22 @@ def procesar_pregunta(
     clasifica la intención mediante el motor local y la redirige de forma
     segura a las funciones de consulta SQL Server o al servicio de Machine Learning.
     """
+    # 0. Determinar sede inicial según rol y parámetros
+    if rol == "Supervisor":
+        sede_aplicada_ini = str(sede_permitida).strip() if (sede_permitida and str(sede_permitida).strip() in SEDES_PERMITIDAS) else "Central"
+    elif sede and str(sede).strip() in SEDES_PERMITIDAS:
+        sede_aplicada_ini = str(sede).strip()
+    else:
+        sede_aplicada_ini = "Todas las sedes"
+
     # 1. Validar la pregunta
     if not pregunta or not isinstance(pregunta, str):
         return {
             "status": "error",
+            "categoria_error": "validacion",
+            "codigo_http": 400,
             "intencion": "intencion_desconocida",
+            "sede_aplicada": sede_aplicada_ini,
             "mensaje": "La pregunta es obligatoria y debe ser un texto válido.",
             "datos": {},
             "requiere_aclaracion": False,
@@ -48,7 +59,10 @@ def procesar_pregunta(
     if not pregunta_limpia:
         return {
             "status": "error",
+            "categoria_error": "validacion",
+            "codigo_http": 400,
             "intencion": "intencion_desconocida",
+            "sede_aplicada": sede_aplicada_ini,
             "mensaje": "La pregunta no puede estar vacía o contener solo espacios.",
             "datos": {},
             "requiere_aclaracion": False,
@@ -60,7 +74,10 @@ def procesar_pregunta(
     if len(pregunta_limpia) > 500:
         return {
             "status": "error",
+            "categoria_error": "validacion",
+            "codigo_http": 400,
             "intencion": "intencion_desconocida",
+            "sede_aplicada": sede_aplicada_ini,
             "mensaje": "La pregunta excede el límite máximo permitido de 500 caracteres.",
             "datos": {},
             "requiere_aclaracion": False,
@@ -75,7 +92,10 @@ def procesar_pregunta(
     except PermissionError as e:
         return {
             "status": "error",
+            "categoria_error": "permiso",
+            "codigo_http": 403,
             "intencion": "intencion_desconocida",
+            "sede_aplicada": sede_aplicada_ini,
             "mensaje": str(e),
             "datos": {},
             "requiere_aclaracion": False,
@@ -89,6 +109,19 @@ def procesar_pregunta(
     intencion = clasificacion["intencion"]
     params_intencion = clasificacion.get("parametros", {})
 
+    # 3.5 Determinar sede_aplicada de forma segura
+    if rol_valido == "Supervisor":
+        sede_aplicada = str(sede_permitida).strip() if (sede_permitida and str(sede_permitida).strip() in SEDES_PERMITIDAS) else "Central"
+        sede_consulta_efectiva = sede_aplicada
+    else:
+        sede_candidata = sede if (sede and str(sede).strip() in SEDES_PERMITIDAS) else params_intencion.get("sede")
+        if sede_candidata and str(sede_candidata).strip() in SEDES_PERMITIDAS:
+            sede_aplicada = str(sede_candidata).strip()
+            sede_consulta_efectiva = sede_aplicada
+        else:
+            sede_aplicada = "Todas las sedes"
+            sede_consulta_efectiva = None
+
     # 4. Enrutamiento seguro por intención
 
     # --- INTENCIÓN: HISTORIAL_PERSONA O ULTIMO_INGRESO_PERSONA ---
@@ -96,7 +129,10 @@ def procesar_pregunta(
         if rol_valido == "Consultor":
             return {
                 "status": "error",
+                "categoria_error": "permiso",
+                "codigo_http": 403,
                 "intencion": intencion,
+                "sede_aplicada": sede_aplicada,
                 "mensaje": "Acceso denegado. El rol Consultor no tiene permiso para consultar historiales personales.",
                 "datos": {},
                 "requiere_aclaracion": False,
@@ -110,6 +146,7 @@ def procesar_pregunta(
             return {
                 "status": "requires_input",
                 "intencion": intencion,
+                "sede_aplicada": sede_aplicada,
                 "mensaje": "No se especificó el nombre de la persona en la consulta. Por favor indique el nombre a consultar.",
                 "datos": {},
                 "requiere_aclaracion": False,
@@ -127,7 +164,10 @@ def procesar_pregunta(
                 if not sede_permitida or str(sede_permitida).strip() not in SEDES_PERMITIDAS:
                     return {
                         "status": "error",
+                        "categoria_error": "permiso",
+                        "codigo_http": 403,
                         "intencion": intencion,
+                        "sede_aplicada": sede_aplicada,
                         "mensaje": "El usuario supervisor debe tener una sede válida permitida.",
                         "datos": {},
                         "requiere_aclaracion": False,
@@ -153,7 +193,10 @@ def procesar_pregunta(
         except Exception:
             return {
                 "status": "error",
+                "categoria_error": "servicio",
+                "codigo_http": 503,
                 "intencion": intencion,
+                "sede_aplicada": sede_aplicada,
                 "mensaje": "Ocurrió un error al buscar la persona en la base de datos.",
                 "datos": {},
                 "requiere_aclaracion": False,
@@ -166,6 +209,7 @@ def procesar_pregunta(
             return {
                 "status": "success",
                 "intencion": intencion,
+                "sede_aplicada": sede_aplicada,
                 "mensaje": f"No se encontró ninguna persona registrada que coincida con '{texto_persona}'.",
                 "datos": {"coincidencias": []},
                 "requiere_aclaracion": False,
@@ -189,7 +233,10 @@ def procesar_pregunta(
             if not candidato_seleccionado:
                 return {
                     "status": "error",
+                    "categoria_error": "validacion",
+                    "codigo_http": 400,
                     "intencion": intencion,
+                    "sede_aplicada": sede_aplicada,
                     "mensaje": "La persona seleccionada no pertenece a los candidatos válidos encontrados para esta búsqueda.",
                     "datos": {},
                     "requiere_aclaracion": True,
@@ -204,6 +251,7 @@ def procesar_pregunta(
                 return {
                     "status": "requires_input",
                     "intencion": intencion,
+                    "sede_aplicada": sede_aplicada,
                     "mensaje": f"Se encontraron {len(coincidencias)} personas que coinciden con '{texto_persona}'. Por favor seleccione una opción.",
                     "datos": {},
                     "requiere_aclaracion": True,
@@ -223,7 +271,10 @@ def procesar_pregunta(
         except Exception:
             return {
                 "status": "error",
+                "categoria_error": "servicio",
+                "codigo_http": 503,
                 "intencion": intencion,
+                "sede_aplicada": sede_aplicada,
                 "mensaje": "Ocurrió un error al consultar el historial de la persona en la base de datos.",
                 "datos": {},
                 "requiere_aclaracion": False,
@@ -241,6 +292,7 @@ def procesar_pregunta(
             return {
                 "status": "success",
                 "intencion": "historial_persona",
+                "sede_aplicada": sede_aplicada,
                 "mensaje": msg,
                 "datos": {
                     "persona": candidato_seleccionado,
@@ -257,6 +309,7 @@ def procesar_pregunta(
                 return {
                     "status": "success",
                     "intencion": "ultimo_ingreso_persona",
+                    "sede_aplicada": sede_aplicada,
                     "mensaje": f"{nombre_p} no registra ningún ingreso a la biblioteca.",
                     "datos": {
                         "persona": candidato_seleccionado,
@@ -273,6 +326,7 @@ def procesar_pregunta(
                 return {
                     "status": "success",
                     "intencion": "ultimo_ingreso_persona",
+                    "sede_aplicada": sede_aplicada,
                     "mensaje": msg,
                     "datos": {
                         "persona": candidato_seleccionado,
@@ -286,10 +340,13 @@ def procesar_pregunta(
 
     # --- INTENCIÓN: RESUMEN_INGRESOS ---
     elif intencion == "resumen_ingresos":
-        if not fecha_inicio or not fecha_fin:
+        f_ini = fecha_inicio or params_intencion.get("fecha_inicio")
+        f_fin = fecha_fin or params_intencion.get("fecha_fin")
+        if not f_ini or not f_fin:
             return {
                 "status": "requires_input",
                 "intencion": "resumen_ingresos",
+                "sede_aplicada": sede_aplicada,
                 "mensaje": "Para consultar el resumen de ingresos debe especificar la fecha de inicio y la fecha de fin (formato YYYY-MM-DD).",
                 "datos": {},
                 "requiere_aclaracion": False,
@@ -301,14 +358,15 @@ def procesar_pregunta(
 
         try:
             resumen = obtener_resumen_ingresos(
-                fecha_inicio=fecha_inicio,
-                fecha_fin=fecha_fin,
+                fecha_inicio=f_ini,
+                fecha_fin=f_fin,
                 rol=rol_valido,
-                sede_permitida=sede_permitida
+                sede_permitida=sede_consulta_efectiva
             )
             return {
                 "status": "success",
                 "intencion": "resumen_ingresos",
+                "sede_aplicada": sede_aplicada,
                 "mensaje": f"Resumen de ingresos del {resumen['fecha_inicio']} al {resumen['fecha_fin']}: Total de {resumen['total_ingresos']} ingresos registrados.",
                 "datos": resumen,
                 "requiere_aclaracion": False,
@@ -319,7 +377,10 @@ def procesar_pregunta(
         except Exception:
             return {
                 "status": "error",
+                "categoria_error": "servicio",
+                "codigo_http": 503,
                 "intencion": "resumen_ingresos",
+                "sede_aplicada": sede_aplicada,
                 "mensaje": "Ocurrió un error al generar el resumen de ingresos.",
                 "datos": {},
                 "requiere_aclaracion": False,
@@ -330,10 +391,13 @@ def procesar_pregunta(
 
     # --- INTENCIÓN: HORAS_MAYOR_AFLUENCIA ---
     elif intencion == "horas_mayor_afluencia":
-        if not fecha_inicio or not fecha_fin:
+        f_ini = fecha_inicio or params_intencion.get("fecha_inicio")
+        f_fin = fecha_fin or params_intencion.get("fecha_fin")
+        if not f_ini or not f_fin:
             return {
                 "status": "requires_input",
                 "intencion": "horas_mayor_afluencia",
+                "sede_aplicada": sede_aplicada,
                 "mensaje": "Para consultar las horas de mayor afluencia debe especificar la fecha de inicio y la fecha de fin (formato YYYY-MM-DD).",
                 "datos": {},
                 "requiere_aclaracion": False,
@@ -347,15 +411,16 @@ def procesar_pregunta(
 
         try:
             horas = obtener_horas_mayor_afluencia(
-                fecha_inicio=fecha_inicio,
-                fecha_fin=fecha_fin,
+                fecha_inicio=f_ini,
+                fecha_fin=f_fin,
                 rol=rol_valido,
-                sede_permitida=sede_permitida,
+                sede_permitida=sede_consulta_efectiva,
                 limite=limite_val
             )
             return {
                 "status": "success",
                 "intencion": "horas_mayor_afluencia",
+                "sede_aplicada": sede_aplicada,
                 "mensaje": f"Horas de mayor afluencia del {horas['fecha_inicio']} al {horas['fecha_fin']}.",
                 "datos": horas,
                 "requiere_aclaracion": False,
@@ -366,7 +431,10 @@ def procesar_pregunta(
         except Exception:
             return {
                 "status": "error",
+                "categoria_error": "servicio",
+                "codigo_http": 503,
                 "intencion": "horas_mayor_afluencia",
+                "sede_aplicada": sede_aplicada,
                 "mensaje": "Ocurrió un error al consultar las horas de mayor afluencia.",
                 "datos": {},
                 "requiere_aclaracion": False,
@@ -382,7 +450,10 @@ def procesar_pregunta(
             if not sede_permitida or str(sede_permitida).strip() not in SEDES_PERMITIDAS:
                 return {
                     "status": "error",
+                    "categoria_error": "permiso",
+                    "codigo_http": 403,
                     "intencion": "prediccion_afluencia",
+                    "sede_aplicada": sede_aplicada,
                     "mensaje": "El usuario supervisor debe tener una sede válida permitida.",
                     "datos": {},
                     "requiere_aclaracion": False,
@@ -391,14 +462,24 @@ def procesar_pregunta(
                     "origen": "machine_learning"
                 }
             sede_efectiva = str(sede_permitida).strip()
+            sede_aplicada = sede_efectiva
         else:
-            sede_efectiva = str(sede).strip() if sede and str(sede).strip() in SEDES_PERMITIDAS else (str(sede_permitida).strip() if sede_permitida and str(sede_permitida).strip() in SEDES_PERMITIDAS else "Central")
+            sede_candidata = str(sede).strip() if (sede and str(sede).strip() in SEDES_PERMITIDAS) else params_intencion.get("sede")
+            if sede_candidata and str(sede_candidata).strip() in SEDES_PERMITIDAS:
+                sede_efectiva = str(sede_candidata).strip()
+                sede_aplicada = sede_efectiva
+            else:
+                sede_efectiva = None
+                sede_aplicada = "Todas las sedes"
+
+        fecha_efectiva = fecha or params_intencion.get("fecha")
+        hora_efectiva = hora if hora is not None else params_intencion.get("hora")
 
         # Comprobar parámetros requeridos para predicción ML
         faltantes = []
-        if not fecha:
+        if not fecha_efectiva:
             faltantes.append("fecha")
-        if hora is None:
+        if hora_efectiva is None:
             faltantes.append("hora")
         if not sede_efectiva:
             faltantes.append("sede")
@@ -407,6 +488,7 @@ def procesar_pregunta(
             return {
                 "status": "requires_input",
                 "intencion": "prediccion_afluencia",
+                "sede_aplicada": sede_aplicada,
                 "mensaje": "Para generar la predicción de afluencia debe especificar la fecha, la hora (8-20) y la sede.",
                 "datos": {},
                 "requiere_aclaracion": False,
@@ -418,13 +500,16 @@ def procesar_pregunta(
 
         # Validar tipo y rango de hora (8 a 20)
         try:
-            hora_int = int(hora)
+            hora_int = int(hora_efectiva)
             if hora_int < 8 or hora_int > 20:
                 raise ValueError("Hora fuera de rango")
         except (TypeError, ValueError):
             return {
                 "status": "error",
+                "categoria_error": "validacion",
+                "codigo_http": 400,
                 "intencion": "prediccion_afluencia",
+                "sede_aplicada": sede_aplicada,
                 "mensaje": "La hora para la predicción debe ser un número entero entre 8 y 20.",
                 "datos": {},
                 "requiere_aclaracion": False,
@@ -436,16 +521,17 @@ def procesar_pregunta(
 
         try:
             pred_res = predecir_afluencia_desde_bd(
-                fecha=fecha,
+                fecha=fecha_efectiva,
                 hora=hora_int,
                 sede=sede_efectiva
             )
             nivel = pred_res["prediccion"]["nivel"]
-            msg = f"Predicción de afluencia para el {fecha} a las {hora_int}:00 en la sede {sede_efectiva}: Nivel {nivel}."
+            msg = f"Predicción de afluencia para el {fecha_efectiva} a las {hora_int}:00 en la sede {sede_efectiva}: Nivel {nivel}."
 
             return {
                 "status": "success",
                 "intencion": "prediccion_afluencia",
+                "sede_aplicada": sede_aplicada,
                 "mensaje": msg,
                 "datos": pred_res,
                 "requiere_aclaracion": False,
@@ -456,7 +542,10 @@ def procesar_pregunta(
         except Exception:
             return {
                 "status": "error",
+                "categoria_error": "servicio",
+                "codigo_http": 503,
                 "intencion": "prediccion_afluencia",
+                "sede_aplicada": sede_aplicada,
                 "mensaje": "Ocurrió un error al generar la predicción de afluencia.",
                 "datos": {},
                 "requiere_aclaracion": False,
@@ -471,6 +560,7 @@ def procesar_pregunta(
         return {
             "status": "requires_input",
             "intencion": "intencion_desconocida",
+            "sede_aplicada": sede_aplicada,
             "mensaje": "No se reconoció la intención de la pregunta. Ejemplos admitidos: '¿Cuántas veces ingresó [Nombre]?', '¿Cuándo fue el último ingreso de [Nombre]?', 'Resumen de ingresos', 'Horas de mayor afluencia' o 'Predicción de afluencia'.",
             "datos": {},
             "requiere_aclaracion": False,
