@@ -37,8 +37,24 @@ class TestModuloMachineLearning(unittest.TestCase):
         respuesta = self.client.get("/admin/ml")
         self.assertEqual(respuesta.status_code, 200)
 
-    def test_04_supervisor_sede_forzada(self):
+    @patch("routes.admin_ml.predecir_afluencia_desde_bd")
+    def test_04_supervisor_sede_forzada(self, mock_predecir):
         """Supervisor de Central enviando 'Tarma' en JSON debe ser forzado a su sede asignada 'Central'."""
+        mock_predecir.side_effect = lambda fecha, hora, sede: {
+            "status": "success",
+            "prediccion": {
+                "nivel": "Medio",
+                "probabilidades": {"Alto": 0.1, "Bajo": 0.2, "Medio": 0.7},
+                "version_modelo": "1.0.0"
+            },
+            "consulta": {
+                "fecha": str(fecha),
+                "hora": hora,
+                "sede": sede
+            },
+            "variables_modelo": {},
+            "advertencia": "Modelo de apoyo."
+        }
         with self.client.session_transaction() as sesion:
             sesion["admin_user"] = "super_central"
             sesion["admin_rol"] = "Supervisor"
@@ -58,9 +74,23 @@ class TestModuloMachineLearning(unittest.TestCase):
         json_data = respuesta.get_json()
         self.assertEqual(json_data["status"], "success")
         self.assertEqual(json_data["consulta"]["sede"], "Central")
+        mock_predecir.assert_called_once()
+        self.assertEqual(mock_predecir.call_args.kwargs["sede"], "Central")
 
-    def test_05_consultor_acceso_solo_lectura(self):
+    @patch("routes.admin_ml.predecir_afluencia_desde_bd")
+    def test_05_consultor_acceso_solo_lectura(self, mock_predecir):
         """Consultor puede acceder a la vista GET y realizar consultas predictivas en la API."""
+        mock_predecir.return_value = {
+            "status": "success",
+            "prediccion": {
+                "nivel": "Medio",
+                "probabilidades": {"Alto": 0.1, "Bajo": 0.2, "Medio": 0.7},
+                "version_modelo": "1.0.0"
+            },
+            "consulta": {"fecha": "2026-09-29", "hora": 10, "sede": "Central"},
+            "variables_modelo": {},
+            "advertencia": "Modelo de apoyo."
+        }
         with self.client.session_transaction() as sesion:
             sesion["admin_user"] = "consultor_test"
             sesion["admin_rol"] = "Consultor"
@@ -110,8 +140,20 @@ class TestModuloMachineLearning(unittest.TestCase):
         self.assertEqual(respuesta.status_code, 403)
         self.assertEqual(respuesta.get_json()["mensaje"], "Token CSRF inválido o expirado.")
 
-    def test_08_post_csrf_valido_exitoso(self):
+    @patch("routes.admin_ml.predecir_afluencia_desde_bd")
+    def test_08_post_csrf_valido_exitoso(self, mock_predecir):
         """Petición POST con token CSRF válido debe procesarse correctamente (200 OK)."""
+        mock_predecir.return_value = {
+            "status": "success",
+            "prediccion": {
+                "nivel": "Medio",
+                "probabilidades": {"Alto": 0.1, "Bajo": 0.2, "Medio": 0.7},
+                "version_modelo": "1.0.0"
+            },
+            "consulta": {"fecha": "2026-09-29", "hora": 10, "sede": "Central"},
+            "variables_modelo": {},
+            "advertencia": "Modelo de apoyo."
+        }
         with self.client.session_transaction() as sesion:
             sesion["admin_user"] = "admin_test"
             sesion["admin_rol"] = "SuperAdmin"
@@ -158,8 +200,12 @@ class TestModuloMachineLearning(unittest.TestCase):
         )
         self.assertEqual(respuesta.status_code, 400)
 
-    def test_11_sede_inexistente(self):
+    @patch("routes.admin_ml.predecir_afluencia_desde_bd")
+    def test_11_sede_inexistente(self, mock_predecir):
         """Sede inexistente sin datos históricos debe retornar 400 Bad Request."""
+        mock_predecir.side_effect = ValueError(
+            "No existen datos históricos para la sede 'SedeInexistente' antes de 2026-09-29."
+        )
         with self.client.session_transaction() as sesion:
             sesion["admin_user"] = "admin_test"
             sesion["admin_rol"] = "SuperAdmin"
@@ -258,8 +304,22 @@ class TestModuloMachineLearning(unittest.TestCase):
         respuesta = self.client.get("/admin/api/ml/historial-afluencia")
         self.assertEqual(respuesta.status_code, 302)
 
-    def test_18_historial_superadmin_7_dias(self):
+    @patch("routes.admin_ml.obtener_historial_afluencia_periodo")
+    def test_18_historial_superadmin_7_dias(self, mock_historial):
         """SuperAdmin consultando 7 días debe obtener status success, periodo 7 y referencia horaria."""
+        mock_historial.return_value = {
+            "status": "success",
+            "sede": "Central",
+            "periodo_dias": 7,
+            "fecha_inicio": "2026-09-23",
+            "fecha_fin": "2026-09-29",
+            "fechas_con_datos": 5,
+            "total_ingresos_periodo": 120,
+            "horas": list(range(8, 21)),
+            "totales": [10] * 13,
+            "promedios": [2.0] * 13,
+            "referencia_horaria": "Hora almacenada en la base de datos"
+        }
         with self.client.session_transaction() as sesion:
             sesion["admin_user"] = "admin_test"
             sesion["admin_rol"] = "SuperAdmin"
@@ -272,9 +332,24 @@ class TestModuloMachineLearning(unittest.TestCase):
         self.assertEqual(datos["sede"], "Central")
         self.assertEqual(datos["periodo_dias"], 7)
         self.assertIn("referencia_horaria", datos)
+        mock_historial.assert_called_once_with(sede="Central", dias=7)
 
-    def test_19_historial_superadmin_30_dias(self):
+    @patch("routes.admin_ml.obtener_historial_afluencia_periodo")
+    def test_19_historial_superadmin_30_dias(self, mock_historial):
         """SuperAdmin consultando 30 días debe obtener status success y periodo 30."""
+        mock_historial.return_value = {
+            "status": "success",
+            "sede": "Central",
+            "periodo_dias": 30,
+            "fecha_inicio": "2026-08-31",
+            "fecha_fin": "2026-09-29",
+            "fechas_con_datos": 15,
+            "total_ingresos_periodo": 450,
+            "horas": list(range(8, 21)),
+            "totales": [35] * 13,
+            "promedios": [2.3] * 13,
+            "referencia_horaria": "Hora almacenada en la base de datos"
+        }
         with self.client.session_transaction() as sesion:
             sesion["admin_user"] = "admin_test"
             sesion["admin_rol"] = "SuperAdmin"
@@ -285,6 +360,7 @@ class TestModuloMachineLearning(unittest.TestCase):
         datos = respuesta.get_json()
         self.assertEqual(datos["status"], "success")
         self.assertEqual(datos["periodo_dias"], 30)
+        mock_historial.assert_called_once_with(sede="Central", dias=30)
 
     def test_20_historial_dias_invalido_400(self):
         """Parámetro dias distinto de 7 o 30 debe retornar 400 Bad Request."""
@@ -298,8 +374,22 @@ class TestModuloMachineLearning(unittest.TestCase):
         datos = respuesta.get_json()
         self.assertEqual(datos["status"], "error")
 
-    def test_21_historial_supervisor_sede_forzada(self):
+    @patch("routes.admin_ml.obtener_historial_afluencia_periodo")
+    def test_21_historial_supervisor_sede_forzada(self, mock_historial):
         """Supervisor con sede 'Tarma' enviando 'Central' debe recibir respuesta para su sede 'Tarma'."""
+        mock_historial.side_effect = lambda sede, dias: {
+            "status": "success",
+            "sede": sede,
+            "periodo_dias": dias,
+            "fecha_inicio": "2026-08-31",
+            "fecha_fin": "2026-09-29",
+            "fechas_con_datos": 10,
+            "total_ingresos_periodo": 200,
+            "horas": list(range(8, 21)),
+            "totales": [15] * 13,
+            "promedios": [1.5] * 13,
+            "referencia_horaria": "Hora almacenada en la base de datos"
+        }
         with self.client.session_transaction() as sesion:
             sesion["admin_user"] = "super_tarma"
             sesion["admin_rol"] = "Supervisor"
@@ -311,6 +401,7 @@ class TestModuloMachineLearning(unittest.TestCase):
         datos = respuesta.get_json()
         self.assertEqual(datos["status"], "success")
         self.assertEqual(datos["sede"], "Tarma")
+        mock_historial.assert_called_once_with(sede="Tarma", dias=30)
 
     def test_22_historial_sin_datos_respuesta_exitosa(self):
         """Sede sin registros debe responder 200 OK con arreglos vacíos y fechas con datos en 0."""
@@ -349,8 +440,22 @@ class TestModuloMachineLearning(unittest.TestCase):
             datos = respuesta.get_json()
             self.assertEqual(datos["status"], "error")
 
-    def test_24_historial_sin_datos_personales(self):
+    @patch("routes.admin_ml.obtener_historial_afluencia_periodo")
+    def test_24_historial_sin_datos_personales(self, mock_historial):
         """Verificar que la respuesta del historial no exponga nombres, DNI, emails o usuarios."""
+        mock_historial.return_value = {
+            "status": "success",
+            "sede": "Central",
+            "periodo_dias": 30,
+            "fecha_inicio": "2026-08-31",
+            "fecha_fin": "2026-09-29",
+            "fechas_con_datos": 10,
+            "total_ingresos_periodo": 200,
+            "horas": list(range(8, 21)),
+            "totales": [15] * 13,
+            "promedios": [1.5] * 13,
+            "referencia_horaria": "Hora almacenada en la base de datos"
+        }
         with self.client.session_transaction() as sesion:
             sesion["admin_user"] = "admin_test"
             sesion["admin_rol"] = "SuperAdmin"
@@ -362,8 +467,22 @@ class TestModuloMachineLearning(unittest.TestCase):
         for campo_pii in ["dni", "nombre_usuario", "email", "usuario", "nombres", "apellidos"]:
             self.assertNotIn(f'"{campo_pii}"', json_str)
 
-    def test_25_historial_formato_campos(self):
+    @patch("routes.admin_ml.obtener_historial_afluencia_periodo")
+    def test_25_historial_formato_campos(self, mock_historial):
         """Verificar tipos y consistencia de horas, totales y promedios."""
+        mock_historial.return_value = {
+            "status": "success",
+            "sede": "Central",
+            "periodo_dias": 30,
+            "fecha_inicio": "2026-08-31",
+            "fecha_fin": "2026-09-29",
+            "fechas_con_datos": 10,
+            "total_ingresos_periodo": 200,
+            "horas": list(range(8, 21)),
+            "totales": [15] * 13,
+            "promedios": [1.5] * 13,
+            "referencia_horaria": "Hora almacenada en la base de datos"
+        }
         with self.client.session_transaction() as sesion:
             sesion["admin_user"] = "admin_test"
             sesion["admin_rol"] = "SuperAdmin"
