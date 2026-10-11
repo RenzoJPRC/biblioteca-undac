@@ -32,6 +32,7 @@ from routes.admin_salas import admin_salas_bp
 from routes.api_undac import api_undac_bp
 from routes.api_external import api_external_bp
 from routes.admin_ml import admin_ml_bp
+from routes.admin_asistente import admin_asistente_bp
 
 app = Flask(__name__)
 
@@ -122,7 +123,7 @@ def requerir_login_admin():
 
     debe_validar_csrf = (
         (request.method in METODOS_PROTEGIDOS and not request.path.startswith("/admin/api"))
-        or (request.method == "POST" and request.path == "/admin/api/ml/predecir-afluencia")
+        or (request.method == "POST" and request.path in ["/admin/api/ml/predecir-afluencia", "/admin/api/asistente/consultar"])
     )
 
     if debe_validar_csrf:
@@ -142,6 +143,8 @@ def requerir_login_admin():
             "/admin/api/ml/informacion",
             "/admin/api/ml/historial-afluencia",
             "/admin/api/ml/predecir-afluencia",
+            "/admin/asistente",
+            "/admin/api/asistente/consultar",
             "/admin/api/dashboard_data",
             "/admin/reporte_rango",
             "/admin/exportar_ingresos_excel",
@@ -155,6 +158,7 @@ def requerir_login_admin():
         es_dinamica = (
             request.path.startswith("/admin/api/dashboard")
             or request.path.startswith("/admin/api/ml")
+            or request.path.startswith("/admin/api/asistente")
             or request.path.startswith("/admin/evento_detalle")
             or request.path.startswith("/admin/eliminar_evento")
             or request.path.startswith("/admin/eventos")
@@ -169,10 +173,12 @@ def requerir_login_admin():
 
     # Restricción para rol Consultor
     if session.get("admin_rol") == "Consultor":
-        # La consulta predictiva de ML es de solo lectura (SELECT + Inferencia ML)
-        es_consulta_ml = (request.method == "POST" and request.path == "/admin/api/ml/predecir-afluencia")
+        # La consulta predictiva de ML y del asistente son de solo lectura / consulta en el coordinador
+        es_consulta_permitida = (
+            request.method == "POST" and request.path in ["/admin/api/ml/predecir-afluencia", "/admin/api/asistente/consultar"]
+        )
 
-        if request.method in METODOS_PROTEGIDOS and request.path not in ["/admin/login", "/admin/logout"] and not es_consulta_ml:
+        if request.method in METODOS_PROTEGIDOS and request.path not in ["/admin/login", "/admin/logout"] and not es_consulta_permitida:
             return jsonify({'status': 'error', 'msg': 'Operación denegada. Rol Consultor (Solo Lectura).'})
 
         RUTAS_PERMITIDAS_CONSULTOR = {
@@ -182,6 +188,8 @@ def requerir_login_admin():
             "/admin/api/ml/informacion",
             "/admin/api/ml/historial-afluencia",
             "/admin/api/ml/predecir-afluencia",
+            "/admin/asistente",
+            "/admin/api/asistente/consultar",
             "/admin/carnets",
             "/admin/egresados",
             "/admin/docentes",
@@ -189,8 +197,12 @@ def requerir_login_admin():
             "/admin/visitantes"
         }
 
-        es_busqueda = request.path.startswith("/admin/buscar_") or request.path.startswith("/admin/api/ml")
-        
+        es_busqueda = (
+            request.path.startswith("/admin/buscar_")
+            or request.path.startswith("/admin/api/ml")
+            or request.path.startswith("/admin/api/asistente")
+        )
+
         if request.path not in RUTAS_PERMITIDAS_CONSULTOR and not es_busqueda and not request.path.startswith("/admin/static"):
             return """
             <h1>403 Forbidden</h1>
@@ -287,6 +299,7 @@ app.register_blueprint(admin_salas_bp)
 app.register_blueprint(api_undac_bp)
 app.register_blueprint(api_external_bp)
 app.register_blueprint(admin_ml_bp)
+app.register_blueprint(admin_asistente_bp)
 # ============================================================
 # ARRANQUE DEL SERVIDOR
 # ============================================================

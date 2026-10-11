@@ -1,0 +1,1237 @@
+{% extends "layout_admin.html" %}
+
+{% block content %}
+
+<header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-8 shrink-0">
+    <div>
+        <h2 class="text-lg font-bold text-slate-700">
+            Asistente inteligente de biblioteca
+        </h2>
+        <div class="flex items-center gap-2 mt-0.5">
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                Modo local — sin proveedor externo
+            </span>
+            <span class="text-xs text-slate-500 font-medium">
+                Asistente inteligente — modo local
+            </span>
+        </div>
+    </div>
+
+    <div class="hidden sm:flex items-center gap-2 text-xs text-slate-500">
+        <i class="ph ph-robot text-2xl text-indigo-500"></i>
+        <span>Consultas en lenguaje natural</span>
+    </div>
+</header>
+
+<div class="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
+
+    <!-- Descripción / Banner -->
+    <section class="bg-gradient-to-r from-indigo-50 to-sky-50 border border-indigo-200 rounded-xl p-5">
+        <div class="flex items-start gap-4">
+            <div class="bg-indigo-600 text-white p-3 rounded-xl shrink-0 shadow-md">
+                <i class="ph ph-sparkle text-2xl"></i>
+            </div>
+            <div>
+                <h3 class="font-bold text-indigo-950">
+                    Asistente Inteligente de Biblioteca — Modo Local
+                </h3>
+                <p class="text-sm text-indigo-800 mt-1">
+                    Realice consultas sobre afluencia, totales de ingresos e historial de accesos. El sistema procesa su pregunta localmente sin enviar datos a servidores externos.
+                </p>
+                <div class="mt-2 flex items-center gap-2 text-xs text-amber-800 bg-amber-50/80 border border-amber-200 rounded-lg px-3 py-1.5 w-fit">
+                    <i class="ph ph-clock text-base text-amber-600 shrink-0"></i>
+                    <span><strong>Advertencia horaria:</strong> Los horarios corresponden al valor almacenado en SQL Server.</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+
+        <!-- Formulario de Consulta -->
+        <section class="xl:col-span-1 bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col">
+            <div class="p-5 border-b border-slate-100">
+                <h3 class="font-bold text-slate-700 flex items-center gap-2">
+                    <i class="ph ph-chat-circle-dots text-indigo-500 text-xl"></i>
+                    Consulta al Asistente
+                </h3>
+            </div>
+
+            <form id="form-asistente" class="p-5 space-y-5 flex-1 flex flex-col justify-between">
+                <div class="space-y-4">
+                    <!-- Pregunta Input -->
+                    <div>
+                        <div class="flex justify-between items-center mb-2">
+                            <label for="pregunta" class="block text-xs font-bold text-slate-600 uppercase">
+                                Pregunta o consulta
+                            </label>
+                            <span id="contador-caracteres" class="text-xs text-slate-400 font-mono">
+                                0 / 500
+                            </span>
+                        </div>
+                        <textarea id="pregunta" rows="4" maxlength="500" placeholder="Ej: ¿Cuáles fueron las horas de mayor afluencia?" required
+                            class="w-full border border-slate-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none resize-none text-slate-700"></textarea>
+                    </div>
+
+                    <!-- Parámetros complementarios opcionales -->
+                    <div class="border border-slate-200 rounded-lg overflow-hidden bg-slate-50/50">
+                        <button type="button" id="btn-toggle-complementario" class="w-full px-4 py-2.5 text-left text-xs font-bold text-slate-600 flex items-center justify-between hover:bg-slate-100 transition-colors">
+                            <div class="flex flex-col text-left">
+                                <span class="flex items-center gap-2 uppercase">
+                                    <i class="ph ph-sliders text-indigo-500 text-base"></i>
+                                    Parámetros complementarios (opcional)
+                                </span>
+                                <span class="text-[11px] text-slate-400 font-normal mt-0.5 normal-case">
+                                    Complete solamente los parámetros necesarios para el tipo de consulta.
+                                </span>
+                            </div>
+                            <i id="icono-toggle-complementario" class="ph ph-caret-down text-slate-400 shrink-0"></i>
+                        </button>
+
+                        <div id="seccion-complementaria" class="hidden p-4 border-t border-slate-200 space-y-3 bg-white">
+                            <div>
+                                <label for="param-sede" class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Sede</label>
+                                <select id="param-sede" {% if session.get('admin_rol') == 'Supervisor' %}disabled{% endif %} class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:ring-2 focus:ring-indigo-500 outline-none disabled:bg-slate-100 disabled:text-slate-500">
+                                    <option value="">-- Todas las sedes / Sede por defecto --</option>
+                                    {% for s in sedes %}
+                                    <option value="{{ s }}" {% if s == sede_asignada and session.get('admin_rol') == 'Supervisor' %}selected{% endif %}>{{ s }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label for="param-fecha" class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Fecha específica</label>
+                                    <input type="date" id="param-fecha" class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-indigo-500 outline-none">
+                                </div>
+                                <div>
+                                    <label for="param-hora" class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Hora (0-23)</label>
+                                    <input type="number" id="param-hora" min="0" max="23" placeholder="Ej: 10" class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-indigo-500 outline-none">
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label for="param-fecha-inicio" class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Fecha Inicio</label>
+                                    <input type="date" id="param-fecha-inicio" class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-indigo-500 outline-none">
+                                </div>
+                                <div>
+                                    <label for="param-fecha-fin" class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Fecha Fin</label>
+                                    <input type="date" id="param-fecha-fin" class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-indigo-500 outline-none">
+                                </div>
+                            </div>
+
+                            <div>
+                                <label for="param-limite" class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Límite de registros</label>
+                                <input type="number" id="param-limite" min="1" max="100" placeholder="Ej: 5" class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-indigo-500 outline-none">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pt-4 space-y-3">
+                    <button type="submit" id="btn-consultar" class="w-full flex justify-center items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed shadow-sm">
+                        <i class="ph ph-paper-plane-tilt text-xl"></i>
+                        <span>Consultar</span>
+                    </button>
+
+                    <button type="button" id="btn-nueva-consulta" class="w-full flex justify-center items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2 rounded-lg transition-colors text-xs">
+                        <i class="ph ph-arrow-counter-clockwise text-base"></i>
+                        <span>Nueva consulta</span>
+                    </button>
+                </div>
+            </form>
+        </section>
+
+        <!-- Resultados y Respuestas -->
+        <section class="xl:col-span-2 bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col">
+            <div class="p-5 border-b border-slate-100 flex justify-between items-center">
+                <h3 class="font-bold text-slate-700 flex items-center gap-2">
+                    <i class="ph ph-desktop text-indigo-500 text-xl"></i>
+                    Respuesta del Asistente
+                </h3>
+                <span id="badge-estado" class="text-[10px] font-bold uppercase bg-slate-100 text-slate-500 px-3 py-1 rounded-full border border-slate-200">
+                    Esperando consulta
+                </span>
+            </div>
+
+            <div class="p-5 flex-1 flex flex-col justify-between space-y-6">
+
+                <!-- Estado Inicial Vacío -->
+                <div id="zona-vacia" class="my-auto flex flex-col justify-center items-center text-center p-8">
+                    <div class="w-20 h-20 bg-indigo-50 rounded-full flex items-center justify-center mb-4 border border-indigo-100">
+                        <i class="ph ph-robot text-4xl text-indigo-500"></i>
+                    </div>
+                    <h4 class="font-bold text-slate-700">
+                        No se ha realizado ninguna consulta
+                    </h4>
+                    <p class="text-sm text-slate-400 max-w-md mt-2">
+                        Ingrese una pregunta en lenguaje natural o seleccione una de las preguntas de ejemplo sugeridas abajo.
+                    </p>
+                </div>
+
+                <!-- Indicador de Carga -->
+                <div id="zona-cargando" class="hidden my-auto flex-col justify-center items-center text-center p-8">
+                    <div class="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center mb-4">
+                        <i class="ph ph-spinner animate-spin text-3xl text-indigo-600"></i>
+                    </div>
+                    <h4 class="font-bold text-indigo-900">
+                        Procesando su consulta localmente...
+                    </h4>
+                    <p class="text-xs text-indigo-600 mt-1">
+                        Analizando intención y ejecutando consulta segura
+                    </p>
+                </div>
+
+                <!-- Zona de Respuesta Principal -->
+                <div id="zona-respuesta" class="hidden space-y-6">
+                    <!-- Mensaje del Asistente -->
+                    <div class="bg-indigo-50/60 border border-indigo-100 rounded-xl p-5 space-y-3">
+                        <div class="flex items-center gap-2 text-xs font-bold text-indigo-700 uppercase tracking-wide">
+                            <i class="ph ph-sparkle text-lg"></i>
+                            <span>Respuesta</span>
+                        </div>
+                        <p id="texto-respuesta" class="text-sm text-slate-800 leading-relaxed font-normal whitespace-pre-line"></p>
+                    </div>
+
+                    <!-- Panel de Desambiguación (Solo para requiere_aclaracion === true con candidatos legítimos) -->
+                    <div id="panel-desambiguacion" class="hidden bg-amber-50 border border-amber-200 rounded-xl p-5 space-y-4">
+                        <div class="flex items-start gap-3">
+                            <i class="ph ph-users-three text-2xl text-amber-600 shrink-0"></i>
+                            <div>
+                                <h4 class="font-bold text-amber-900 text-sm">
+                                    Selección de persona requerida
+                                </h4>
+                                <p class="text-xs text-amber-800 mt-1">
+                                    Se encontraron múltiples coincidencias. Seleccione una persona de la lista para continuar:
+                                </p>
+                            </div>
+                        </div>
+                        <div id="contenedor-candidatos" class="space-y-2"></div>
+                    </div>
+
+                    <!-- Panel de Parámetros Requeridos (requiere_parametros === true) -->
+                    <div id="panel-parametros-faltantes" class="hidden bg-sky-50 border border-sky-200 rounded-xl p-5 space-y-4">
+                        <div class="flex items-start gap-3">
+                            <i class="ph ph-sliders text-2xl text-sky-600 shrink-0"></i>
+                            <div>
+                                <h4 class="font-bold text-sky-900 text-sm">
+                                    Parámetros requeridos
+                                </h4>
+                                <p class="text-xs text-sky-800 mt-1">
+                                    Para completar la consulta es necesario indicar los siguientes parámetros en el formulario complementario:
+                                </p>
+                            </div>
+                        </div>
+                        <div id="contenedor-parametros-faltantes" class="flex flex-wrap gap-2"></div>
+                    </div>
+
+                    <!-- Panel de Horas de Mayor Afluencia -->
+                    <div id="panel-horas-afluencia" class="hidden bg-white border border-slate-200 rounded-xl p-5 space-y-4">
+                        <h4 class="font-bold text-slate-700 text-sm flex items-center gap-2">
+                            <i class="ph ph-clock-countdown text-indigo-500 text-lg"></i>
+                            Horas de Mayor Afluencia Registrada
+                        </h4>
+                        <div id="contenedor-horas-afluencia" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+                    </div>
+
+                    <!-- Panel de Resumen Agregado de Ingresos -->
+                    <div id="panel-resumen-ingresos" class="hidden bg-white border border-slate-200 rounded-xl p-5 space-y-5">
+                        <h4 class="font-bold text-slate-700 text-sm flex items-center gap-2">
+                            <i class="ph ph-chart-bar text-indigo-500 text-lg"></i>
+                            Resumen Agregado de Ingresos
+                        </h4>
+                        <div id="contenedor-resumen-ingresos" class="space-y-4"></div>
+                    </div>
+
+                    <!-- Panel de Predicción de Machine Learning -->
+                    <div id="panel-prediccion-ml" class="hidden bg-white border border-slate-200 rounded-xl p-5 space-y-4">
+                        <h4 class="font-bold text-slate-700 text-sm flex items-center gap-2">
+                            <i class="ph ph-brain text-indigo-500 text-lg"></i>
+                            Estimación de Afluencia del Modelo
+                        </h4>
+                        <div id="contenedor-prediccion-ml" class="space-y-4"></div>
+                    </div>
+
+                    <!-- Panel de Historial de Usuario -->
+                    <div id="panel-historial-persona" class="hidden bg-white border border-slate-200 rounded-xl p-5 space-y-4">
+                        <h4 class="font-bold text-slate-700 text-sm flex items-center gap-2">
+                            <i class="ph ph-identification-badge text-indigo-500 text-lg"></i>
+                            Historial Personal de Ingresos
+                        </h4>
+                        <div id="contenedor-historial-persona" class="space-y-4"></div>
+                    </div>
+
+                    <!-- Advertencia del Modelo ML -->
+                    <div id="panel-advertencia-ml" class="hidden bg-indigo-50 border border-indigo-200 rounded-xl p-4 flex items-start gap-3">
+                        <i class="ph ph-info text-xl text-indigo-600 shrink-0 mt-0.5"></i>
+                        <div>
+                            <h5 class="text-xs font-bold text-indigo-900 uppercase">Información del Modelo de Machine Learning</h5>
+                            <p id="texto-advertencia-ml" class="text-xs text-indigo-800 mt-1"></p>
+                        </div>
+                    </div>
+
+                    <!-- Metadatos de la Consulta -->
+                    <div id="panel-metadatos" class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div class="bg-slate-50 rounded-lg p-3 border border-slate-200">
+                            <p class="text-[10px] font-bold uppercase text-slate-400">Intención detectada</p>
+                            <p id="meta-intencion" class="text-xs font-bold text-slate-700 mt-0.5">—</p>
+                        </div>
+                        <div class="bg-slate-50 rounded-lg p-3 border border-slate-200">
+                            <p class="text-[10px] font-bold uppercase text-slate-400">Sede aplicada</p>
+                            <p id="meta-sede" class="text-xs font-bold text-slate-700 mt-0.5">—</p>
+                        </div>
+                        <div class="bg-slate-50 rounded-lg p-3 border border-slate-200">
+                            <p class="text-[10px] font-bold uppercase text-slate-400">Estado de respuesta</p>
+                            <p id="meta-status" class="text-xs font-bold text-slate-700 mt-0.5">—</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Zona de Error -->
+                <div id="zona-error" class="hidden my-auto flex-col justify-center items-center text-center p-8 bg-rose-50/50 border border-rose-200 rounded-xl">
+                    <div class="w-16 h-16 bg-rose-100 rounded-full flex items-center justify-center mb-4">
+                        <i class="ph ph-warning-circle text-3xl text-rose-600"></i>
+                    </div>
+                    <h4 class="font-bold text-rose-800">
+                        Error en la consulta
+                    </h4>
+                    <p id="texto-error" class="text-sm text-rose-600 mt-2 max-w-md"></p>
+                </div>
+
+            </div>
+        </section>
+
+    </div>
+
+    <!-- Ejemplos de Preguntas Admitidas -->
+    <section class="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
+        <h3 class="font-bold text-slate-700 flex items-center gap-2 mb-4">
+            <i class="ph ph-lightbulb text-amber-500 text-xl"></i>
+            Ejemplos de preguntas admitidas
+        </h3>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            <button type="button" class="btn-ejemplo text-left bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 p-3.5 rounded-xl transition-all group">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-[10px] font-bold uppercase text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded">Resumen Rango</span>
+                    <i class="ph ph-arrow-right text-slate-400 group-hover:text-indigo-600 transition-colors"></i>
+                </div>
+                <p class="text-xs font-semibold text-slate-700">Resumen de ingresos del 2026-03-01 al 2026-03-15</p>
+            </button>
+
+            <button type="button" class="btn-ejemplo text-left bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 p-3.5 rounded-xl transition-all group">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-[10px] font-bold uppercase text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded">Horas Top</span>
+                    <i class="ph ph-arrow-right text-slate-400 group-hover:text-indigo-600 transition-colors"></i>
+                </div>
+                <p class="text-xs font-semibold text-slate-700">¿Cuáles fueron las horas de mayor afluencia?</p>
+            </button>
+
+            <button type="button" class="btn-ejemplo text-left bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 p-3.5 rounded-xl transition-all group">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-[10px] font-bold uppercase text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded">Predicción ML</span>
+                    <i class="ph ph-arrow-right text-slate-400 group-hover:text-indigo-600 transition-colors"></i>
+                </div>
+                <p class="text-xs font-semibold text-slate-700">¿Cuál será el nivel de afluencia?</p>
+            </button>
+
+            {% if session.get('admin_rol') != 'Consultor' %}
+            <button type="button" class="btn-ejemplo text-left bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 p-3.5 rounded-xl transition-all group">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-[10px] font-bold uppercase text-sky-600 bg-sky-100 px-2 py-0.5 rounded">Historial Personal</span>
+                    <i class="ph ph-arrow-right text-slate-400 group-hover:text-indigo-600 transition-colors"></i>
+                </div>
+                <p class="text-xs font-semibold text-slate-700">Historial de accesos de Juan Perez</p>
+            </button>
+            {% endif %}
+
+            <button type="button" class="btn-ejemplo text-left bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 p-3.5 rounded-xl transition-all group">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-[10px] font-bold uppercase text-amber-600 bg-amber-100 px-2 py-0.5 rounded">Desambiguación</span>
+                    <i class="ph ph-arrow-right text-slate-400 group-hover:text-indigo-600 transition-colors"></i>
+                </div>
+                <p class="text-xs font-semibold text-slate-700">Buscar a Quispe</p>
+            </button>
+
+            <button type="button" class="btn-ejemplo text-left bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 p-3.5 rounded-xl transition-all group">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-[10px] font-bold uppercase text-slate-600 bg-slate-200 px-2 py-0.5 rounded">Ayuda</span>
+                    <i class="ph ph-arrow-right text-slate-400 group-hover:text-indigo-600 transition-colors"></i>
+                </div>
+                <p class="text-xs font-semibold text-slate-700">Hola, ¿qué puedes hacer?</p>
+            </button>
+        </div>
+    </section>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Variables en memoria JavaScript
+    let preguntaEnMemoria = "";
+    let consultaEnCurso = false;
+
+    document.addEventListener("DOMContentLoaded", function () {
+        const textareaPregunta = document.getElementById("pregunta");
+        const contadorChar = document.getElementById("contador-caracteres");
+        const formAsistente = document.getElementById("form-asistente");
+        const btnNuevaConsulta = document.getElementById("btn-nueva-consulta");
+        const btnToggleComplementario = document.getElementById("btn-toggle-complementario");
+        const seccionComplementaria = document.getElementById("seccion-complementaria");
+        const iconoToggle = document.getElementById("icono-toggle-complementario");
+
+        textareaPregunta.addEventListener("input", function () {
+            contadorChar.textContent = textareaPregunta.value.length + " / 500";
+        });
+
+        btnToggleComplementario.addEventListener("click", function () {
+            seccionComplementaria.classList.toggle("hidden");
+            if (seccionComplementaria.classList.contains("hidden")) {
+                iconoToggle.className = "ph ph-caret-down text-slate-400 shrink-0";
+            } else {
+                iconoToggle.className = "ph ph-caret-up text-indigo-500 shrink-0";
+            }
+        });
+
+        document.querySelectorAll(".btn-ejemplo").forEach(function (btn) {
+            btn.addEventListener("click", function () {
+                const texto = btn.querySelector("p").textContent.trim();
+                textareaPregunta.value = texto;
+                contadorChar.textContent = texto.length + " / 500";
+                textareaPregunta.focus();
+            });
+        });
+
+        formAsistente.addEventListener("submit", function (e) {
+            e.preventDefault();
+            if (consultaEnCurso) return;
+            ejecutarConsulta();
+        });
+
+        btnNuevaConsulta.addEventListener("click", function () {
+            textareaPregunta.value = "";
+            contadorChar.textContent = "0 / 500";
+            preguntaEnMemoria = "";
+            limpiarResultadoAnterior();
+            mostrarEstadoVacio();
+            textareaPregunta.focus();
+        });
+    });
+
+    function limpiarResultadoAnterior() {
+        // Vaciar contenedores dinámicos de forma segura
+        const idsContenedores = [
+            "contenedor-candidatos",
+            "contenedor-parametros-faltantes",
+            "contenedor-horas-afluencia",
+            "contenedor-resumen-ingresos",
+            "contenedor-prediccion-ml",
+            "contenedor-historial-persona"
+        ];
+
+        idsContenedores.forEach(function (id) {
+            const el = document.getElementById(id);
+            if (el) {
+                el.replaceChildren();
+            }
+        });
+
+        // Ocultar paneles secundarios
+        const idsPaneles = [
+            "panel-desambiguacion",
+            "panel-parametros-faltantes",
+            "panel-horas-afluencia",
+            "panel-resumen-ingresos",
+            "panel-prediccion-ml",
+            "panel-historial-persona",
+            "panel-advertencia-ml",
+            "zona-error"
+        ];
+
+        idsPaneles.forEach(function (id) {
+            const p = document.getElementById(id);
+            if (p) {
+                p.classList.add("hidden");
+            }
+        });
+
+        // Reset de textos de metadatos
+        const metaIntencion = document.getElementById("meta-intencion");
+        const metaSede = document.getElementById("meta-sede");
+        const metaStatus = document.getElementById("meta-status");
+        if (metaIntencion) metaIntencion.textContent = "—";
+        if (metaSede) metaSede.textContent = "—";
+        if (metaStatus) metaStatus.textContent = "—";
+
+        const textoRespuesta = document.getElementById("texto-respuesta");
+        if (textoRespuesta) textoRespuesta.textContent = "";
+        const textoError = document.getElementById("texto-error");
+        if (textoError) textoError.textContent = "";
+        const textoAdv = document.getElementById("texto-advertencia-ml");
+        if (textoAdv) textoAdv.textContent = "";
+
+        // Reset badge
+        const badge = document.getElementById("badge-estado");
+        if (badge) {
+            badge.textContent = "Esperando consulta";
+            badge.className = "text-[10px] font-bold uppercase bg-slate-100 text-slate-500 px-3 py-1 rounded-full border border-slate-200";
+        }
+    }
+
+    async function ejecutarConsulta(opcionSeleccionada) {
+        if (consultaEnCurso) return;
+
+        const textareaPregunta = document.getElementById("pregunta");
+        const btnConsultar = document.getElementById("btn-consultar");
+
+        const textoPregunta = textareaPregunta.value.trim();
+        if (!textoPregunta && !opcionSeleccionada) return;
+
+        if (textoPregunta) {
+            preguntaEnMemoria = textoPregunta;
+        }
+
+        // Limpiar estado anterior antes de enviar
+        limpiarResultadoAnterior();
+
+        consultaEnCurso = true;
+        bloquearBoton(btnConsultar, true);
+        mostrarEstadoCargando();
+
+        const payload = {
+            pregunta: preguntaEnMemoria
+        };
+
+        if (opcionSeleccionada) {
+            payload.seleccion_persona = opcionSeleccionada;
+        }
+
+        const pSede = document.getElementById("param-sede").value;
+        const pFecha = document.getElementById("param-fecha").value;
+        const pHora = document.getElementById("param-hora").value;
+        const pFechaInicio = document.getElementById("param-fecha-inicio").value;
+        const pFechaFin = document.getElementById("param-fecha-fin").value;
+        const pLimite = document.getElementById("param-limite").value;
+
+        if (pSede) payload.sede = pSede;
+        if (pFecha) payload.fecha = pFecha;
+        if (pHora !== "") payload.hora = Number(pHora);
+        if (pFechaInicio) payload.fecha_inicio = pFechaInicio;
+        if (pFechaFin) payload.fecha_fin = pFechaFin;
+        if (pLimite) payload.limite = Number(pLimite);
+
+        try {
+            const respuesta = await fetch("/admin/api/asistente/consultar", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(payload)
+            });
+
+            const datos = await respuesta.json();
+
+            if (!respuesta.ok && datos.status !== "requires_input" && datos.status !== "success") {
+                throw new Error(datos.mensaje || "Ocurrió un error al procesar la consulta.");
+            }
+
+            procesarRespuestaExitoso(datos);
+        } catch (err) {
+            mostrarEstadoError(err.message || "Error de conexión o respuesta del servidor.");
+        } finally {
+            consultaEnCurso = false;
+            bloquearBoton(btnConsultar, false);
+        }
+    }
+
+    function procesarRespuestaExitoso(datos) {
+        // Limpiar completamente el estado anterior antes de renderizar
+        limpiarResultadoAnterior();
+        ocultarEstadosDeCarga();
+
+        const zonaRespuesta = document.getElementById("zona-respuesta");
+        zonaRespuesta.classList.remove("hidden");
+
+        const textoRespuesta = document.getElementById("texto-respuesta");
+        textoRespuesta.textContent = datos.mensaje || "Consulta completada.";
+
+        // Metadatos seguros
+        document.getElementById("meta-intencion").textContent = datos.intencion || "No especificada";
+        document.getElementById("meta-sede").textContent = datos.sede_aplicada || "No especificada";
+        document.getElementById("meta-status").textContent = datos.status || "OK";
+
+        // Advertencia de modelo si aplica
+        if (datos.prediccion_ml && datos.prediccion_ml.advertencia) {
+            mostrarAdvertenciaML(datos.prediccion_ml.advertencia);
+        } else if (datos.datos && datos.datos.advertencia) {
+            mostrarAdvertenciaML(datos.datos.advertencia);
+        }
+
+        // Asignación de Badge según reglas requeridas
+        actualizarBadgeEstado(datos);
+
+        // Diferenciación de requires_input y renderizado según intención
+        if (datos.intencion === "intencion_desconocida") {
+            // Intención no reconocida: solo mensaje de orientación, sin candidatos
+        } else if (datos.requiere_aclaracion === true && Array.isArray(datos.opciones) && esListaDeCandidatosValida(datos.opciones)) {
+            renderizarCandidatos(datos.opciones);
+        } else if (datos.requiere_parametros === true) {
+            renderizarParametrosFaltantes(datos);
+        } else if (datos.status === "success") {
+            const datosPayload = datos.datos || {};
+            if (datos.intencion === "horas_mayor_afluencia") {
+                renderizarHorasAfluencia(datosPayload);
+            } else if (datos.intencion === "resumen_ingresos") {
+                renderizarResumenIngresos(datosPayload);
+            } else if (datos.intencion === "prediccion_afluencia") {
+                renderizarPrediccion(datosPayload);
+            } else if (datos.intencion === "historial_persona" || datos.intencion === "ultimo_ingreso_persona") {
+                renderizarHistorialPersona(datosPayload);
+            }
+        }
+    }
+
+    function esListaDeCandidatosValida(opciones) {
+        if (!opciones || opciones.length === 0) return false;
+        return opciones.every(function (opt) {
+            return opt && typeof opt === "object" && ("persona_id" in opt) && ("nombre" in opt) && ("tipo_persona" in opt);
+        });
+    }
+
+    function actualizarBadgeEstado(datos) {
+        const badge = document.getElementById("badge-estado");
+        if (!badge) return;
+
+        if (datos.status === "error") {
+            badge.textContent = "NO SE PUDO COMPLETAR";
+            badge.className = "text-[10px] font-bold uppercase bg-rose-100 text-rose-800 px-3 py-1 rounded-full border border-rose-300";
+        } else if (datos.intencion === "intencion_desconocida") {
+            badge.textContent = "CONSULTA NO RECONOCIDA";
+            badge.className = "text-[10px] font-bold uppercase bg-slate-100 text-slate-700 px-3 py-1 rounded-full border border-slate-300";
+        } else if (datos.requiere_aclaracion === true) {
+            badge.textContent = "SELECCIÓN REQUERIDA";
+            badge.className = "text-[10px] font-bold uppercase bg-amber-100 text-amber-800 px-3 py-1 rounded-full border border-amber-300";
+        } else if (datos.requiere_parametros === true) {
+            badge.textContent = "PARÁMETROS REQUERIDOS";
+            badge.className = "text-[10px] font-bold uppercase bg-sky-100 text-sky-800 px-3 py-1 rounded-full border border-sky-300";
+        } else if (datos.status === "success") {
+            badge.textContent = "CONSULTA COMPLETADA";
+            badge.className = "text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full border border-emerald-300";
+        } else {
+            badge.textContent = "CONSULTA PROCESADA";
+            badge.className = "text-[10px] font-bold uppercase bg-slate-100 text-slate-700 px-3 py-1 rounded-full border border-slate-300";
+        }
+    }
+
+    function renderizarCandidatos(opciones) {
+        const panel = document.getElementById("panel-desambiguacion");
+        const contenedor = document.getElementById("contenedor-candidatos");
+        contenedor.replaceChildren();
+
+        opciones.forEach(function (opt) {
+            const card = document.createElement("button");
+            card.type = "button";
+            card.className = "w-full text-left bg-white hover:bg-amber-100/70 border border-amber-300 rounded-lg p-3 transition-colors flex items-center justify-between group shadow-xs";
+
+            const infoDiv = document.createElement("div");
+
+            const nombreP = document.createElement("p");
+            nombreP.className = "text-xs font-bold text-slate-800 group-hover:text-amber-950";
+            nombreP.textContent = opt.nombre || "Sin nombre";
+
+            const detallesP = document.createElement("p");
+            detallesP.className = "text-[11px] text-slate-500 mt-0.5 flex items-center gap-2";
+
+            const spanTipo = document.createElement("span");
+            spanTipo.className = "font-medium text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded";
+            spanTipo.textContent = opt.tipo_persona || "Usuario";
+
+            detallesP.appendChild(spanTipo);
+
+            if (opt.codigo_mascarado) {
+                const spanCodigo = document.createElement("span");
+                spanCodigo.className = "font-mono text-slate-600";
+                spanCodigo.textContent = "Código: " + opt.codigo_mascarado;
+                detallesP.appendChild(spanCodigo);
+            }
+
+            infoDiv.appendChild(nombreP);
+            infoDiv.appendChild(detallesP);
+
+            const icon = document.createElement("i");
+            icon.className = "ph ph-check-circle text-xl text-amber-600 group-hover:text-amber-700 shrink-0";
+
+            card.appendChild(infoDiv);
+            card.appendChild(icon);
+
+            card.addEventListener("click", function () {
+                ejecutarConsulta(opt);
+            });
+
+            contenedor.appendChild(card);
+        });
+
+        panel.classList.remove("hidden");
+    }
+
+    function renderizarParametrosFaltantes(respuesta) {
+        const panel = document.getElementById("panel-parametros-faltantes");
+        const contenedor = document.getElementById("contenedor-parametros-faltantes");
+        contenedor.replaceChildren();
+
+        const faltantes = respuesta.parametros_faltantes || [];
+        if (faltantes.length === 0) return;
+
+        const etiquetas = {
+            "fecha_inicio": "Fecha de inicio",
+            "fecha_fin": "Fecha de fin",
+            "fecha": "Fecha objetivo",
+            "hora": "Hora (8-20)",
+            "sede": "Sede de biblioteca",
+            "texto_persona": "Nombre de persona"
+        };
+
+        faltantes.forEach(function (param) {
+            const badge = document.createElement("span");
+            badge.className = "inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-sky-300 text-sky-800 text-xs font-semibold rounded-lg shadow-xs";
+
+            const icon = document.createElement("i");
+            icon.className = "ph ph-asterisk text-sky-500 text-xs";
+
+            const label = document.createElement("span");
+            label.textContent = etiquetas[param] || param;
+
+            badge.appendChild(icon);
+            badge.appendChild(label);
+            contenedor.appendChild(badge);
+        });
+
+        panel.classList.remove("hidden");
+    }
+
+    function renderizarHorasAfluencia(datos) {
+        const panel = document.getElementById("panel-horas-afluencia");
+        const contenedor = document.getElementById("contenedor-horas-afluencia");
+        contenedor.replaceChildren();
+
+        const horasTop = datos.horas_top || [];
+
+        if (horasTop.length === 0) {
+            const pVacio = document.createElement("p");
+            pVacio.className = "col-span-full text-xs text-slate-500 italic p-4 text-center bg-slate-50 border border-slate-200 rounded-lg";
+            pVacio.textContent = "No existen ingresos registrados en el periodo seleccionado.";
+            contenedor.appendChild(pVacio);
+            panel.classList.remove("hidden");
+            return;
+        }
+
+        if (datos.dias_con_registros !== undefined) {
+            const infoDias = document.createElement("div");
+            infoDias.className = "col-span-full flex items-center justify-between text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3.5 py-2 font-medium";
+
+            const spanDias = document.createElement("span");
+            spanDias.className = "font-bold text-slate-700";
+            spanDias.textContent = "Días con registros: " + String(datos.dias_con_registros);
+
+            const spanNota = document.createElement("span");
+            spanNota.className = "text-[11px] text-slate-500";
+            spanNota.textContent = "Promedio calculado sobre los días con ingresos registrados";
+
+            infoDias.appendChild(spanDias);
+            infoDias.appendChild(spanNota);
+            contenedor.appendChild(infoDias);
+        }
+
+        horasTop.forEach(function (item, index) {
+            const card = document.createElement("div");
+            card.className = "p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2";
+
+            const topDiv = document.createElement("div");
+            topDiv.className = "flex items-center justify-between";
+
+            const badgeRank = document.createElement("span");
+            badgeRank.className = "text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700";
+            badgeRank.textContent = "Top " + (index + 1);
+
+            const horaSpan = document.createElement("span");
+            horaSpan.className = "text-xs font-bold text-slate-700";
+            horaSpan.textContent = item.hora_formato || (String(item.hora).padStart(2, "0") + ":00");
+
+            topDiv.appendChild(badgeRank);
+            topDiv.appendChild(horaSpan);
+
+            const gridStats = document.createElement("div");
+            gridStats.className = "grid grid-cols-2 gap-2 pt-1 border-t border-slate-200";
+
+            const divTot = document.createElement("div");
+            const lblTot = document.createElement("p");
+            lblTot.className = "text-[10px] font-bold text-slate-400 uppercase";
+            lblTot.textContent = "Total ingresos";
+            const valTot = document.createElement("p");
+            valTot.className = "text-sm font-extrabold text-slate-800 mt-0.5";
+            valTot.textContent = String(item.total_ingresos);
+            divTot.appendChild(lblTot);
+            divTot.appendChild(valTot);
+
+            const divProm = document.createElement("div");
+            const lblProm = document.createElement("p");
+            lblProm.className = "text-[10px] font-bold text-slate-400 uppercase";
+            lblProm.textContent = "Promedio por día con registros";
+            const valProm = document.createElement("p");
+            valProm.className = "text-sm font-extrabold text-indigo-600 mt-0.5";
+            valProm.textContent = String(item.promedio_diario) + " / día";
+            divProm.appendChild(lblProm);
+            divProm.appendChild(valProm);
+
+            gridStats.appendChild(divTot);
+            gridStats.appendChild(divProm);
+
+            card.appendChild(topDiv);
+            card.appendChild(gridStats);
+            contenedor.appendChild(card);
+        });
+
+        panel.classList.remove("hidden");
+    }
+
+    function renderizarResumenIngresos(datos) {
+        const panel = document.getElementById("panel-resumen-ingresos");
+        const contenedor = document.getElementById("contenedor-resumen-ingresos");
+        contenedor.replaceChildren();
+
+        // 1. Tarjetas de métricas del rango
+        const metricsGrid = document.createElement("div");
+        metricsGrid.className = "grid grid-cols-2 sm:grid-cols-4 gap-3";
+
+        const metadatosRango = [
+            { titulo: "Total Ingresos", valor: String(datos.total_ingresos || 0) },
+            { titulo: "Fecha Inicio", valor: datos.fecha_inicio || "—" },
+            { titulo: "Fecha Fin", valor: datos.fecha_fin || "—" },
+            { titulo: "Días del Rango", valor: (datos.dias_rango ? String(datos.dias_rango) + " días" : "—") }
+        ];
+
+        metadatosRango.forEach(function (m) {
+            const c = document.createElement("div");
+            c.className = "p-3 bg-slate-50 border border-slate-200 rounded-lg";
+            const t = document.createElement("p");
+            t.className = "text-[10px] font-bold text-slate-400 uppercase";
+            t.textContent = m.titulo;
+            const v = document.createElement("p");
+            v.className = "text-sm font-extrabold text-slate-800 mt-1";
+            v.textContent = m.valor;
+            c.appendChild(t);
+            c.appendChild(v);
+            metricsGrid.appendChild(c);
+        });
+
+        contenedor.appendChild(metricsGrid);
+
+        // 2. Grilla de ingresos por sede y por tipo
+        const twoCols = document.createElement("div");
+        twoCols.className = "grid grid-cols-1 md:grid-cols-2 gap-4 pt-2";
+
+        // Ingresos por Sede
+        const colSede = document.createElement("div");
+        colSede.className = "p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3";
+        const titSede = document.createElement("h5");
+        titSede.className = "text-xs font-bold text-slate-700 uppercase flex items-center gap-1.5";
+        titSede.textContent = "Ingresos por Sede";
+        colSede.appendChild(titSede);
+
+        const sedesDict = datos.ingresos_por_sede || {};
+        const sedesKeys = Object.keys(sedesDict);
+        if (sedesKeys.length === 0) {
+            const pSin = document.createElement("p");
+            pSin.className = "text-xs text-slate-400 italic";
+            pSin.textContent = "Sin datos por sede.";
+            colSede.appendChild(pSin);
+        } else {
+            const listS = document.createElement("div");
+            listS.className = "space-y-1.5";
+            sedesKeys.forEach(function (k) {
+                const row = document.createElement("div");
+                row.className = "flex justify-between items-center text-xs py-1 border-b border-slate-200/60";
+                const kSpan = document.createElement("span");
+                kSpan.className = "font-medium text-slate-600";
+                kSpan.textContent = k;
+                const vSpan = document.createElement("span");
+                vSpan.className = "font-bold text-slate-800";
+                vSpan.textContent = String(sedesDict[k]);
+                row.appendChild(kSpan);
+                row.appendChild(vSpan);
+                listS.appendChild(row);
+            });
+            colSede.appendChild(listS);
+        }
+
+        // Ingresos por Tipo de Persona
+        const colTipo = document.createElement("div");
+        colTipo.className = "p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3";
+        const titTipo = document.createElement("h5");
+        titTipo.className = "text-xs font-bold text-slate-700 uppercase flex items-center gap-1.5";
+        titTipo.textContent = "Ingresos por Tipo de Persona";
+        colTipo.appendChild(titTipo);
+
+        const tipoDict = datos.ingresos_por_tipo_persona || {};
+        const tipoKeys = Object.keys(tipoDict);
+        if (tipoKeys.length === 0) {
+            const pSin = document.createElement("p");
+            pSin.className = "text-xs text-slate-400 italic";
+            pSin.textContent = "Sin datos por tipo.";
+            colTipo.appendChild(pSin);
+        } else {
+            const listT = document.createElement("div");
+            listT.className = "space-y-1.5";
+            tipoKeys.forEach(function (k) {
+                const row = document.createElement("div");
+                row.className = "flex justify-between items-center text-xs py-1 border-b border-slate-200/60";
+                const kSpan = document.createElement("span");
+                kSpan.className = "font-medium text-slate-600";
+                kSpan.textContent = k;
+                const vSpan = document.createElement("span");
+                vSpan.className = "font-bold text-slate-800";
+                vSpan.textContent = String(tipoDict[k]);
+                row.appendChild(kSpan);
+                row.appendChild(vSpan);
+                listT.appendChild(row);
+            });
+            colTipo.appendChild(listT);
+        }
+
+        twoCols.appendChild(colSede);
+        twoCols.appendChild(colTipo);
+        contenedor.appendChild(twoCols);
+
+        panel.classList.remove("hidden");
+    }
+
+    function renderizarPrediccion(datos) {
+        const panel = document.getElementById("panel-prediccion-ml");
+        const contenedor = document.getElementById("contenedor-prediccion-ml");
+        contenedor.replaceChildren();
+
+        const prediccion = datos.prediccion || {};
+        const nivel = prediccion.nivel || "No disponible";
+        const probabilidades = prediccion.probabilidades || {};
+        const consulta = datos.consulta || {};
+
+        // 1. Tarjeta principal de nivel y consulta
+        const headerGrid = document.createElement("div");
+        headerGrid.className = "grid grid-cols-1 sm:grid-cols-4 gap-3";
+
+        const cardNivel = document.createElement("div");
+        cardNivel.className = "p-4 bg-indigo-50 border border-indigo-200 rounded-xl flex flex-col justify-center items-center text-center";
+        const pTit = document.createElement("p");
+        pTit.className = "text-[10px] font-bold uppercase text-indigo-600";
+        pTit.textContent = "Nivel Estimado";
+        const pVal = document.createElement("p");
+        pVal.className = "text-2xl font-black text-indigo-950 mt-1";
+        pVal.textContent = nivel;
+        cardNivel.appendChild(pTit);
+        cardNivel.appendChild(pVal);
+
+        const cardFecha = document.createElement("div");
+        cardFecha.className = "p-4 bg-slate-50 border border-slate-200 rounded-xl";
+        const fTit = document.createElement("p");
+        fTit.className = "text-[10px] font-bold uppercase text-slate-400";
+        fTit.textContent = "Fecha Objetivo";
+        const fVal = document.createElement("p");
+        fVal.className = "text-sm font-bold text-slate-800 mt-1";
+        fVal.textContent = consulta.fecha || "—";
+        cardFecha.appendChild(fTit);
+        cardFecha.appendChild(fVal);
+
+        const cardHora = document.createElement("div");
+        cardHora.className = "p-4 bg-slate-50 border border-slate-200 rounded-xl";
+        const hTit = document.createElement("p");
+        hTit.className = "text-[10px] font-bold uppercase text-slate-400";
+        hTit.textContent = "Hora Consultada";
+        const hVal = document.createElement("p");
+        hVal.className = "text-sm font-bold text-slate-800 mt-1";
+        hVal.textContent = (consulta.hora !== undefined ? String(consulta.hora).padStart(2, "0") + ":00" : "—");
+        cardHora.appendChild(hTit);
+        cardHora.appendChild(hVal);
+
+        const cardSede = document.createElement("div");
+        cardSede.className = "p-4 bg-slate-50 border border-slate-200 rounded-xl";
+        const sTit = document.createElement("p");
+        sTit.className = "text-[10px] font-bold uppercase text-slate-400";
+        sTit.textContent = "Sede Analizada";
+        const sVal = document.createElement("p");
+        sVal.className = "text-sm font-bold text-slate-800 mt-1";
+        sVal.textContent = consulta.sede || "—";
+        cardSede.appendChild(sTit);
+        cardSede.appendChild(sVal);
+
+        headerGrid.appendChild(cardNivel);
+        headerGrid.appendChild(cardFecha);
+        headerGrid.appendChild(cardHora);
+        headerGrid.appendChild(cardSede);
+        contenedor.appendChild(headerGrid);
+
+        // 2. Probabilidades Bajo, Medio y Alto
+        const probContainer = document.createElement("div");
+        probContainer.className = "p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3";
+        const probTit = document.createElement("h5");
+        probTit.className = "text-xs font-bold text-slate-700 uppercase";
+        probTit.textContent = "Distribución de Probabilidad del Modelo";
+        probContainer.appendChild(probTit);
+
+        const niveles = [
+            { clave: "Bajo", color: "bg-emerald-500", border: "border-emerald-300" },
+            { clave: "Medio", color: "bg-amber-500", border: "border-amber-300" },
+            { clave: "Alto", color: "bg-rose-500", border: "border-rose-300" }
+        ];
+
+        niveles.forEach(function (n) {
+            const probValor = probabilidades[n.clave] !== undefined ? probabilidades[n.clave] : 0;
+            const pct = (probValor * 100).toFixed(1) + "%";
+
+            const row = document.createElement("div");
+            row.className = "space-y-1";
+
+            const labels = document.createElement("div");
+            labels.className = "flex justify-between text-xs";
+            const spanN = document.createElement("span");
+            spanN.className = "font-bold text-slate-700";
+            spanN.textContent = n.clave;
+            const spanPct = document.createElement("span");
+            spanPct.className = "font-mono font-bold text-slate-800";
+            spanPct.textContent = pct;
+
+            labels.appendChild(spanN);
+            labels.appendChild(spanPct);
+
+            const barBg = document.createElement("div");
+            barBg.className = "w-full bg-slate-200 rounded-full h-2 overflow-hidden";
+            const barFill = document.createElement("div");
+            barFill.className = n.color + " h-2 rounded-full";
+            barFill.style.width = pct;
+            barBg.appendChild(barFill);
+
+            row.appendChild(labels);
+            row.appendChild(barBg);
+            probContainer.appendChild(row);
+        });
+
+        contenedor.appendChild(probContainer);
+
+        panel.classList.remove("hidden");
+    }
+
+    function renderizarHistorialPersona(datos) {
+        const panel = document.getElementById("panel-historial-persona");
+        const contenedor = document.getElementById("contenedor-historial-persona");
+        contenedor.replaceChildren();
+
+        const persona = datos.persona || {};
+        const historial = datos.historial || {};
+        const registros = historial.registros || (datos.ultimo_registro ? [datos.ultimo_registro] : []);
+
+        // 1. Tarjeta de información principal de la persona
+        const infoGrid = document.createElement("div");
+        infoGrid.className = "grid grid-cols-1 sm:grid-cols-4 gap-3";
+
+        const cNom = document.createElement("div");
+        cNom.className = "p-3 bg-slate-50 border border-slate-200 rounded-lg";
+        const tNom = document.createElement("p");
+        tNom.className = "text-[10px] font-bold text-slate-400 uppercase";
+        tNom.textContent = "Nombre";
+        const vNom = document.createElement("p");
+        vNom.className = "text-sm font-bold text-slate-800 mt-0.5 truncate";
+        vNom.textContent = persona.nombre || "—";
+        cNom.appendChild(tNom);
+        cNom.appendChild(vNom);
+
+        const cTip = document.createElement("div");
+        cTip.className = "p-3 bg-slate-50 border border-slate-200 rounded-lg";
+        const tTip = document.createElement("p");
+        tTip.className = "text-[10px] font-bold text-slate-400 uppercase";
+        tTip.textContent = "Tipo de Persona";
+        const vTip = document.createElement("p");
+        vTip.className = "text-sm font-bold text-slate-800 mt-0.5";
+        vTip.textContent = persona.tipo_persona || "—";
+        cTip.appendChild(tTip);
+        cTip.appendChild(vTip);
+
+        const cCod = document.createElement("div");
+        cCod.className = "p-3 bg-slate-50 border border-slate-200 rounded-lg";
+        const tCod = document.createElement("p");
+        tCod.className = "text-[10px] font-bold text-slate-400 uppercase";
+        tCod.textContent = "Código Enmascarado";
+        const vCod = document.createElement("p");
+        vCod.className = "text-sm font-mono font-bold text-slate-800 mt-0.5";
+        vCod.textContent = persona.codigo_mascarado || "Sin código";
+        cCod.appendChild(tCod);
+        cCod.appendChild(vCod);
+
+        const cTot = document.createElement("div");
+        cTot.className = "p-3 bg-slate-50 border border-slate-200 rounded-lg";
+        const tTot = document.createElement("p");
+        tTot.className = "text-[10px] font-bold text-slate-400 uppercase";
+        tTot.textContent = "Total Ingresos";
+        const vTot = document.createElement("p");
+        vTot.className = "text-sm font-extrabold text-indigo-600 mt-0.5";
+        vTot.textContent = String(historial.total_ingresos !== undefined ? historial.total_ingresos : registros.length);
+        cTot.appendChild(tTot);
+        cTot.appendChild(vTot);
+
+        infoGrid.appendChild(cNom);
+        infoGrid.appendChild(cTip);
+        infoGrid.appendChild(cCod);
+        infoGrid.appendChild(cTot);
+        contenedor.appendChild(infoGrid);
+
+        // 2. Primera y última fecha
+        if (historial.primera_fecha || historial.ultima_fecha) {
+            const fechasDiv = document.createElement("div");
+            fechasDiv.className = "grid grid-cols-2 gap-3 text-xs";
+
+            const dPri = document.createElement("div");
+            dPri.className = "p-2.5 bg-slate-50 border border-slate-100 rounded-lg flex justify-between";
+            const sPriL = document.createElement("span");
+            sPriL.className = "text-slate-400 uppercase font-bold text-[10px]";
+            sPriL.textContent = "Primer ingreso:";
+            const sPriV = document.createElement("span");
+            sPriV.className = "font-bold text-slate-700";
+            sPriV.textContent = historial.primera_fecha || "—";
+            dPri.appendChild(sPriL);
+            dPri.appendChild(sPriV);
+
+            const dUlt = document.createElement("div");
+            dUlt.className = "p-2.5 bg-slate-50 border border-slate-100 rounded-lg flex justify-between";
+            const sUltL = document.createElement("span");
+            sUltL.className = "text-slate-400 uppercase font-bold text-[10px]";
+            sUltL.textContent = "Último ingreso:";
+            const sUltV = document.createElement("span");
+            sUltV.className = "font-bold text-slate-700";
+            sUltV.textContent = historial.ultima_fecha || "—";
+            dUlt.appendChild(sUltL);
+            dUlt.appendChild(sUltV);
+
+            fechasDiv.appendChild(dPri);
+            fechasDiv.appendChild(dUlt);
+            contenedor.appendChild(fechasDiv);
+        }
+
+        // 3. Tabla de registros devueltos
+        if (registros.length > 0) {
+            const tableDiv = document.createElement("div");
+            tableDiv.className = "overflow-x-auto border border-slate-200 rounded-lg";
+
+            const table = document.createElement("table");
+            table.className = "w-full text-left text-xs";
+
+            const thead = document.createElement("thead");
+            thead.className = "bg-slate-100 text-slate-600 font-bold uppercase text-[10px]";
+            const trH = document.createElement("tr");
+
+            ["Fecha y Hora", "Sede", "Turno"].forEach(function (h) {
+                const th = document.createElement("th");
+                th.className = "px-3 py-2";
+                th.textContent = h;
+                trH.appendChild(th);
+            });
+            thead.appendChild(trH);
+            table.appendChild(thead);
+
+            const tbody = document.createElement("tbody");
+            tbody.className = "divide-y divide-slate-100";
+
+            registros.forEach(function (reg) {
+                const tr = document.createElement("tr");
+                tr.className = "hover:bg-slate-50";
+
+                const tdFecha = document.createElement("td");
+                tdFecha.className = "px-3 py-2 font-mono text-slate-700";
+                tdFecha.textContent = reg.fecha_hora || "—";
+
+                const tdSede = document.createElement("td");
+                tdSede.className = "px-3 py-2 font-medium text-slate-800";
+                tdSede.textContent = reg.sede || "Central";
+
+                const tdTurno = document.createElement("td");
+                tdTurno.className = "px-3 py-2 text-slate-500";
+                tdTurno.textContent = reg.turno || "—";
+
+                tr.appendChild(tdFecha);
+                tr.appendChild(tdSede);
+                tr.appendChild(tdTurno);
+                tbody.appendChild(tr);
+            });
+
+            table.appendChild(tbody);
+            tableDiv.appendChild(table);
+            contenedor.appendChild(tableDiv);
+        }
+
+        panel.classList.remove("hidden");
+    }
+
+    function mostrarAdvertenciaML(advTexto) {
+        const panel = document.getElementById("panel-advertencia-ml");
+        const texto = document.getElementById("texto-advertencia-ml");
+        texto.textContent = advTexto;
+        panel.classList.remove("hidden");
+    }
+
+    function mostrarEstadoVacio() {
+        ocultarEstadosDeCarga();
+        document.getElementById("zona-respuesta").classList.add("hidden");
+        document.getElementById("zona-vacia").classList.remove("hidden");
+    }
+
+    function mostrarEstadoCargando() {
+        ocultarEstadosDeCarga();
+        document.getElementById("zona-cargando").classList.remove("hidden");
+        const badge = document.getElementById("badge-estado");
+        if (badge) {
+            badge.textContent = "Procesando";
+            badge.className = "text-[10px] font-bold uppercase bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full animate-pulse border border-indigo-200";
+        }
+    }
+
+    function mostrarEstadoError(mensaje) {
+        limpiarResultadoAnterior();
+        ocultarEstadosDeCarga();
+
+        const zonaError = document.getElementById("zona-error");
+        zonaError.classList.remove("hidden");
+        zonaError.classList.add("flex");
+
+        document.getElementById("texto-error").textContent = mensaje;
+
+        const badge = document.getElementById("badge-estado");
+        if (badge) {
+            badge.textContent = "NO SE PUDO COMPLETAR";
+            badge.className = "text-[10px] font-bold uppercase bg-rose-100 text-rose-800 px-3 py-1 rounded-full border border-rose-300";
+        }
+    }
+
+    function ocultarEstadosDeCarga() {
+        document.getElementById("zona-vacia").classList.add("hidden");
+        document.getElementById("zona-cargando").classList.add("hidden");
+        document.getElementById("zona-cargando").classList.remove("flex");
+        document.getElementById("zona-error").classList.add("hidden");
+        document.getElementById("zona-error").classList.remove("flex");
+    }
+
+    function bloquearBoton(btn, bloquear) {
+        btn.disabled = bloquear;
+        const span = btn.querySelector("span");
+        const icon = btn.querySelector("i");
+
+        if (bloquear) {
+            span.textContent = "Procesando...";
+            icon.className = "ph ph-spinner animate-spin text-xl";
+        } else {
+            span.textContent = "Consultar";
+            icon.className = "ph ph-paper-plane-tilt text-xl";
+        }
+    }
+</script>
+{% endblock %}
