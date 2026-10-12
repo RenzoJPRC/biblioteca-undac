@@ -41,9 +41,17 @@ def predecir_afluencia_desde_bd(
     if modo_demo:
         dias_ant = contexto.get("dias_antiguedad_ultimo_registro", 0)
         fechas_cnt = contexto.get("fechas_historicas", 0)
+        ult_fecha_txt = contexto.get("ultima_fecha_disponible", "")
+        fecha_obj_txt = contexto.get("fecha", "")
+        try:
+            from datetime import datetime as dt
+            ult_f_corta = dt.strptime(ult_fecha_txt, "%Y-%m-%d").strftime("%d/%m")
+        except Exception:
+            ult_f_corta = ult_fecha_txt
         prefijo_advertencia = (
             f"[MODO DEMOSTRACIÓN - NO CONFIABLE] Historial insuficiente o desactualizado "
-            f"({fechas_cnt} fechas registradas, último registro con {dias_ant} días de desfase). "
+            f"({fechas_cnt} fechas registradas; el último registro es del {ult_f_corta} y está "
+            f"{dias_ant} días antes de la fecha objetivo {fecha_obj_txt}). "
             "La estimación tiene carácter estrictamente ilustrativo y no debe utilizarse para decisiones operativas. "
         )
         advertencia_final = prefijo_advertencia + advertencia_base
