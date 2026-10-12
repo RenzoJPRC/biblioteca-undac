@@ -1,4 +1,5 @@
 import re
+from datetime import date, datetime, timedelta
 
 SEDES_VALIDAS = {
     "central": "Central",
@@ -9,10 +10,248 @@ SEDES_VALIDAS = {
     "yanahuanca": "Yanahuanca"
 }
 
+CAMPOS_CONTEXTO_PERMITIDOS = {"intencion", "fecha_inicio", "fecha_fin", "fecha", "sede"}
+INTENCIONES_VALIDAS_CONTEXTO = {"resumen_ingresos", "horas_mayor_afluencia", "prediccion_afluencia"}
+CAMPOS_SENSIBLES_PROHIBIDOS = {
+    "nombre", "texto_persona", "dni", "persona_id", "id", "persona",
+    "candidato", "opciones", "historial", "registros", "ultimo_registro",
+    "respuesta", "mensaje", "datos"
+}
+
+
+def obtener_fecha_referencia():
+    """
+    Obtiene la fecha actual de referencia en la zona horaria America/Lima
+    o en la hora local del sistema como alternativa segura.
+    """
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo("America/Lima")).date()
+    except Exception:
+        return datetime.now().date()
+
+
+def resolver_expresion_temporal(texto, fecha_referencia=None):
+    """
+    Resuelve expresiones temporales relativas y absolutas a fechas ISO (YYYY-MM-DD).
+    Soporta:
+    - 'ayer', 'de ayer', 'para ayer' -> día anterior
+    - 'hoy', 'de hoy', 'para hoy' -> día actual
+    - 'anteayer', 'antier' -> dos días anteriores
+    - 'la semana pasada' -> lunes a domingo de la semana calendario anterior
+    - 'el mes pasado' -> primer y último día del mes calendario anterior
+    - 'del YYYY-MM-DD al YYYY-MM-DD' -> rango explícito
+    - 'YYYY-MM-DD' -> fecha puntual explícita
+    """
+    if not texto or not isinstance(texto, str):
+        return None
+
+    ref = fecha_referencia if isinstance(fecha_referencia, (date, datetime)) else obtener_fecha_referencia()
+    if isinstance(ref, datetime):
+        ref = ref.date()
+
+    # 1. Rango explícito: del YYYY-MM-DD al YYYY-MM-DD
+    m_rango = re.search(r"\bdel\s+(\d{4}-\d{2}-\d{2})\s+al\s+(\d{4}-\d{2}-\d{2})\b", texto, re.IGNORECASE)
+    if m_rango:
+        return {
+            "fecha_inicio": m_rango.group(1),
+            "fecha_fin": m_rango.group(2),
+            "tipo_periodo": "rango"
+        }
+
+    # 2. Fecha explícita única: YYYY-MM-DD
+    m_fecha = re.search(r"\b(\d{4}-\d{2}-\d{2})\b", texto)
+    if m_fecha:
+        f_str = m_fecha.group(1)
+        return {
+            "fecha_inicio": f_str,
+            "fecha_fin": f_str,
+            "fecha": f_str,
+            "tipo_periodo": "fecha_fija"
+        }
+
+    norm = normalizar_texto(texto)
+
+    # 3. Anteayer / Antier (evaluado antes de 'ayer')
+    if re.search(r"\b(?:anteayer|antier)\b", norm):
+        d = ref - timedelta(days=2)
+        d_str = d.isoformat()
+        return {
+            "fecha_inicio": d_str,
+            "fecha_fin": d_str,
+            "fecha": d_str,
+            "tipo_periodo": "anteayer"
+        }
+
+    # 4. Ayer
+    if re.search(r"\bayer\b", norm):
+        d = ref - timedelta(days=1)
+        d_str = d.isoformat()
+        return {
+            "fecha_inicio": d_str,
+            "fecha_fin": d_str,
+            "fecha": d_str,
+            "tipo_periodo": "ayer"
+        }
+
+    # 5. Hoy
+    if re.search(r"\bhoy\b", norm):
+        d_str = ref.isoformat()
+        return {
+            "fecha_inicio": d_str,
+            "fecha_fin": d_str,
+            "fecha": d_str,
+            "tipo_periodo": "hoy"
+        }
+
+    # 6. Semana pasada (lunes a domingo de la semana calendario previa)
+    if re.search(r"\b(?:la\s+)?semana\s+pasada\b", norm):
+        dias_desde_lunes = ref.weekday()  # Lunes = 0, Domingo = 6
+        fin_semana_pasada = ref - timedelta(days=dias_desde_lunes + 1)
+        inicio_semana_pasada = fin_semana_pasada - timedelta(days=6)
+        return {
+            "fecha_inicio": inicio_semana_pasada.isoformat(),
+            "fecha_fin": fin_semana_pasada.isoformat(),
+            "tipo_periodo": "semana_pasada"
+        }
+
+    # 7. Mes pasado (primer y último día del mes calendario previo)
+    if re.search(r"\b(?:el\s+)?mes\s+pasado\b", norm):
+        if ref.month == 1:
+            inicio_mes_pasado = date(ref.year - 1, 12, 1)
+            fin_mes_pasado = date(ref.year, 1, 1) - timedelta(days=1)
+        else:
+            inicio_mes_pasado = date(ref.year, ref.month - 1, 1)
+            fin_mes_pasado = date(ref.year, ref.month, 1) - timedelta(days=1)
+        return {
+            "fecha_inicio": inicio_mes_pasado.isoformat(),
+            "fecha_fin": fin_mes_pasado.isoformat(),
+            "tipo_periodo": "mes_pasado"
+        }
+
+    return None
+
+
+def es_pregunta_seguimiento(pregunta):
+    """
+    Determina si una pregunta es una continuación o seguimiento conversacional.
+    Detecta patrones como:
+    - '¿Y ayer?', 'y ayer?', '¿ayer?', 'ayer'
+    - '¿Y hoy?', 'y hoy', 'hoy'
+    - '¿Y anteayer?', '¿Y antier?'
+    - '¿Y la semana pasada?', '¿Y el mes pasado?'
+    - '¿Y del YYYY-MM-DD al YYYY-MM-DD?'
+    - '¿Y el YYYY-MM-DD?'
+    - Preguntas de seguimiento cortas o ambiguas: '¿Y entonces?', '¿Y qué más?', '¿Y?', etc.
+    """
+    if not pregunta or not isinstance(pregunta, str):
+        return False
+    norm = normalizar_texto(pregunta)
+    if not norm:
+        return False
+
+    # 1. Empieza con conjunción de seguimiento 'y' o 'e'
+    if re.match(r"^(?:y|e)\s+", norm) or norm in ("y", "e"):
+        return True
+
+    # 2. Expresiones temporales o de fechas como consulta corta o aislada
+    patrones_cortos = [
+        r"^(?:de\s+|para\s+)?(?:ayer|hoy|anteayer|antier)\??$",
+        r"^(?:de\s+|para\s+)?(?:la\s+)?semana\s+pasada\??$",
+        r"^(?:de\s+|para\s+)?(?:el\s+)?mes\s+pasado\??$",
+        r"^(?:que\s+hay\s+de|que\s+tal)\s+(?:ayer|hoy|anteayer|antier|la\s+semana\s+pasada|el\s+mes\s+pasado)\??$",
+        r"^\d{4}-\d{2}-\d{2}\??$",
+        r"^del\s+\d{4}-\d{2}-\d{2}\s+al\s+\d{4}-\d{2}-\d{2}\??$"
+    ]
+    for p in patrones_cortos:
+        if re.search(p, norm):
+            return True
+
+    # 3. Preguntas de seguimiento ambiguas sin intención definida
+    patrones_ambiguos = [
+        r"^(?:y\s+)?entonces\??$",
+        r"^(?:y\s+)?que\s+mas\??$",
+        r"^(?:y\s+)?ahora\??$",
+        r"^(?:y\s+)?que\s+sigue\??$",
+        r"^(?:y\s+)?luego\??$",
+        r"^como\??$"
+    ]
+    for p in patrones_ambiguos:
+        if re.search(p, norm):
+            return True
+
+    return False
+
+
+def es_seguimiento_ambiguo(pregunta):
+    """
+    Determina si una pregunta de seguimiento es ambigua por carecer de
+    parámetros temporales, filtros o intención específica.
+    """
+    if not pregunta or not isinstance(pregunta, str):
+        return False
+    norm = normalizar_texto(pregunta)
+    if not norm:
+        return False
+
+    # Frases claramente ambiguas
+    patrones_ambiguos = [
+        r"^(?:y|e)\s*$",
+        r"^(?:y\s+)?entonces\??$",
+        r"^(?:y\s+)?que\s+mas\??$",
+        r"^(?:y\s+)?ahora\??$",
+        r"^(?:y\s+)?que\s+sigue\??$",
+        r"^(?:y\s+)?luego\??$",
+        r"^como\??$"
+    ]
+    for p in patrones_ambiguos:
+        if re.search(p, norm):
+            return True
+
+    # Si es pregunta de seguimiento pero no contiene periodo temporal ni sede
+    if es_pregunta_seguimiento(pregunta):
+        temp = resolver_expresion_temporal(pregunta)
+        tiene_sede = any(re.search(r"\b" + re.escape(s) + r"\b", norm) for s in SEDES_VALIDAS)
+        if not temp and not tiene_sede:
+            return True
+
+    return False
+
+
+def sanitizar_contexto(contexto):
+    """
+    Filtra y conserva exclusivamente el contexto mínimo necesario:
+    - intención y filtros de fecha (y sede si aplica).
+    - NUNCA almacena nombres, DNI, IDs personales, respuestas completas ni datos crudos.
+    """
+    if not isinstance(contexto, dict):
+        return {}
+
+    limpio = {}
+    for k in CAMPOS_CONTEXTO_PERMITIDOS:
+        val = contexto.get(k)
+        if val is not None:
+            s_val = str(val).strip()
+            if s_val:
+                limpio[k] = s_val
+
+    # Si la intención no es una de las intenciones agregadas/predictivas permitidas,
+    # se descarta para evitar reusar búsquedas personales sin nombre.
+    intencion = limpio.get("intencion")
+    if intencion and intencion not in INTENCIONES_VALIDAS_CONTEXTO:
+        limpio.pop("intencion", None)
+
+    # Doble verificación estricta: asegurar que ningún campo sensible o prohibido permanezca
+    for sensible in CAMPOS_SENSIBLES_PROHIBIDOS:
+        limpio.pop(sensible, None)
+
+    return limpio
+
 
 def normalizar_texto(texto):
     """
-    Normaliza el texto removiendo acentos, convirtiendo a minúsculas y eliminando espacios adicionales.
+    Normaliza el texto removiendo acentos, signos de interrogación/exclamación,
+    convirtiendo a minúsculas y eliminando espacios adicionales.
     """
     if not texto:
         return ""
@@ -20,7 +259,8 @@ def normalizar_texto(texto):
     remplazos = {
         "á": "a", "é": "e", "í": "i", "ó": "o", "ú": "u",
         "à": "a", "è": "e", "ì": "i", "ò": "o", "ù": "u",
-        "ü": "u"
+        "ü": "u",
+        "¿": "", "?": "", "¡": "", "!": ""
     }
     for orig, dest in remplazos.items():
         t = t.replace(orig, dest)
@@ -53,7 +293,7 @@ def extraer_nombre_persona(pregunta_original):
     return ""
 
 
-def extraer_parametros_texto(pregunta_original, norm):
+def extraer_parametros_texto(pregunta_original, norm, fecha_referencia=None):
     """
     Extrae parámetros auxiliares (fechas, hora, sede) directamente del texto si están presentes.
     """
@@ -71,7 +311,18 @@ def extraer_parametros_texto(pregunta_original, norm):
         if m_fecha:
             params["fecha"] = m_fecha.group(1)
 
-    # 3. Hora: 'a las 10:00', 'a las 10', 'a la 1'
+    # 3. Expresiones temporales relativas si no hay fechas explícitas
+    if "fecha_inicio" not in params and "fecha" not in params:
+        temp = resolver_expresion_temporal(pregunta_original, fecha_referencia)
+        if temp:
+            if "fecha_inicio" in temp:
+                params["fecha_inicio"] = temp["fecha_inicio"]
+            if "fecha_fin" in temp:
+                params["fecha_fin"] = temp["fecha_fin"]
+            if "fecha" in temp:
+                params["fecha"] = temp["fecha"]
+
+    # 4. Hora: 'a las 10:00', 'a las 10', 'a la 1'
     m_hora = re.search(r"\b(?:a\s+las\s+|a\s+la\s+|hora\s+)(\d{1,2})(?::00)?\b", norm)
     if m_hora:
         try:
@@ -81,7 +332,7 @@ def extraer_parametros_texto(pregunta_original, norm):
         except (ValueError, TypeError):
             pass
 
-    # 4. Sede
+    # 5. Sede
     for sede_clave, sede_nom in SEDES_VALIDAS.items():
         if re.search(r"\b(?:sede\s+)?" + re.escape(sede_clave) + r"\b", norm):
             params["sede"] = sede_nom
@@ -90,7 +341,7 @@ def extraer_parametros_texto(pregunta_original, norm):
     return params
 
 
-def clasificar_intencion(pregunta):
+def clasificar_intencion(pregunta, fecha_referencia=None):
     """
     Motor local determinista de intenciones sin APIs externas ni SQL.
 
@@ -119,7 +370,7 @@ def clasificar_intencion(pregunta):
         }
 
     norm = normalizar_texto(pregunta_limpia)
-    params_extra = extraer_parametros_texto(pregunta_limpia, norm)
+    params_extra = extraer_parametros_texto(pregunta_limpia, norm, fecha_referencia=fecha_referencia)
 
     # Detectar si la pregunta contiene marcadores explícitos de tiempo pasado
     es_pasado = bool(re.search(

@@ -463,6 +463,193 @@ class TestCoordinadorAsistente(unittest.TestCase):
         mock_resumen.assert_called_once()
         mock_ml.assert_not_called()
 
+    # 36. SEGUIMIENTO CONVERSACIONAL: "¿Y ayer?" CONSERVA INTENCIÓN Y APLICA AYER
+    @patch("llm.services.coordinador_asistente.obtener_resumen_ingresos")
+    def test_36_seguimiento_despues_de_resumen_aplica_ayer(self, mock_resumen):
+        ref = date(2026, 10, 11)
+        mock_resumen.return_value = {
+            "status": "success",
+            "fecha_inicio": "2026-10-10",
+            "fecha_fin": "2026-10-10",
+            "total_ingresos": 75
+        }
+        ctx_previo = {
+            "intencion": "resumen_ingresos",
+            "fecha_inicio": "2026-09-01",
+            "fecha_fin": "2026-09-30"
+        }
+        res = procesar_pregunta(
+            "¿Y ayer?",
+            rol="SuperAdmin",
+            contexto=ctx_previo,
+            fecha_referencia=ref
+        )
+        self.assertEqual(res["status"], "success")
+        self.assertEqual(res["intencion"], "resumen_ingresos")
+        self.assertIn("75 ingresos", res["mensaje"])
+        self.assertEqual(res["contexto"]["intencion"], "resumen_ingresos")
+        self.assertEqual(res["contexto"]["fecha_inicio"], "2026-10-10")
+        self.assertEqual(res["contexto"]["fecha_fin"], "2026-10-10")
+        mock_resumen.assert_called_once_with(
+            fecha_inicio="2026-10-10",
+            fecha_fin="2026-10-10",
+            rol="SuperAdmin",
+            sede_permitida=None
+        )
+
+    # 37. VARIACIONES DE SEGUIMIENTO TEMPORAL (ayer, la semana pasada, el mes pasado, rango)
+    @patch("llm.services.coordinador_asistente.obtener_resumen_ingresos")
+    def test_37_seguimiento_variaciones_temporales(self, mock_resumen):
+        ref = date(2026, 10, 11)
+        mock_resumen.return_value = {"status": "success", "total_ingresos": 20, "fecha_inicio": "2026-10-10", "fecha_fin": "2026-10-10"}
+        ctx = {"intencion": "resumen_ingresos", "fecha_inicio": "2026-09-01", "fecha_fin": "2026-09-30"}
+
+        # "ayer" a secas
+        r1 = procesar_pregunta("ayer", rol="SuperAdmin", contexto=ctx, fecha_referencia=ref)
+        self.assertEqual(r1["status"], "success")
+        self.assertEqual(r1["intencion"], "resumen_ingresos")
+
+        # "¿ayer?"
+        r2 = procesar_pregunta("¿ayer?", rol="SuperAdmin", contexto=ctx, fecha_referencia=ref)
+        self.assertEqual(r2["status"], "success")
+
+        # "¿Y hoy?"
+        mock_resumen.return_value = {"status": "success", "total_ingresos": 15, "fecha_inicio": "2026-10-11", "fecha_fin": "2026-10-11"}
+        r3 = procesar_pregunta("¿Y hoy?", rol="SuperAdmin", contexto=ctx, fecha_referencia=ref)
+        self.assertEqual(r3["status"], "success")
+        self.assertEqual(r3["contexto"]["fecha_inicio"], "2026-10-11")
+
+        # "¿Y anteayer?"
+        mock_resumen.return_value = {"status": "success", "total_ingresos": 30, "fecha_inicio": "2026-10-09", "fecha_fin": "2026-10-09"}
+        r4 = procesar_pregunta("¿Y anteayer?", rol="SuperAdmin", contexto=ctx, fecha_referencia=ref)
+        self.assertEqual(r4["status"], "success")
+        self.assertEqual(r4["contexto"]["fecha_inicio"], "2026-10-09")
+
+        # "¿Y del 2026-08-01 al 2026-08-15?"
+        mock_resumen.return_value = {"status": "success", "total_ingresos": 80, "fecha_inicio": "2026-08-01", "fecha_fin": "2026-08-15"}
+        r5 = procesar_pregunta("¿Y del 2026-08-01 al 2026-08-15?", rol="SuperAdmin", contexto=ctx, fecha_referencia=ref)
+        self.assertEqual(r5["status"], "success")
+        self.assertEqual(r5["contexto"]["fecha_inicio"], "2026-08-01")
+        self.assertEqual(r5["contexto"]["fecha_fin"], "2026-08-15")
+
+    # 38. SEGUIMIENTO TRAS HORAS DE MAYOR AFLUENCIA HEREDA HORAS_MAYOR_AFLUENCIA
+    @patch("llm.services.coordinador_asistente.obtener_horas_mayor_afluencia")
+    def test_38_seguimiento_despues_de_horas_mayor_afluencia(self, mock_horas):
+        ref = date(2026, 10, 11)
+        mock_horas.return_value = {
+            "status": "success",
+            "fecha_inicio": "2026-10-10",
+            "fecha_fin": "2026-10-10",
+            "horas_top": [{"hora": 11, "hora_formato": "11:00 - 12:00", "total_ingresos": 25}]
+        }
+        ctx_horas = {
+            "intencion": "horas_mayor_afluencia",
+            "fecha_inicio": "2026-09-01",
+            "fecha_fin": "2026-09-30"
+        }
+        res = procesar_pregunta("¿Y ayer?", rol="SuperAdmin", contexto=ctx_horas, fecha_referencia=ref)
+        self.assertEqual(res["status"], "success")
+        self.assertEqual(res["intencion"], "horas_mayor_afluencia")
+        self.assertEqual(res["contexto"]["intencion"], "horas_mayor_afluencia")
+        self.assertEqual(res["contexto"]["fecha_inicio"], "2026-10-10")
+        mock_horas.assert_called_once_with(
+            fecha_inicio="2026-10-10",
+            fecha_fin="2026-10-10",
+            rol="SuperAdmin",
+            sede_permitida=None,
+            limite=5
+        )
+
+    # 39. SEGUIMIENTO SIN CONTEXTO PREVIO SOLICITA ACLARACIÓN
+    def test_39_seguimiento_sin_contexto_previo_solicita_aclaracion(self):
+        # Pregunta "¿Y ayer?" con contexto None
+        r1 = procesar_pregunta("¿Y ayer?", rol="SuperAdmin", contexto=None)
+        self.assertEqual(r1["status"], "requires_input")
+        self.assertEqual(r1["intencion"], "intencion_desconocida")
+        self.assertTrue(r1["requiere_aclaracion"])
+        self.assertIn("No se encontró una consulta previa", r1["mensaje"])
+        self.assertTrue(len(r1["opciones"]) > 0)
+        self.assertEqual(r1["contexto"], {})
+
+        # Pregunta "¿ayer?" con contexto vacío
+        r2 = procesar_pregunta("¿ayer?", rol="SuperAdmin", contexto={})
+        self.assertEqual(r2["status"], "requires_input")
+        self.assertTrue(r2["requiere_aclaracion"])
+
+    # 40. PREGUNTA DE SEGUIMIENTO AMBIGUA SOLICITA ACLARACIÓN
+    def test_40_seguimiento_ambiguo_solicita_aclaracion(self):
+        ctx = {"intencion": "resumen_ingresos", "fecha_inicio": "2026-09-01", "fecha_fin": "2026-09-30"}
+
+        casos_ambiguos = ["¿Y entonces?", "¿Y qué más?", "¿Y?", "¿Cómo?", "¿Y ahora?"]
+        for preg in casos_ambiguos:
+            res = procesar_pregunta(preg, rol="SuperAdmin", contexto=ctx)
+            self.assertEqual(res["status"], "requires_input", f"Pregunta '{preg}' debía retornar requires_input")
+            self.assertTrue(res["requiere_aclaracion"], f"Pregunta '{preg}' debía requerir aclaración")
+            self.assertIn("ambigua", res["mensaje"].lower())
+            self.assertTrue(len(res["opciones"]) > 0)
+
+    # 41. AISLAMIENTO POR ROL Y SEDE: SUPERVISOR NUNCA PUEDE CONSULTAR OTRA SEDE
+    @patch("llm.services.coordinador_asistente.obtener_resumen_ingresos")
+    def test_41_supervisor_aislamiento_sede_en_seguimiento(self, mock_resumen):
+        mock_resumen.return_value = {
+            "status": "success",
+            "fecha_inicio": "2026-10-10",
+            "fecha_fin": "2026-10-10",
+            "total_ingresos": 18
+        }
+        # Supervisor asignado a 'Tarma'
+        # Contexto previo intenta inyectar sede 'Central'
+        ctx_manipulado = {
+            "intencion": "resumen_ingresos",
+            "fecha_inicio": "2026-09-01",
+            "fecha_fin": "2026-09-30",
+            "sede": "Central"
+        }
+
+        # Supervisor pregunta "¿Y ayer en Yanahuanca?" o envía sede="Central"
+        res = procesar_pregunta(
+            "¿Y ayer en Yanahuanca?",
+            rol="Supervisor",
+            sede_permitida="Tarma",
+            sede="Central",
+            contexto=ctx_manipulado,
+            fecha_referencia=date(2026, 10, 11)
+        )
+        self.assertEqual(res["status"], "success")
+        self.assertEqual(res["sede_aplicada"], "Tarma")
+        self.assertEqual(res["contexto"]["sede"], "Tarma")
+        mock_resumen.assert_called_once_with(
+            fecha_inicio="2026-10-10",
+            fecha_fin="2026-10-10",
+            rol="Supervisor",
+            sede_permitida="Tarma"
+        )
+
+    # 42. PRIVACIDAD: CONTEXTO NO ALMACENA DATOS PERSONALES NI RESPUESTAS COMPLETAS
+    @patch("llm.services.coordinador_asistente.buscar_personas")
+    @patch("llm.services.coordinador_asistente.obtener_historial_persona")
+    def test_42_contexto_no_almacena_datos_personales_ni_respuestas_completas(self, mock_hist, mock_busq):
+        mock_busq.return_value = [
+            {"tipo_persona": "Alumno", "persona_id": 101, "nombre": "Renzo Rojas Castillo", "codigo_mascarado": "20******56"}
+        ]
+        mock_hist.return_value = {
+            "status": "success",
+            "total_ingresos": 5,
+            "registros": [{"registro_id": 1, "fecha_hora": "2026-10-01T10:00:00", "sede": "Central"}]
+        }
+        res = procesar_pregunta("¿Cuántas veces ingresó Renzo Rojas Castillo?", rol="SuperAdmin")
+        self.assertEqual(res["status"], "success")
+        ctx = res.get("contexto", {})
+
+        # El contexto retornado debe estar estrictamente limpio de datos personales
+        campos_prohibidos = [
+            "nombre", "texto_persona", "dni", "persona_id", "id", "persona",
+            "candidato", "opciones", "historial", "registros", "ultimo_registro",
+            "respuesta", "mensaje", "datos"
+        ]
+        for c in campos_prohibidos:
+            self.assertNotIn(c, ctx, f"Campo prohibido '{c}' encontrado en el contexto")
+
 
 if __name__ == "__main__":
     unittest.main()

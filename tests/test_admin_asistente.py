@@ -765,6 +765,182 @@ class TestAdminAsistente(unittest.TestCase):
         self.assertIn("hora", datos["parametros_faltantes"])
         self.assertIn("sede", datos["parametros_faltantes"])
 
+    # 42. Seguimiento en sesión: después de consultar resumen histórico, "¿Y ayer?" conserva intención
+    @patch("llm.services.coordinador_asistente.obtener_resumen_ingresos")
+    def test_42_seguimiento_en_sesion_aplica_ayer_y_conserva_intencion(self, mock_resumen):
+        mock_resumen.return_value = {
+            "status": "success",
+            "fecha_inicio": "2026-09-01",
+            "fecha_fin": "2026-09-30",
+            "total_ingresos": 120
+        }
+        self._obtener_cliente_con_sesion(rol="SuperAdmin")
+
+        # Turno 1: Consulta de resumen histórico
+        res1 = self.client.post(
+            "/admin/api/asistente/consultar",
+            headers={"X-CSRFToken": "token_csrf_de_prueba_12345"},
+            json={
+                "pregunta": "Resumen de ingresos del 2026-09-01 al 2026-09-30"
+            }
+        )
+        self.assertEqual(res1.status_code, 200)
+        datos1 = res1.get_json()
+        self.assertEqual(datos1["status"], "success")
+        self.assertEqual(datos1["intencion"], "resumen_ingresos")
+        self.assertIn("contexto", datos1)
+        self.assertEqual(datos1["contexto"]["intencion"], "resumen_ingresos")
+
+        # Turno 2: Seguimiento "¿Y ayer?" en la misma sesión
+        mock_resumen.return_value = {
+            "status": "success",
+            "fecha_inicio": "2026-10-10",
+            "fecha_fin": "2026-10-10",
+            "total_ingresos": 35
+        }
+        res2 = self.client.post(
+            "/admin/api/asistente/consultar",
+            headers={"X-CSRFToken": "token_csrf_de_prueba_12345"},
+            json={
+                "pregunta": "¿Y ayer?"
+            }
+        )
+        self.assertEqual(res2.status_code, 200)
+        datos2 = res2.get_json()
+        self.assertEqual(datos2["status"], "success")
+        self.assertEqual(datos2["intencion"], "resumen_ingresos")
+        self.assertIn("35 ingresos", datos2["mensaje"])
+        self.assertEqual(datos2["contexto"]["intencion"], "resumen_ingresos")
+
+    # 43. Seguimiento sin contexto previo en sesión solicita aclaración
+    def test_43_seguimiento_sin_contexto_previo_retorna_requires_input(self):
+        self._obtener_cliente_con_sesion(rol="SuperAdmin")
+        res = self.client.post(
+            "/admin/api/asistente/consultar",
+            headers={"X-CSRFToken": "token_csrf_de_prueba_12345"},
+            json={
+                "pregunta": "¿Y ayer?"
+            }
+        )
+        self.assertEqual(res.status_code, 200)
+        datos = res.get_json()
+        self.assertEqual(datos["status"], "requires_input")
+        self.assertEqual(datos["intencion"], "intencion_desconocida")
+        self.assertTrue(datos["requiere_aclaracion"])
+        self.assertIn("No se encontró una consulta previa", datos["mensaje"])
+        self.assertTrue(len(datos["opciones"]) > 0)
+
+    # 44. Seguimiento ambiguo en sesión solicita aclaración
+    @patch("llm.services.coordinador_asistente.obtener_resumen_ingresos")
+    def test_44_seguimiento_ambiguo_retorna_requires_input(self, mock_resumen):
+        mock_resumen.return_value = {"status": "success", "fecha_inicio": "2026-09-01", "fecha_fin": "2026-09-30", "total_ingresos": 50}
+        self._obtener_cliente_con_sesion(rol="SuperAdmin")
+
+        # Turno 1: Establecer contexto
+        self.client.post(
+            "/admin/api/asistente/consultar",
+            headers={"X-CSRFToken": "token_csrf_de_prueba_12345"},
+            json={"pregunta": "Resumen de ingresos del 2026-09-01 al 2026-09-30"}
+        )
+
+        # Turno 2: Pregunta ambigua
+        res = self.client.post(
+            "/admin/api/asistente/consultar",
+            headers={"X-CSRFToken": "token_csrf_de_prueba_12345"},
+            json={"pregunta": "¿Y entonces?"}
+        )
+        self.assertEqual(res.status_code, 200)
+        datos = res.get_json()
+        self.assertEqual(datos["status"], "requires_input")
+        self.assertTrue(datos["requiere_aclaracion"])
+        self.assertIn("ambigua", datos["mensaje"].lower())
+
+    # 45. Supervisor: aislamiento estricto de sede en seguimiento a través de sesión
+    @patch("llm.services.coordinador_asistente.obtener_resumen_ingresos")
+    def test_45_supervisor_aislamiento_de_sede_en_seguimiento_en_sesion(self, mock_resumen):
+        mock_resumen.return_value = {
+            "status": "success",
+            "fecha_inicio": "2026-09-01",
+            "fecha_fin": "2026-09-30",
+            "total_ingresos": 10
+        }
+        # Supervisor con sede Tarma
+        self._obtener_cliente_con_sesion(rol="Supervisor", sede="Tarma")
+
+        # Turno 1
+        res1 = self.client.post(
+            "/admin/api/asistente/consultar",
+            headers={"X-CSRFToken": "token_csrf_de_prueba_12345"},
+            json={"pregunta": "Resumen de ingresos del 2026-09-01 al 2026-09-30"}
+        )
+        self.assertEqual(res1.status_code, 200)
+        self.assertEqual(res1.get_json()["sede_aplicada"], "Tarma")
+
+        # Turno 2: Intenta forzar otra sede en la pregunta y en el contexto
+        mock_resumen.return_value = {
+            "status": "success",
+            "fecha_inicio": "2026-10-10",
+            "fecha_fin": "2026-10-10",
+            "total_ingresos": 8
+        }
+        res2 = self.client.post(
+            "/admin/api/asistente/consultar",
+            headers={"X-CSRFToken": "token_csrf_de_prueba_12345"},
+            json={
+                "pregunta": "¿Y ayer en Central?",
+                "sede": "Central",
+                "sede_permitida": "Central",
+                "contexto": {"sede": "Central"}
+            }
+        )
+        self.assertEqual(res2.status_code, 200)
+        datos2 = res2.get_json()
+        # Sede aplicada DEBE ser estrictamente 'Tarma'
+        self.assertEqual(datos2["sede_aplicada"], "Tarma")
+        self.assertEqual(datos2["contexto"]["sede"], "Tarma")
+        # Verificar que a obtener_resumen_ingresos se le pasó Tarma
+        mock_resumen.assert_called_with(
+            fecha_inicio=unittest.mock.ANY,
+            fecha_fin=unittest.mock.ANY,
+            rol="Supervisor",
+            sede_permitida="Tarma"
+        )
+
+    # 46. Privacidad: contexto en sesión no almacena datos sensibles
+    @patch("llm.services.coordinador_asistente.buscar_personas")
+    @patch("llm.services.coordinador_asistente.obtener_historial_persona")
+    def test_46_contexto_sesion_no_expone_datos_sensibles(self, mock_hist, mock_busq):
+        mock_busq.return_value = [
+            {"tipo_persona": "Alumno", "persona_id": 101, "nombre": "Renzo Rojas Castillo", "codigo_mascarado": "20******56"}
+        ]
+        mock_hist.return_value = {
+            "status": "success",
+            "total_ingresos": 3,
+            "registros": [{"registro_id": 1, "fecha_hora": "2026-10-01T10:00:00", "sede": "Central"}]
+        }
+        self._obtener_cliente_con_sesion(rol="SuperAdmin")
+        res = self.client.post(
+            "/admin/api/asistente/consultar",
+            headers={"X-CSRFToken": "token_csrf_de_prueba_12345"},
+            json={"pregunta": "¿Cuántas veces ingresó Renzo Rojas Castillo?"}
+        )
+        self.assertEqual(res.status_code, 200)
+        datos = res.get_json()
+        ctx = datos.get("contexto", {})
+
+        campos_prohibidos = [
+            "nombre", "texto_persona", "dni", "persona_id", "id", "persona",
+            "candidato", "opciones", "historial", "registros", "ultimo_registro",
+            "respuesta", "mensaje", "datos"
+        ]
+        for c in campos_prohibidos:
+            self.assertNotIn(c, ctx, f"Campo prohibido '{c}' encontrado en el contexto de respuesta")
+
+        with self.client.session_transaction() as sess:
+            ctx_sess = sess.get("asistente_contexto", {})
+            for c in campos_prohibidos:
+                self.assertNotIn(c, ctx_sess, f"Campo prohibido '{c}' encontrado en asistente_contexto de sesión")
+
 
 if __name__ == "__main__":
     unittest.main()

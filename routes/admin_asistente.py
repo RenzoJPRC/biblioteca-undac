@@ -1,5 +1,6 @@
 from flask import Blueprint, render_template, request, session, jsonify
 from llm.services.coordinador_asistente import procesar_pregunta
+from llm.services.motor_intenciones import sanitizar_contexto
 
 admin_asistente_bp = Blueprint(
     "admin_asistente",
@@ -90,6 +91,27 @@ def api_consultar_asistente():
     if not rol or not isinstance(rol, str) or rol not in ["SuperAdmin", "Supervisor", "Consultor"]:
         return respuesta_error("Acceso denegado. Rol de sesión no válido o no autorizado.", 403, "permiso")
 
+    # 5. Obtener contexto conversacional mínimo desde la sesión segura
+    if datos.get("reset_contexto") or datos.get("nueva_consulta"):
+        session.pop("asistente_contexto", None)
+        contexto_previo = {}
+    else:
+        contexto_previo = session.get("asistente_contexto")
+        if not isinstance(contexto_previo, dict):
+            contexto_previo = {}
+
+    contexto_cliente = datos.get("contexto")
+    if isinstance(contexto_cliente, dict):
+        contexto_combinado = {**contexto_previo, **contexto_cliente}
+    else:
+        contexto_combinado = contexto_previo
+
+    contexto_limpio = sanitizar_contexto(contexto_combinado)
+
+    # Si el rol es Supervisor, la sede de sesión es estrictamente inmutable
+    if rol == "Supervisor":
+        contexto_limpio["sede"] = sede_permitida
+
     # Parámetros opcionales sanitizados
     seleccion_persona = datos.get("seleccion_persona")
     fecha_inicio = datos.get("fecha_inicio")
@@ -110,8 +132,15 @@ def api_consultar_asistente():
             fecha=fecha,
             hora=hora,
             sede=sede,
-            limite=limite
+            limite=limite,
+            contexto=contexto_limpio
         )
+
+        # 6. Actualizar sesión con el contexto mínimo devuelto (garantizando ausencia de datos personales)
+        ctx_actualizado = resultado.get("contexto")
+        if isinstance(ctx_actualizado, dict):
+            session["asistente_contexto"] = sanitizar_contexto(ctx_actualizado)
+            session.modified = True
 
         status = resultado.get("status")
 
