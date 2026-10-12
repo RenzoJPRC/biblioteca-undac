@@ -12,7 +12,14 @@ from llm.services.consultas_biblioteca import (
     _es_error_tabla_inexistente
 )
 
-from llm.services.motor_intenciones import clasificar_intencion, normalizar_texto
+from llm.services.motor_intenciones import (
+    clasificar_intencion,
+    normalizar_texto,
+    resolver_expresion_temporal,
+    es_pregunta_seguimiento,
+    es_seguimiento_ambiguo,
+    sanitizar_contexto
+)
 
 
 class TestModuloLLMConsultas(unittest.TestCase):
@@ -529,6 +536,89 @@ class TestModuloLLMConsultas(unittest.TestCase):
             # 4 ingresos entre 2 días con registros = 2.0 de promedio por día con registros
             self.assertEqual(res["horas_top"][0]["total_ingresos"], 4)
             self.assertEqual(res["horas_top"][0]["promedio_diario"], 2.0)
+
+    def test_37_resolver_expresiones_temporales(self):
+        """resolver_expresion_temporal resuelve ayer, hoy, anteayer, semana pasada, mes pasado y rangos explícitos."""
+        ref = date(2026, 10, 11)  # Domingo
+
+        # Ayer
+        t1 = resolver_expresion_temporal("ayer", fecha_referencia=ref)
+        self.assertEqual(t1["fecha_inicio"], "2026-10-10")
+        self.assertEqual(t1["fecha_fin"], "2026-10-10")
+        self.assertEqual(t1["tipo_periodo"], "ayer")
+
+        # Hoy
+        t2 = resolver_expresion_temporal("hoy", fecha_referencia=ref)
+        self.assertEqual(t2["fecha_inicio"], "2026-10-11")
+        self.assertEqual(t2["tipo_periodo"], "hoy")
+
+        # Anteayer
+        t3 = resolver_expresion_temporal("anteayer", fecha_referencia=ref)
+        self.assertEqual(t3["fecha_inicio"], "2026-10-09")
+        self.assertEqual(t3["tipo_periodo"], "anteayer")
+
+        # Semana pasada
+        t4 = resolver_expresion_temporal("la semana pasada", fecha_referencia=ref)
+        self.assertEqual(t4["tipo_periodo"], "semana_pasada")
+        self.assertTrue(t4["fecha_inicio"] < t4["fecha_fin"])
+
+        # Mes pasado
+        t5 = resolver_expresion_temporal("el mes pasado", fecha_referencia=ref)
+        self.assertEqual(t5["fecha_inicio"], "2026-09-01")
+        self.assertEqual(t5["fecha_fin"], "2026-09-30")
+        self.assertEqual(t5["tipo_periodo"], "mes_pasado")
+
+        # Rango explícito
+        t6 = resolver_expresion_temporal("del 2026-08-01 al 2026-08-15", fecha_referencia=ref)
+        self.assertEqual(t6["fecha_inicio"], "2026-08-01")
+        self.assertEqual(t6["fecha_fin"], "2026-08-15")
+
+    def test_38_deteccion_preguntas_seguimiento_y_ambiguedad(self):
+        """es_pregunta_seguimiento y es_seguimiento_ambiguo clasifican correctamente."""
+        # Seguimientos claros
+        self.assertTrue(es_pregunta_seguimiento("¿Y ayer?"))
+        self.assertTrue(es_pregunta_seguimiento("y ayer?"))
+        self.assertTrue(es_pregunta_seguimiento("ayer"))
+        self.assertTrue(es_pregunta_seguimiento("¿ayer?"))
+        self.assertTrue(es_pregunta_seguimiento("¿Y hoy?"))
+        self.assertTrue(es_pregunta_seguimiento("¿Y la semana pasada?"))
+        self.assertTrue(es_pregunta_seguimiento("¿Y del 2026-08-01 al 2026-08-15?"))
+        self.assertFalse(es_seguimiento_ambiguo("¿Y ayer?"))
+        self.assertFalse(es_seguimiento_ambiguo("ayer"))
+
+        # Seguimientos ambiguos
+        self.assertTrue(es_pregunta_seguimiento("¿Y entonces?"))
+        self.assertTrue(es_seguimiento_ambiguo("¿Y entonces?"))
+        self.assertTrue(es_seguimiento_ambiguo("¿Y qué más?"))
+        self.assertTrue(es_seguimiento_ambiguo("¿Y?"))
+        self.assertTrue(es_seguimiento_ambiguo("¿Cómo?"))
+
+        # Consultas normales independientes (no son seguimientos)
+        self.assertFalse(es_pregunta_seguimiento("Resumen de ingresos del 2026-09-01 al 2026-09-30"))
+        self.assertFalse(es_pregunta_seguimiento("¿Cuáles son las horas de mayor afluencia?"))
+        self.assertFalse(es_pregunta_seguimiento("¿Cuántas veces ingresó Renzo Rojas Castillo?"))
+
+    def test_39_sanitizar_contexto_limpia_datos_sensibles(self):
+        """sanitizar_contexto conserva exclusivamente campos mínimos y descarta datos sensibles."""
+        ctx_sucio = {
+            "intencion": "resumen_ingresos",
+            "fecha_inicio": "2026-09-01",
+            "fecha_fin": "2026-09-30",
+            "nombre": "Renzo Rojas Castillo",
+            "dni": "12345678",
+            "persona_id": 99,
+            "respuesta": "Texto de respuesta completo",
+            "datos": {"raw": 123}
+        }
+        limpio = sanitizar_contexto(ctx_sucio)
+        self.assertEqual(limpio["intencion"], "resumen_ingresos")
+        self.assertEqual(limpio["fecha_inicio"], "2026-09-01")
+        self.assertEqual(limpio["fecha_fin"], "2026-09-30")
+        self.assertNotIn("nombre", limpio)
+        self.assertNotIn("dni", limpio)
+        self.assertNotIn("persona_id", limpio)
+        self.assertNotIn("respuesta", limpio)
+        self.assertNotIn("datos", limpio)
 
 
 if __name__ == "__main__":

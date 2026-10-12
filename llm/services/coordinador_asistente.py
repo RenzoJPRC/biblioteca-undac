@@ -8,7 +8,15 @@ from llm.services.consultas_biblioteca import (
     obtener_horas_mayor_afluencia,
     SEDES_PERMITIDAS
 )
-from llm.services.motor_intenciones import clasificar_intencion
+from llm.services.motor_intenciones import (
+    clasificar_intencion,
+    normalizar_texto,
+    extraer_parametros_texto,
+    resolver_expresion_temporal,
+    es_pregunta_seguimiento,
+    es_seguimiento_ambiguo,
+    sanitizar_contexto
+)
 from ml.services.servicio_afluencia import predecir_afluencia_desde_bd
 
 
@@ -22,16 +30,23 @@ def procesar_pregunta(
     fecha=None,
     hora=None,
     sede=None,
-    limite=None
+    limite=None,
+    contexto=None,
+    fecha_referencia=None
 ):
     """
     Coordinador local del Asistente LLM de Biblioteca.
 
     Evalúa la pregunta enviada por el usuario en lenguaje natural,
-    clasifica la intención mediante el motor local y la redirige de forma
-    segura a las funciones de consulta SQL Server o al servicio de Machine Learning.
+    conserva contexto conversacional mínimo (intención y filtros de fecha)
+    sin almacenar datos personales ni respuestas completas,
+    re-valida siempre el rol y sede permitida de sesión,
+    y clasifica y enruta la consulta de forma determinista y segura.
     """
-    # 0. Determinar sede inicial según rol y parámetros
+    # 0. Sanitizar contexto conversacional recibido (mínimo, sin datos personales)
+    ctx_sanitizado = sanitizar_contexto(contexto)
+
+    # Determinar sede inicial según rol y parámetros
     if rol == "Supervisor":
         sede_aplicada_ini = str(sede_permitida).strip() if (sede_permitida and str(sede_permitida).strip() in SEDES_PERMITIDAS) else "Central"
     elif sede and str(sede).strip() in SEDES_PERMITIDAS:
@@ -52,6 +67,7 @@ def procesar_pregunta(
             "requiere_aclaracion": False,
             "requiere_parametros": False,
             "opciones": [],
+            "contexto": ctx_sanitizado,
             "origen": "regla_local"
         }
 
@@ -68,6 +84,7 @@ def procesar_pregunta(
             "requiere_aclaracion": False,
             "requiere_parametros": False,
             "opciones": [],
+            "contexto": ctx_sanitizado,
             "origen": "regla_local"
         }
 
@@ -83,10 +100,11 @@ def procesar_pregunta(
             "requiere_aclaracion": False,
             "requiere_parametros": False,
             "opciones": [],
+            "contexto": ctx_sanitizado,
             "origen": "regla_local"
         }
 
-    # 2. Validar el rol del usuario
+    # 2. Validar el rol del usuario (estrictamente desde la sesión)
     try:
         rol_valido = validar_rol(rol)
     except PermissionError as e:
@@ -101,26 +119,129 @@ def procesar_pregunta(
             "requiere_aclaracion": False,
             "requiere_parametros": False,
             "opciones": [],
+            "contexto": {},
             "origen": "regla_local"
         }
 
-    # 3. Clasificar intención mediante motor local
-    clasificacion = clasificar_intencion(pregunta_limpia)
-    intencion = clasificacion["intencion"]
-    params_intencion = clasificacion.get("parametros", {})
-
-    # 3.5 Determinar sede_aplicada de forma segura
+    # 3. Determinar sede_aplicada y sede_consulta_efectiva de forma segura
+    # En Supervisor, la sede de sesión SIEMPRE manda y no puede ser cambiada por contexto ni cliente
     if rol_valido == "Supervisor":
         sede_aplicada = str(sede_permitida).strip() if (sede_permitida and str(sede_permitida).strip() in SEDES_PERMITIDAS) else "Central"
         sede_consulta_efectiva = sede_aplicada
     else:
-        sede_candidata = sede if (sede and str(sede).strip() in SEDES_PERMITIDAS) else params_intencion.get("sede")
+        sede_candidata = sede if (sede and str(sede).strip() in SEDES_PERMITIDAS) else ctx_sanitizado.get("sede")
         if sede_candidata and str(sede_candidata).strip() in SEDES_PERMITIDAS:
             sede_aplicada = str(sede_candidata).strip()
             sede_consulta_efectiva = sede_aplicada
         else:
             sede_aplicada = "Todas las sedes"
             sede_consulta_efectiva = None
+
+    # 4. Evaluar si la consulta es una pregunta de seguimiento conversacional
+    es_seguimiento = es_pregunta_seguimiento(pregunta_limpia)
+
+    if es_seguimiento:
+        # Caso A: Pregunta de seguimiento ambigua (ej: "¿Y entonces?", "¿Y qué más?", "¿Y?")
+        if es_seguimiento_ambiguo(pregunta_limpia):
+            return {
+                "status": "requires_input",
+                "intencion": ctx_sanitizado.get("intencion") or "intencion_desconocida",
+                "sede_aplicada": sede_aplicada,
+                "mensaje": "La pregunta de seguimiento es ambigua. Por favor especifique el periodo o dato que desea consultar (por ejemplo: '¿Y ayer?', '¿Y la semana pasada?' o un rango de fechas).",
+                "datos": {},
+                "requiere_aclaracion": True,
+                "requiere_parametros": False,
+                "opciones": [
+                    "¿Y ayer?",
+                    "¿Y hoy?",
+                    "¿Y la semana pasada?",
+                    "¿Y el mes pasado?"
+                ],
+                "contexto": ctx_sanitizado,
+                "origen": "regla_local"
+            }
+
+        # Caso B: Pregunta de seguimiento sin contexto previo válido
+        intencion_previa = ctx_sanitizado.get("intencion")
+        if not intencion_previa:
+            temp_resolv = resolver_expresion_temporal(pregunta_limpia, fecha_referencia)
+            tipo_p = temp_resolv.get("tipo_periodo", "") if temp_resolv else ""
+            sufijo = f" de {tipo_p}" if tipo_p in ("ayer", "hoy") else (" del mes pasado" if tipo_p == "mes_pasado" else "")
+            return {
+                "status": "requires_input",
+                "intencion": "intencion_desconocida",
+                "sede_aplicada": sede_aplicada,
+                "mensaje": f"No se encontró una consulta previa en la conversación para continuar con la pregunta de seguimiento. ¿Desea consultar el resumen de ingresos o las horas de mayor afluencia{sufijo}?",
+                "datos": {},
+                "requiere_aclaracion": True,
+                "requiere_parametros": False,
+                "opciones": [
+                    f"Resumen de ingresos{sufijo}",
+                    f"Horas de mayor afluencia{sufijo}"
+                ],
+                "contexto": {},
+                "origen": "regla_local"
+            }
+
+        # Caso C: Pregunta de seguimiento con contexto previo válido
+        intencion = intencion_previa
+        temp_resolv = resolver_expresion_temporal(pregunta_limpia, fecha_referencia)
+        norm_txt = normalizar_texto(pregunta_limpia)
+        params_texto = extraer_parametros_texto(pregunta_limpia, norm_txt, fecha_referencia=fecha_referencia)
+
+        if temp_resolv:
+            f_ini_efectivo = temp_resolv.get("fecha_inicio")
+            f_fin_efectivo = temp_resolv.get("fecha_fin")
+            fecha_efectiva = temp_resolv.get("fecha")
+        else:
+            f_ini_efectivo = fecha_inicio or ctx_sanitizado.get("fecha_inicio")
+            f_fin_efectivo = fecha_fin or ctx_sanitizado.get("fecha_fin")
+            fecha_efectiva = fecha or ctx_sanitizado.get("fecha")
+
+        f_ini = fecha_inicio or f_ini_efectivo
+        f_fin = fecha_fin or f_fin_efectivo
+        if not fecha and fecha_efectiva:
+            fecha = fecha_efectiva
+
+        if rol_valido == "Supervisor":
+            sede_aplicada = str(sede_permitida).strip() if (sede_permitida and str(sede_permitida).strip() in SEDES_PERMITIDAS) else "Central"
+            sede_consulta_efectiva = sede_aplicada
+        else:
+            sede_candidata = params_texto.get("sede") or sede or ctx_sanitizado.get("sede")
+            if sede_candidata and str(sede_candidata).strip() in SEDES_PERMITIDAS:
+                sede_aplicada = str(sede_candidata).strip()
+                sede_consulta_efectiva = sede_aplicada
+            else:
+                sede_aplicada = "Todas las sedes"
+                sede_consulta_efectiva = None
+
+        params_intencion = {
+            "fecha_inicio": f_ini,
+            "fecha_fin": f_fin,
+            "fecha": fecha,
+            "sede": sede_consulta_efectiva
+        }
+
+    else:
+        # Clasificar intención mediante motor local para consulta normal
+        clasificacion = clasificar_intencion(pregunta_limpia, fecha_referencia=fecha_referencia)
+        intencion = clasificacion["intencion"]
+        params_intencion = clasificacion.get("parametros", {})
+
+        if rol_valido == "Supervisor":
+            sede_aplicada = str(sede_permitida).strip() if (sede_permitida and str(sede_permitida).strip() in SEDES_PERMITIDAS) else "Central"
+            sede_consulta_efectiva = sede_aplicada
+        else:
+            sede_candidata = sede if (sede and str(sede).strip() in SEDES_PERMITIDAS) else params_intencion.get("sede")
+            if sede_candidata and str(sede_candidata).strip() in SEDES_PERMITIDAS:
+                sede_aplicada = str(sede_candidata).strip()
+                sede_consulta_efectiva = sede_aplicada
+            else:
+                sede_aplicada = "Todas las sedes"
+                sede_consulta_efectiva = None
+
+        f_ini = fecha_inicio or params_intencion.get("fecha_inicio")
+        f_fin = fecha_fin or params_intencion.get("fecha_fin")
 
     # 4. Enrutamiento seguro por intención
 
@@ -138,6 +259,7 @@ def procesar_pregunta(
                 "requiere_aclaracion": False,
                 "requiere_parametros": False,
                 "opciones": [],
+                "contexto": {},
                 "origen": "consulta_segura"
             }
 
@@ -153,6 +275,7 @@ def procesar_pregunta(
                 "requiere_parametros": True,
                 "parametros_faltantes": ["texto_persona"],
                 "opciones": [],
+                "contexto": {},
                 "origen": "regla_local"
             }
 
@@ -173,6 +296,7 @@ def procesar_pregunta(
                         "requiere_aclaracion": False,
                         "requiere_parametros": False,
                         "opciones": [],
+                        "contexto": {},
                         "origen": "consulta_segura"
                     }
 
@@ -202,6 +326,7 @@ def procesar_pregunta(
                 "requiere_aclaracion": False,
                 "requiere_parametros": False,
                 "opciones": [],
+                "contexto": {},
                 "origen": "consulta_segura"
             }
 
@@ -215,6 +340,7 @@ def procesar_pregunta(
                 "requiere_aclaracion": False,
                 "requiere_parametros": False,
                 "opciones": [],
+                "contexto": {},
                 "origen": "consulta_segura"
             }
 
@@ -242,6 +368,7 @@ def procesar_pregunta(
                     "requiere_aclaracion": True,
                     "requiere_parametros": False,
                     "opciones": coincidencias,
+                    "contexto": {},
                     "origen": "consulta_segura"
                 }
         else:
@@ -257,6 +384,7 @@ def procesar_pregunta(
                     "requiere_aclaracion": True,
                     "requiere_parametros": False,
                     "opciones": coincidencias,
+                    "contexto": {},
                     "origen": "consulta_segura"
                 }
 
@@ -280,9 +408,9 @@ def procesar_pregunta(
                 "requiere_aclaracion": False,
                 "requiere_parametros": False,
                 "opciones": [],
+                "contexto": {},
                 "origen": "consulta_segura"
             }
-
 
         nombre_p = candidato_seleccionado["nombre"]
 
@@ -301,6 +429,7 @@ def procesar_pregunta(
                 "requiere_aclaracion": False,
                 "requiere_parametros": False,
                 "opciones": [],
+                "contexto": {},
                 "origen": "consulta_segura"
             }
         else:  # ultimo_ingreso_persona
@@ -318,6 +447,7 @@ def procesar_pregunta(
                     "requiere_aclaracion": False,
                     "requiere_parametros": False,
                     "opciones": [],
+                    "contexto": {},
                     "origen": "consulta_segura"
                 }
             else:
@@ -335,6 +465,7 @@ def procesar_pregunta(
                     "requiere_aclaracion": False,
                     "requiere_parametros": False,
                     "opciones": [],
+                    "contexto": {},
                     "origen": "consulta_segura"
                 }
 
@@ -353,6 +484,7 @@ def procesar_pregunta(
                 "requiere_parametros": True,
                 "parametros_faltantes": ["fecha_inicio", "fecha_fin"],
                 "opciones": [],
+                "contexto": ctx_sanitizado,
                 "origen": "consulta_segura"
             }
 
@@ -363,6 +495,14 @@ def procesar_pregunta(
                 rol=rol_valido,
                 sede_permitida=sede_consulta_efectiva
             )
+            nuevo_ctx = {
+                "intencion": "resumen_ingresos",
+                "fecha_inicio": resumen.get("fecha_inicio", f_ini),
+                "fecha_fin": resumen.get("fecha_fin", f_fin)
+            }
+            if sede_consulta_efectiva:
+                nuevo_ctx["sede"] = sede_consulta_efectiva
+
             return {
                 "status": "success",
                 "intencion": "resumen_ingresos",
@@ -372,6 +512,7 @@ def procesar_pregunta(
                 "requiere_aclaracion": False,
                 "requiere_parametros": False,
                 "opciones": [],
+                "contexto": sanitizar_contexto(nuevo_ctx),
                 "origen": "consulta_segura"
             }
         except Exception:
@@ -386,6 +527,7 @@ def procesar_pregunta(
                 "requiere_aclaracion": False,
                 "requiere_parametros": False,
                 "opciones": [],
+                "contexto": ctx_sanitizado,
                 "origen": "consulta_segura"
             }
 
@@ -404,6 +546,7 @@ def procesar_pregunta(
                 "requiere_parametros": True,
                 "parametros_faltantes": ["fecha_inicio", "fecha_fin"],
                 "opciones": [],
+                "contexto": ctx_sanitizado,
                 "origen": "consulta_segura"
             }
 
@@ -417,6 +560,14 @@ def procesar_pregunta(
                 sede_permitida=sede_consulta_efectiva,
                 limite=limite_val
             )
+            nuevo_ctx = {
+                "intencion": "horas_mayor_afluencia",
+                "fecha_inicio": horas.get("fecha_inicio", f_ini),
+                "fecha_fin": horas.get("fecha_fin", f_fin)
+            }
+            if sede_consulta_efectiva:
+                nuevo_ctx["sede"] = sede_consulta_efectiva
+
             return {
                 "status": "success",
                 "intencion": "horas_mayor_afluencia",
@@ -426,6 +577,7 @@ def procesar_pregunta(
                 "requiere_aclaracion": False,
                 "requiere_parametros": False,
                 "opciones": [],
+                "contexto": sanitizar_contexto(nuevo_ctx),
                 "origen": "consulta_segura"
             }
         except Exception:
@@ -440,6 +592,7 @@ def procesar_pregunta(
                 "requiere_aclaracion": False,
                 "requiere_parametros": False,
                 "opciones": [],
+                "contexto": ctx_sanitizado,
                 "origen": "consulta_segura"
             }
 
@@ -459,6 +612,7 @@ def procesar_pregunta(
                     "requiere_aclaracion": False,
                     "requiere_parametros": False,
                     "opciones": [],
+                    "contexto": ctx_sanitizado,
                     "origen": "machine_learning"
                 }
             sede_efectiva = str(sede_permitida).strip()
@@ -495,6 +649,7 @@ def procesar_pregunta(
                 "requiere_parametros": True,
                 "parametros_faltantes": faltantes,
                 "opciones": [],
+                "contexto": ctx_sanitizado,
                 "origen": "machine_learning"
             }
 
@@ -516,6 +671,7 @@ def procesar_pregunta(
                 "requiere_parametros": True,
                 "parametros_faltantes": ["hora"],
                 "opciones": [],
+                "contexto": ctx_sanitizado,
                 "origen": "machine_learning"
             }
 
@@ -528,6 +684,13 @@ def procesar_pregunta(
             nivel = pred_res["prediccion"]["nivel"]
             msg = f"Predicción de afluencia para el {fecha_efectiva} a las {hora_int}:00 en la sede {sede_efectiva}: Nivel {nivel}."
 
+            nuevo_ctx = {
+                "intencion": "prediccion_afluencia",
+                "fecha": str(fecha_efectiva)
+            }
+            if sede_efectiva:
+                nuevo_ctx["sede"] = sede_efectiva
+
             return {
                 "status": "success",
                 "intencion": "prediccion_afluencia",
@@ -537,6 +700,7 @@ def procesar_pregunta(
                 "requiere_aclaracion": False,
                 "requiere_parametros": False,
                 "opciones": [],
+                "contexto": sanitizar_contexto(nuevo_ctx),
                 "origen": "machine_learning"
             }
         except Exception:
@@ -551,9 +715,9 @@ def procesar_pregunta(
                 "requiere_aclaracion": False,
                 "requiere_parametros": False,
                 "opciones": [],
+                "contexto": ctx_sanitizado,
                 "origen": "machine_learning"
             }
-
 
     # --- INTENCIÓN: INTENCION_DESCONOCIDA ---
     else:
@@ -572,6 +736,7 @@ def procesar_pregunta(
                 "Horas de mayor afluencia del 2026-09-01 al 2026-09-30",
                 "Predicción de afluencia para 2026-10-15 a las 10:00"
             ],
+            "contexto": {},
             "origen": "regla_local"
         }
 
