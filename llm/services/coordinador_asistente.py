@@ -682,7 +682,15 @@ def procesar_pregunta(
                 sede=sede_efectiva
             )
             nivel = pred_res["prediccion"]["nivel"]
-            msg = f"Predicción de afluencia para el {fecha_efectiva} a las {hora_int}:00 en la sede {sede_efectiva}: Nivel {nivel}."
+            if pred_res.get("prediccion", {}).get("modo_demostracion"):
+                dias_ant = pred_res.get("consulta", {}).get("dias_antiguedad_ultimo_registro", 0)
+                msg = (
+                    f"Predicción de afluencia para el {fecha_efectiva} a las {hora_int}:00 en la sede {sede_efectiva}: "
+                    f"Nivel {nivel}. (Aviso: resultado en modo demostración; el historial tiene {dias_ant} días de desfase "
+                    "y no es confiable para uso operativo)."
+                )
+            else:
+                msg = f"Predicción de afluencia para el {fecha_efectiva} a las {hora_int}:00 en la sede {sede_efectiva}: Nivel {nivel}."
 
             nuevo_ctx = {
                 "intencion": "prediccion_afluencia",

@@ -34,6 +34,26 @@ def predecir_afluencia_desde_bd(
         variables
     )
 
+    calidad_minima = bool(contexto.get("calidad_minima_historial", contexto.get("confiable", True)))
+    modo_demo = bool(contexto.get("modo_demostracion", False))
+
+    advertencia_base = resultado_modelo.get("advertencia", "")
+    if modo_demo:
+        dias_ant = contexto.get("dias_antiguedad_ultimo_registro", 0)
+        fechas_cnt = contexto.get("fechas_historicas", 0)
+        prefijo_advertencia = (
+            f"[MODO DEMOSTRACIÓN - NO CONFIABLE] Historial insuficiente o desactualizado "
+            f"({fechas_cnt} fechas registradas, último registro con {dias_ant} días de desfase). "
+            "La estimación tiene carácter estrictamente ilustrativo y no debe utilizarse para decisiones operativas. "
+        )
+        advertencia_final = prefijo_advertencia + advertencia_base
+    else:
+        prefijo_calidad = (
+            "El historial cumple los criterios mínimos de calidad operativa de entrada (cobertura temporal y rezagos), "
+            "pero los umbrales no constituyen una prueba formal de certeza; la estimación es únicamente de apoyo referencial. "
+        )
+        advertencia_final = prefijo_calidad + advertencia_base
+
     return {
         "status": "success",
         "prediccion": {
@@ -45,13 +65,14 @@ def predecir_afluencia_desde_bd(
             ],
             "version_modelo": resultado_modelo[
                 "version_modelo"
-            ]
+            ],
+            "calidad_minima_historial": calidad_minima,
+            "confiable": calidad_minima,
+            "modo_demostracion": modo_demo
         },
         "consulta": contexto,
         "variables_modelo": variables,
-        "advertencia": resultado_modelo[
-            "advertencia"
-        ]
+        "advertencia": advertencia_final
     }
 
 
