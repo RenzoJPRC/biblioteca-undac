@@ -458,19 +458,42 @@
         const consulta = datos.consulta || {};
 
         document.getElementById("nivel-predicho").textContent = nivel;
-        document.getElementById("estado-modelo").textContent = "Predicción generada";
+
+        const elEstado = document.getElementById("estado-modelo");
+        if (consulta.modo_demostracion) {
+            elEstado.textContent = "Modo demostración (Historial no representativo)";
+            elEstado.className = "text-xs font-semibold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200";
+        } else {
+            elEstado.textContent = "Estimación referencial (Historial mínimo cumplido)";
+            elEstado.className = "text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200";
+        }
+
         document.getElementById("dato-fecha").textContent =
             `${consulta.fecha} - ${String(consulta.hora).padStart(2, "0")}:00`;
         document.getElementById("dato-historial").textContent =
-            `${consulta.fechas_historicas} fechas`;
+            consulta.es_desactualizado
+                ? `${consulta.fechas_historicas} fechas (desactualizado)`
+                : `${consulta.fechas_historicas} fechas`;
         document.getElementById("dato-ultima-fecha").textContent =
-            consulta.ultima_fecha_disponible || "No disponible";
+            (consulta.dias_antiguedad_ultimo_registro !== undefined && consulta.dias_antiguedad_ultimo_registro > 0)
+                ? `${consulta.ultima_fecha_disponible} (hace ${consulta.dias_antiguedad_ultimo_registro} días)`
+                : (consulta.ultima_fecha_disponible || "No disponible");
 
-        // Advertencia por historial limitado (< 15 fechas)
+        // Advertencia por historial limitado o desactualizado
         const advHistorial = document.getElementById("contenedor-advertencia-historial");
         if (advHistorial) {
-            if (consulta.fechas_historicas < 15) {
+            if (consulta.modo_demostracion || consulta.fechas_historicas < 15 || consulta.es_desactualizado) {
                 advHistorial.classList.remove("hidden");
+                const pAdv = advHistorial.querySelector("p");
+                if (pAdv) {
+                    if (consulta.motivos_advertencia && consulta.motivos_advertencia.length > 0) {
+                        pAdv.innerHTML = `<strong>Aviso de calidad del historial (Demostración técnica):</strong><br>` +
+                            consulta.motivos_advertencia.join("<br>") +
+                            `<span class="text-[11px] text-amber-700 mt-1 block font-normal">Nota: Los umbrales de 14 días y 15 fechas son criterios operativos mínimos de entrada, no una prueba de certeza del modelo.</span>`;
+                    } else {
+                        pAdv.textContent = "La predicción utiliza un historial limitado o desactualizado y debe interpretarse únicamente como demostración técnica referencial.";
+                    }
+                }
             } else {
                 advHistorial.classList.add("hidden");
             }
@@ -482,11 +505,11 @@
 
         aplicarEstiloNivel(nivel);
         actualizarGrafico(probabilidades);
-        renderizarBarrasProbabilidad(probabilidades, nivel);
+        renderizarBarrasProbabilidad(probabilidades, nivel, consulta);
         renderizarFactoresConsiderados(variables);
     }
 
-    function renderizarBarrasProbabilidad(probabilidades, nivelEstimado) {
+    function renderizarBarrasProbabilidad(probabilidades, nivelEstimado, consulta) {
         const contenedor = document.getElementById("barras-probabilidad");
         if (!contenedor) return;
 
@@ -527,6 +550,10 @@
             }
         });
 
+        const textoBadge = (consulta && consulta.modo_demostracion)
+            ? "Nivel estimado (Demostración)"
+            : "Nivel estimado (Referencial)";
+
         contenedor.innerHTML = nivelesConfig.map(item => {
             const prob = probabilidades[item.clave] || 0;
             const porcentaje = (prob * 100).toFixed(2);
@@ -542,7 +569,7 @@
                         <div class="flex items-center gap-2">
                             <span class="text-slate-800 font-bold text-sm">${item.etiqueta}</span>
                             <span class="text-[11px] font-normal text-slate-500">(${item.rango})</span>
-                            ${esSeleccionado ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${item.colorBadge}">Nivel estimado</span>` : ""}
+                            ${esSeleccionado ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${item.colorBadge}">${textoBadge}</span>` : ""}
                         </div>
                         <span class="text-sm font-extrabold text-slate-700">${porcentaje}%</span>
                     </div>

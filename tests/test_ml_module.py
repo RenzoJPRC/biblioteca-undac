@@ -497,6 +497,136 @@ class TestModuloMachineLearning(unittest.TestCase):
         self.assertEqual(len(datos["horas"]), len(datos["totales"]))
         self.assertEqual(len(datos["horas"]), len(datos["promedios"]))
 
+    def test_26_prediccion_desactualizada_marca_modo_demostracion(self):
+        """Predicción con último registro de hace más de 14 días debe marcar modo demostración y advertencia explícita."""
+        from datetime import date
+        from ml.services.datos_afluencia import construir_variables_afluencia
+        from ml.services.servicio_afluencia import predecir_afluencia_desde_bd
+        import pandas as pd
+
+        # Simular 16 fechas pero con última fecha el 2026-09-28 para una consulta del 2026-10-31 (33 días de desfase)
+        fechas_simuladas = [f"2026-09-{dia:02d}" for dia in range(1, 29)]  # 28 fechas
+        datos_mock = []
+        for f in fechas_simuladas:
+            for h in range(8, 21):
+                datos_mock.append({"Fecha": f, "Hora": h, "CantidadIngresos": 10})
+
+        with patch("ml.services.datos_afluencia.obtener_historial_agrupado") as mock_hist:
+            mock_hist.return_value = pd.DataFrame(datos_mock)
+            resultado = predecir_afluencia_desde_bd(
+                fecha=date(2026, 10, 31),
+                hora=10,
+                sede="Central"
+            )
+
+            self.assertEqual(resultado["status"], "success")
+            self.assertTrue(resultado["prediccion"]["modo_demostracion"])
+            self.assertFalse(resultado["prediccion"]["confiable"])
+            self.assertTrue(resultado["consulta"]["es_desactualizado"])
+            self.assertGreater(resultado["consulta"]["dias_antiguedad_ultimo_registro"], 14)
+            self.assertIn("MODO DEMOSTRACIÓN - NO CONFIABLE", resultado["advertencia"])
+
+    def test_27_prediccion_historial_insuficiente_marca_modo_demostracion(self):
+        """Predicción con menos de 15 fechas debe marcar historial insuficiente y modo demostración."""
+        from datetime import date
+        from ml.services.servicio_afluencia import predecir_afluencia_desde_bd
+        import pandas as pd
+
+        # Simular 6 fechas consecutivas recientes (desfase de 1 día, pero < 15 fechas)
+        fechas_simuladas = [f"2026-10-{dia:02d}" for dia in range(20, 26)]  # 6 fechas
+        datos_mock = []
+        for f in fechas_simuladas:
+            for h in range(8, 21):
+                datos_mock.append({"Fecha": f, "Hora": h, "CantidadIngresos": 12})
+
+        with patch("ml.services.datos_afluencia.obtener_historial_agrupado") as mock_hist:
+            mock_hist.return_value = pd.DataFrame(datos_mock)
+            resultado = predecir_afluencia_desde_bd(
+                fecha=date(2026, 10, 26),
+                hora=10,
+                sede="Central"
+            )
+
+            self.assertEqual(resultado["status"], "success")
+            self.assertTrue(resultado["prediccion"]["modo_demostracion"])
+            self.assertFalse(resultado["prediccion"]["confiable"])
+            self.assertTrue(resultado["consulta"]["historial_insuficiente"])
+            self.assertFalse(resultado["consulta"]["es_desactualizado"])
+            self.assertIn("MODO DEMOSTRACIÓN - NO CONFIABLE", resultado["advertencia"])
+
+    def test_28_prediccion_reciente_y_suficiente_es_confiable(self):
+        """Predicción con 15 o más fechas y desfase <= 14 días cumple calidad mínima referencial (no demo)."""
+        from datetime import date
+        from ml.services.servicio_afluencia import predecir_afluencia_desde_bd
+        import pandas as pd
+
+        # Simular 20 fechas recientes consecutivas hasta el día anterior
+        fechas_simuladas = [f"2026-10-{dia:02d}" for dia in range(1, 21)]  # 20 fechas
+        datos_mock = []
+        for f in fechas_simuladas:
+            for h in range(8, 21):
+                datos_mock.append({"Fecha": f, "Hora": h, "CantidadIngresos": 15})
+
+        with patch("ml.services.datos_afluencia.obtener_historial_agrupado") as mock_hist:
+            mock_hist.return_value = pd.DataFrame(datos_mock)
+            resultado = predecir_afluencia_desde_bd(
+                fecha=date(2026, 10, 21),
+                hora=10,
+                sede="Central"
+            )
+
+            self.assertEqual(resultado["status"], "success")
+            self.assertFalse(resultado["prediccion"]["modo_demostracion"])
+            self.assertTrue(resultado["prediccion"]["confiable"])
+            self.assertTrue(resultado["prediccion"]["calidad_minima_historial"])
+            self.assertFalse(resultado["consulta"]["criterio_justificado_por_evaluacion"])
+            self.assertFalse(resultado["consulta"]["es_desactualizado"])
+            self.assertFalse(resultado["consulta"]["historial_insuficiente"])
+            self.assertNotIn("MODO DEMOSTRACIÓN", resultado["advertencia"])
+            self.assertIn("criterios mínimos de calidad operativa de entrada", resultado["advertencia"])
+
+    def test_29_formula_tendencia_reciente_consistente_con_entrenamiento(self):
+        """Verificar que TendenciaReciente calcule exactamente IngresosDiaAnterior - PromedioMovil5."""
+        from datetime import date
+        from ml.services.datos_afluencia import construir_variables_afluencia
+        import pandas as pd
+
+        # Simular 6 fechas con valores crecientes para hora 10: 10, 20, 30, 40, 50, 100
+        valores_hora_10 = [10, 20, 30, 40, 50, 100]
+        fechas = [f"2026-10-{d:02d}" for d in range(1, 7)]
+        datos_mock = []
+        for i, f in enumerate(fechas):
+            for h in range(8, 21):
+                cant = valores_hora_10[i] if h == 10 else 5
+                datos_mock.append({"Fecha": f, "Hora": h, "CantidadIngresos": cant})
+
+        with patch("ml.services.datos_afluencia.obtener_historial_agrupado") as mock_hist:
+            mock_hist.return_value = pd.DataFrame(datos_mock)
+            variables, contexto = construir_variables_afluencia(
+                fecha_objetivo=date(2026, 10, 7),
+                hora_objetivo=10,
+                sede="Central"
+            )
+
+            # Para hora 10:
+            # IngresosDiaAnterior = 100 (último día observado)
+            # IngresosCincoDiasAntes = 20 (quinto día hacia atrás: 20)
+            # PromedioMovil5 = (20 + 30 + 40 + 50 + 100) / 5 = 48.0
+            # TendenciaReciente = IngresosDiaAnterior - PromedioMovil5 = 100 - 48 = 52.0
+            # Fórmula alternativa errónea: PromedioMovil5 - IngresosCincoDiasAntes = 48 - 20 = 28.0
+            self.assertEqual(variables["IngresosDiaAnterior"], 100.0)
+            self.assertEqual(variables["IngresosCincoDiasAntes"], 20.0)
+            self.assertAlmostEqual(variables["PromedioMovil5"], 48.0, places=4)
+            self.assertAlmostEqual(variables["TendenciaReciente"], 52.0, places=4)
+            self.assertEqual(
+                variables["TendenciaReciente"],
+                variables["IngresosDiaAnterior"] - variables["PromedioMovil5"]
+            )
+            self.assertNotEqual(
+                variables["TendenciaReciente"],
+                variables["PromedioMovil5"] - variables["IngresosCincoDiasAntes"]
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

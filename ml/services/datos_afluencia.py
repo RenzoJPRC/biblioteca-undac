@@ -254,6 +254,42 @@ def construir_variables_afluencia(
             tendencia_reciente
     }
 
+    ultima_fecha_disponible = historial_hora["Fecha"].iloc[-1]
+    if isinstance(ultima_fecha_disponible, datetime):
+        ultima_fecha_date = ultima_fecha_disponible.date()
+    elif isinstance(ultima_fecha_disponible, date):
+        ultima_fecha_date = ultima_fecha_disponible
+    else:
+        ultima_fecha_date = datetime.strptime(
+            str(ultima_fecha_disponible),
+            "%Y-%m-%d"
+        ).date()
+
+    # NOTA METODOLÓGICA SOBRE LOS UMBRALES:
+    # Los umbrales de 14 días (desfase máximo) y 15 fechas (volumen mínimo)
+    # son criterios heurísticos de control de calidad del historial y cobertura
+    # de entrada. No provienen de una curva formal de degradación empírica en el
+    # entrenamiento. Por tanto, su cumplimiento NO es prueba de certeza predictiva,
+    # sino una condición mínima de cobertura temporal para una estimación referencial.
+    dias_antiguedad = max(0, (fecha_objetivo - ultima_fecha_date).days)
+    es_desactualizado = dias_antiguedad > 14
+    historial_insuficiente = len(historial_hora) < 15
+    calidad_minima_historial = bool((not es_desactualizado) and (not historial_insuficiente))
+    modo_demostracion = not calidad_minima_historial
+
+    motivos_advertencia = []
+    if es_desactualizado:
+        motivos_advertencia.append(
+            f"El último registro disponible tiene {dias_antiguedad} días de desfase "
+            f"respecto a la fecha consultada ({ultima_fecha_date.isoformat()}), superando el criterio operativo mínimo de 14 días. "
+            "Las variables de rezago ('día anterior' y 'últimos 5 días') no reflejan la dinámica reciente del recinto."
+        )
+    if historial_insuficiente:
+        motivos_advertencia.append(
+            f"El historial disponible contiene solo {len(historial_hora)} fechas "
+            "(criterio operativo mínimo: 15 fechas para cálculo representativo de rezagos y promedios móviles)."
+        )
+
     contexto = {
         "fecha": fecha_objetivo.isoformat(),
         "hora": hora_objetivo,
@@ -262,10 +298,16 @@ def construir_variables_afluencia(
             len(historial_hora)
         ),
         "ultima_fecha_disponible": (
-            historial_hora["Fecha"]
-            .iloc[-1]
-            .isoformat()
-        )
+            ultima_fecha_date.isoformat()
+        ),
+        "dias_antiguedad_ultimo_registro": int(dias_antiguedad),
+        "es_desactualizado": es_desactualizado,
+        "historial_insuficiente": historial_insuficiente,
+        "calidad_minima_historial": calidad_minima_historial,
+        "criterio_justificado_por_evaluacion": False,
+        "confiable": calidad_minima_historial,
+        "modo_demostracion": modo_demostracion,
+        "motivos_advertencia": motivos_advertencia
     }
 
     return variables, contexto
