@@ -292,13 +292,13 @@
                 <p class="text-xs text-slate-400 mt-1">Seleccione otra sede o intente consultar nuevamente más adelante.</p>
             </div>
 
-            <div id="historial-advertencia-limitado" class="hidden bg-amber-50 border border-amber-200 rounded-lg p-3.5 flex items-start gap-3">
-                <i class="ph ph-warning-circle text-amber-600 text-lg shrink-0 mt-0.5"></i>
-                <p class="text-xs text-amber-800 font-medium">El historial disponible es limitado; la distribución debe interpretarse de forma referencial.</p>
+            <div id="historial-aviso-fuera-horario" class="hidden bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs text-slate-700 flex items-start gap-2.5">
+                <i class="ph ph-clock text-slate-500 text-base shrink-0 mt-0.5"></i>
+                <div id="historial-texto-fuera-horario"></div>
             </div>
 
             <p class="text-[11px] text-slate-400 italic">
-                La gráfica utiliza la hora almacenada en la base de datos para mantener compatibilidad con el modelo entrenado.
+                La gráfica consolida el horario habitual de atención (08:00 a 20:00) para mantener coherencia con el modelo predictivo.
             </p>
         </div>
     </section>
@@ -476,7 +476,7 @@
                 : `${consulta.fechas_historicas} fechas`;
         document.getElementById("dato-ultima-fecha").textContent =
             (consulta.dias_antiguedad_ultimo_registro !== undefined && consulta.dias_antiguedad_ultimo_registro > 0)
-                ? `${consulta.ultima_fecha_disponible} (hace ${consulta.dias_antiguedad_ultimo_registro} días)`
+                ? `${consulta.ultima_fecha_disponible} (${consulta.dias_antiguedad_ultimo_registro} días antes de la fecha objetivo)`
                 : (consulta.ultima_fecha_disponible || "No disponible");
 
         // Advertencia por historial limitado o desactualizado
@@ -768,16 +768,26 @@
         if (elFechas) elFechas.textContent = `${fechasConDatos} fechas`;
 
         const elTotal = document.getElementById("historial-dato-total");
-        if (elTotal) elTotal.textContent = `${datos.total_ingresos_periodo || 0} ingresos`;
+        if (elTotal) {
+            if (datos.registros_fuera_horario && datos.registros_fuera_horario.total > 0) {
+                elTotal.textContent = `${datos.total_ingresos_periodo || 0} ingresos (+${datos.registros_fuera_horario.total} fuera de horario excluidos)`;
+            } else {
+                elTotal.textContent = `${datos.total_ingresos_periodo || 0} ingresos`;
+            }
+        }
 
         const elSede = document.getElementById("historial-dato-sede");
         if (elSede) elSede.textContent = datos.sede || "—";
 
-        if (advLimitado) {
-            if (fechasConDatos > 0 && fechasConDatos < 15) {
-                advLimitado.classList.remove("hidden");
+        const avisoFueraHorario = document.getElementById("historial-aviso-fuera-horario");
+        const textoFueraHorario = document.getElementById("historial-texto-fuera-horario");
+        if (avisoFueraHorario && textoFueraHorario) {
+            if (datos.registros_fuera_horario && datos.registros_fuera_horario.total > 0) {
+                const det = datos.registros_fuera_horario.detalle.map(d => `${d.cantidad} a las ${d.etiqueta}`).join(", ");
+                textoFueraHorario.innerHTML = `<strong>Criterio de horario aplicado:</strong> La gráfica consolida exclusivamente el horario habitual de atención (08:00 a 20:00). Se detectaron <strong>${datos.registros_fuera_horario.total} registros fuera de horario</strong> (${det}), catalogados como registros atípicos de prueba y excluidos de la distribución operativa.`;
+                avisoFueraHorario.classList.remove("hidden");
             } else {
-                advLimitado.classList.add("hidden");
+                avisoFueraHorario.classList.add("hidden");
             }
         }
 

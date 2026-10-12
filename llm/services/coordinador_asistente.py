@@ -684,10 +684,16 @@ def procesar_pregunta(
             nivel = pred_res["prediccion"]["nivel"]
             if pred_res.get("prediccion", {}).get("modo_demostracion"):
                 dias_ant = pred_res.get("consulta", {}).get("dias_antiguedad_ultimo_registro", 0)
+                ult_fecha_txt = pred_res.get("consulta", {}).get("ultima_fecha_disponible", "")
+                try:
+                    from datetime import datetime as dt
+                    ult_f_corta = dt.strptime(ult_fecha_txt, "%Y-%m-%d").strftime("%d/%m")
+                except Exception:
+                    ult_f_corta = ult_fecha_txt
                 msg = (
                     f"Predicción de afluencia para el {fecha_efectiva} a las {hora_int}:00 en la sede {sede_efectiva}: "
-                    f"Nivel {nivel}. (Aviso: resultado en modo demostración; el historial tiene {dias_ant} días de desfase "
-                    "y no es confiable para uso operativo)."
+                    f"Nivel {nivel}. (Aviso: resultado en modo demostración; el último registro es del {ult_f_corta} y está "
+                    f"{dias_ant} días antes de la fecha objetivo, por lo que no es confiable para uso operativo)."
                 )
             else:
                 msg = f"Predicción de afluencia para el {fecha_efectiva} a las {hora_int}:00 en la sede {sede_efectiva}: Nivel {nivel}."

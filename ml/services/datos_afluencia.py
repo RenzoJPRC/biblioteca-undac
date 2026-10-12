@@ -279,10 +279,14 @@ def construir_variables_afluencia(
 
     motivos_advertencia = []
     if es_desactualizado:
+        f_ult_corta = ultima_fecha_date.strftime("%d/%m")
+        f_ult_fmt = ultima_fecha_date.strftime("%d/%m/%Y")
+        f_obj_fmt = fecha_objetivo.strftime("%d/%m/%Y")
         motivos_advertencia.append(
-            f"El último registro disponible tiene {dias_antiguedad} días de desfase "
-            f"respecto a la fecha consultada ({ultima_fecha_date.isoformat()}), superando el criterio operativo mínimo de 14 días. "
-            "Las variables de rezago ('día anterior' y 'últimos 5 días') no reflejan la dinámica reciente del recinto."
+            f"El último registro en base de datos es del {f_ult_corta} ({f_ult_fmt}) y está "
+            f"{dias_antiguedad} días antes de la fecha objetivo consultada ({f_obj_fmt}), "
+            "superando el criterio operativo máximo de 14 días. Las variables de rezago ('día anterior' y 'últimos 5 días') "
+            "no reflejan la dinámica reciente del recinto."
         )
     if historial_insuficiente:
         motivos_advertencia.append(
@@ -358,10 +362,17 @@ def obtener_historial_afluencia_periodo(sede="Central", dias=30):
                 "fecha_fin": None,
                 "fechas_con_datos": 0,
                 "total_ingresos_periodo": 0,
+                "total_ingresos_fuera_horario": 0,
                 "horas": [],
                 "totales": [],
                 "promedios": [],
-                "referencia_horaria": "Hora almacenada en la base de datos"
+                "criterio_horario": "Horario habitual de atención (08:00 a 20:00)",
+                "registros_fuera_horario": {
+                    "total": 0,
+                    "criterio_aplicado": "Excluidos del gráfico operativo por encontrarse fuera del horario habitual de atención (08:00 a 20:00).",
+                    "detalle": []
+                },
+                "referencia_horaria": "Hora almacenada en la base de datos (horario habitual de 08:00 a 20:00)"
             }
 
         if isinstance(ultima_fecha, datetime):
@@ -403,17 +414,26 @@ def obtener_historial_afluencia_periodo(sede="Central", dias=30):
             "fecha_fin": fecha_fin.isoformat(),
             "fechas_con_datos": 0,
             "total_ingresos_periodo": 0,
+            "total_ingresos_fuera_horario": 0,
             "horas": [],
             "totales": [],
             "promedios": [],
-            "referencia_horaria": "Hora almacenada en la base de datos"
+            "criterio_horario": "Horario habitual de atención (08:00 a 20:00)",
+            "registros_fuera_horario": {
+                "total": 0,
+                "criterio_aplicado": "Excluidos del gráfico operativo por encontrarse fuera del horario habitual de atención (08:00 a 20:00).",
+                "detalle": []
+            },
+            "referencia_horaria": "Hora almacenada en la base de datos (horario habitual de 08:00 a 20:00)"
         }
 
     fechas_unicas = set(f[0] for f in filas)
     fechas_con_datos = len(fechas_unicas)
 
-    horas_registradas = set(int(f[1]) for f in filas)
-    horas = sorted(list(set(range(8, 21)).union(horas_registradas)))
+    # El horario configurado para la biblioteca y el modelo predictivo es 08:00 a 20:00 (HORAS_PERMITIDAS).
+    # Se excluyen del gráfico operativo los registros atípicos fuera de ese rango (p. ej. 01:00 o 21:00)
+    # y se presentan de forma explícita en registros_fuera_horario indicando el criterio aplicado.
+    horas = list(HORAS_PERMITIDAS)
 
     totales = []
     promedios = []
@@ -426,6 +446,19 @@ def obtener_historial_afluencia_periodo(sede="Central", dias=30):
 
     total_ingresos_periodo = sum(totales)
 
+    # Identificar y agrupar registros fuera del horario habitual (08:00 a 20:00)
+    filas_fuera_horario = [f for f in filas if int(f[1]) not in HORAS_PERMITIDAS]
+    horas_fuera = sorted(list(set(int(f[1]) for f in filas_fuera_horario)))
+    detalle_fuera = []
+    for h_f in horas_fuera:
+        cant_hf = sum(int(f[2]) for f in filas_fuera_horario if int(f[1]) == h_f)
+        detalle_fuera.append({
+            "hora": h_f,
+            "etiqueta": f"{h_f:02d}:00",
+            "cantidad": cant_hf
+        })
+    total_fuera = sum(d["cantidad"] for d in detalle_fuera)
+
     return {
         "status": "success",
         "sede": sede,
@@ -434,10 +467,20 @@ def obtener_historial_afluencia_periodo(sede="Central", dias=30):
         "fecha_fin": fecha_fin.isoformat(),
         "fechas_con_datos": fechas_con_datos,
         "total_ingresos_periodo": total_ingresos_periodo,
+        "total_ingresos_fuera_horario": total_fuera,
         "horas": horas,
         "totales": totales,
         "promedios": promedios,
-        "referencia_horaria": "Hora almacenada en la base de datos"
+        "criterio_horario": "Horario habitual de atención (08:00 a 20:00)",
+        "registros_fuera_horario": {
+            "total": total_fuera,
+            "criterio_aplicado": (
+                "Excluidos del gráfico operativo por registrarse fuera del horario habitual "
+                "de atención de la biblioteca (08:00 a 20:00)."
+            ),
+            "detalle": detalle_fuera
+        },
+        "referencia_horaria": "Hora almacenada en la base de datos (horario habitual de 08:00 a 20:00)"
     }
 
 

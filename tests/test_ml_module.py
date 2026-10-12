@@ -523,8 +523,11 @@ class TestModuloMachineLearning(unittest.TestCase):
             self.assertTrue(resultado["prediccion"]["modo_demostracion"])
             self.assertFalse(resultado["prediccion"]["confiable"])
             self.assertTrue(resultado["consulta"]["es_desactualizado"])
-            self.assertGreater(resultado["consulta"]["dias_antiguedad_ultimo_registro"], 14)
+            self.assertEqual(resultado["consulta"]["dias_antiguedad_ultimo_registro"], 33)
             self.assertIn("MODO DEMOSTRACIÓN - NO CONFIABLE", resultado["advertencia"])
+            self.assertIn("el último registro es del 28/09 y está 33 días antes de la fecha objetivo 2026-10-31", resultado["advertencia"])
+            self.assertIn("El último registro en base de datos es del 28/09", resultado["consulta"]["motivos_advertencia"][0])
+            self.assertIn("está 33 días antes de la fecha objetivo consultada", resultado["consulta"]["motivos_advertencia"][0])
 
     def test_27_prediccion_historial_insuficiente_marca_modo_demostracion(self):
         """Predicción con menos de 15 fechas debe marcar historial insuficiente y modo demostración."""
@@ -626,6 +629,46 @@ class TestModuloMachineLearning(unittest.TestCase):
                 variables["TendenciaReciente"],
                 variables["PromedioMovil5"] - variables["IngresosCincoDiasAntes"]
             )
+
+    def test_30_historial_excluye_y_reporta_registros_fuera_horario(self):
+        """Verificar que el historial excluya del gráfico operativo (08:00 a 20:00) los ingresos atípicos a las 01:00 y 21:00 y los reporte explícitamente."""
+        from datetime import date
+        from ml.services.datos_afluencia import obtener_historial_afluencia_periodo
+
+        # Simular registros para el 28/09/2026 con horas habituales (10:00, 14:00) y fuera de horario (01:00, 21:00)
+        filas_mock = [
+            ("2026-09-28", 1, 1),
+            ("2026-09-28", 10, 3),
+            ("2026-09-28", 14, 2),
+            ("2026-09-28", 21, 1)
+        ]
+
+        with patch("ml.services.datos_afluencia.get_db_cursor") as mock_db:
+            mock_cursor = MagicMock()
+            mock_db.return_value.__enter__.return_value = (MagicMock(), mock_cursor)
+            mock_cursor.fetchone.return_value = (date(2026, 9, 28),)
+            mock_cursor.fetchall.return_value = filas_mock
+
+            resultado = obtener_historial_afluencia_periodo(sede="Central", dias=30)
+
+            self.assertEqual(resultado["status"], "success")
+            # El arreglo de horas del gráfico debe contener estrictamente las 13 horas habituales (08:00 a 20:00)
+            self.assertEqual(resultado["horas"], list(range(8, 21)))
+            self.assertNotIn(1, resultado["horas"])
+            self.assertNotIn(21, resultado["horas"])
+
+            # El total en horario habitual debe ser 5 (3 + 2)
+            self.assertEqual(resultado["total_ingresos_periodo"], 5)
+            # El total fuera de horario debe ser 2 (1 a las 01:00 + 1 a las 21:00)
+            self.assertEqual(resultado["total_ingresos_fuera_horario"], 2)
+
+            # Verificar reporte explícito de registros fuera de horario
+            fuera = resultado["registros_fuera_horario"]
+            self.assertEqual(fuera["total"], 2)
+            self.assertIn("Excluidos del gráfico operativo", fuera["criterio_aplicado"])
+            self.assertEqual(len(fuera["detalle"]), 2)
+            self.assertEqual(fuera["detalle"][0], {"hora": 1, "etiqueta": "01:00", "cantidad": 1})
+            self.assertEqual(fuera["detalle"][1], {"hora": 21, "etiqueta": "21:00", "cantidad": 1})
 
 
 if __name__ == "__main__":
