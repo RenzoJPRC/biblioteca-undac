@@ -1,3 +1,4 @@
+import os
 import unittest
 from unittest.mock import patch, MagicMock
 from datetime import datetime, date
@@ -6,6 +7,13 @@ from llm.services.coordinador_asistente import procesar_pregunta
 
 
 class TestCoordinadorAsistente(unittest.TestCase):
+
+    def setUp(self):
+        self._env_patch = patch.dict(os.environ, {"LLM_ACTIVADO": "false"})
+        self._env_patch.start()
+
+    def tearDown(self):
+        self._env_patch.stop()
 
     # 1. PREGUNTA VACÍA
     def test_01_pregunta_vacia(self):
@@ -649,6 +657,346 @@ class TestCoordinadorAsistente(unittest.TestCase):
         ]
         for c in campos_prohibidos:
             self.assertNotIn(c, ctx, f"Campo prohibido '{c}' encontrado en el contexto")
+
+    # 43. CONTEO DE INGRESOS DE ALUMNO POR CÓDIGO
+    @patch("llm.services.coordinador_asistente.contar_ingresos_alumno_por_codigo")
+    def test_43_procesar_pregunta_conteo_ingresos_alumno(self, mock_conteo):
+        mock_conteo.return_value = {
+            "status": "success",
+            "codigo_mascarado": "20******56",
+            "total_ingresos": 4,
+            "dias_con_visita": 3,
+            "primer_ingreso": "2026-04-15T10:30:00",
+            "ultimo_ingreso": "2026-05-20T16:45:00",
+            "cobertura_sistema": {
+                "fecha_minima": "2026-04-10",
+                "fecha_maxima": "2026-09-28",
+                "total_visitas_sistema": 38
+            },
+            "mensaje": "El alumno con código 20******56 registra 4 ingreso(s). Nota de cobertura: sistema cubre 2026-04-10 a 2026-09-28."
+        }
+
+        res = procesar_pregunta(
+            "¿Cuántas veces ingresó el alumno con código 2021123456 del 2026-04-10 al 2026-05-30?",
+            rol="SuperAdmin"
+        )
+        self.assertEqual(res["status"], "success")
+        self.assertEqual(res["intencion"], "conteo_ingresos_alumno")
+        self.assertIn("4 ingreso(s)", res["mensaje"])
+        self.assertIn("2026-04-10 a 2026-09-28", res["mensaje"])
+        mock_conteo.assert_called_once()
+
+    # 44. CONTEO DE INGRESOS DE ALUMNO BLOQUEA ROL CONSULTOR
+    def test_44_procesar_pregunta_conteo_ingresos_alumno_bloquea_consultor(self):
+        res = procesar_pregunta(
+            "¿Cuántas veces ingresó el alumno con código 2021123456?",
+            rol="Consultor"
+        )
+        self.assertEqual(res["status"], "error")
+        self.assertEqual(res["codigo_http"], 403)
+        self.assertEqual(res["categoria_error"], "permiso")
+        self.assertIn("Acceso denegado", res["mensaje"])
+
+    # 45. PREGUNTA REPRESENTATIVA: AFLUENCIA HISTÓRICA EN SEDE CENTRAL CON RANGO
+    @patch("llm.services.coordinador_asistente.consultar_afluencia_historica")
+    def test_45_pregunta_representativa_afluencia_historica_central(self, mock_afluencia):
+        mock_afluencia.return_value = {
+            "status": "success",
+            "herramienta": "consulta_afluencia_historica",
+            "periodo": {"fecha_inicio": "2026-05-01", "fecha_fin": "2026-05-31", "dias_calendario": 31},
+            "sede": "Central",
+            "fuente": "Tabla analítica AfluenciaHistoricaAgregada (procedencia: 02_ingresos_reales_actual.csv)",
+            "limites_cobertura": {
+                "fecha_minima_sistema": "2026-04-10",
+                "fecha_maxima_sistema": "2026-09-28",
+                "horario_operativo": "08:00 a 20:45 (lunes a viernes)",
+                "franja_20h_parcial": "20:00 a 20:45 (45 minutos por apagado del servidor)",
+                "sedes_con_historial_suficiente": ["Central"],
+                "sedes_con_datos_insuficientes": ["Tarma", "La Merced", "Oxapampa", "Paucartambo", "Yanahuanca"]
+            },
+            "metricas": {
+                "total_ingresos": 7820,
+                "franjas_observadas": 240,
+                "dias_con_registros": 20,
+                "promedio_por_dia_activo": 391.0,
+                "promedio_por_franja_observada": 32.58,
+                "franjas_parciales_20h": 20,
+                "ingresos_franjas_parciales_20h": 410,
+                "horas_top": []
+            },
+            "interpretacion_franjas_no_observadas": {
+                "asume_cero": False,
+                "aviso": "Las franjas no observadas corresponden a intervalos no registrados en el archivo fuente y NO se asumen como cero visitas."
+            },
+            "mensaje": "Consulta descriptiva de afluencia histórica para la sede Central del 2026-05-01 al 2026-05-31: Total de 7820 ingresos. Fuente: Tabla analítica AfluenciaHistoricaAgregada. Límites de cobertura: Registros disponibles entre 2026-04-10 y 2026-09-28. Aviso: Las franjas no observadas NO se interpretan automáticamente como cero ingresos."
+        }
+
+        res = procesar_pregunta(
+            "Consulta descriptiva de afluencia histórica del 2026-05-01 al 2026-05-31 en sede Central",
+            rol="SuperAdmin"
+        )
+        self.assertEqual(res["status"], "success")
+        self.assertEqual(res["intencion"], "afluencia_historica")
+        self.assertEqual(res["sede_aplicada"], "Central")
+        self.assertEqual(res["periodo"]["fecha_inicio"], "2026-05-01")
+        self.assertEqual(res["periodo"]["fecha_fin"], "2026-05-31")
+        self.assertIn("AfluenciaHistoricaAgregada", res["fuente"])
+        self.assertEqual(res["limites_cobertura"]["sedes_con_historial_suficiente"], ["Central"])
+        self.assertFalse(res["datos"]["interpretacion_franjas_no_observadas"]["asume_cero"])
+        mock_afluencia.assert_called_once_with(
+            fecha_inicio="2026-05-01",
+            fecha_fin="2026-05-31",
+            sede="Central",
+            rol="SuperAdmin",
+            sede_permitida=None
+        )
+
+    # 46. PREGUNTA REPRESENTATIVA: AFLUENCIA HISTÓRICA EN TARMA DEVUELVE DATOS INSUFICIENTES
+    @patch("llm.services.coordinador_asistente.consultar_afluencia_historica")
+    def test_46_pregunta_representativa_afluencia_historica_tarma_insuficiente(self, mock_afluencia):
+        mock_afluencia.side_effect = ValueError(
+            "Historial insuficiente: La sede 'Tarma' cuenta con 1 fecha(s) operativa(s) registrada(s) "
+            "en la base histórica analítica, no alcanzando el mínimo configurado de 15 fechas operativas "
+            "para generar un análisis confiable. No se completa con registros de prueba de RegistroIngresos."
+        )
+
+        res = procesar_pregunta(
+            "Consulta descriptiva de afluencia histórica en Tarma del 2026-05-01 al 2026-05-31",
+            rol="SuperAdmin"
+        )
+        self.assertEqual(res["status"], "error")
+        self.assertEqual(res["categoria_error"], "datos_insuficientes")
+        self.assertEqual(res["codigo_http"], 400)
+        self.assertEqual(res["datos"]["estado"], "datos_insuficientes")
+        self.assertEqual(res["datos"]["sede"], "Tarma")
+        self.assertIn("Historial insuficiente", res["mensaje"])
+        self.assertIn("Tarma", res["mensaje"])
+
+    # 47. PREGUNTA REPRESENTATIVA: AFLUENCIA HISTÓRICA EN LA MERCED DEVUELVE DATOS INSUFICIENTES
+    @patch("llm.services.coordinador_asistente.consultar_afluencia_historica")
+    def test_47_pregunta_representativa_afluencia_historica_la_merced_insuficiente(self, mock_afluencia):
+        mock_afluencia.side_effect = ValueError(
+            "Historial insuficiente: La sede 'La Merced' cuenta con 0 fecha(s) operativa(s) registrada(s) "
+            "en la base histórica analítica, no alcanzando el mínimo configurado de 15 fechas operativas."
+        )
+
+        res = procesar_pregunta(
+            "Consulta descriptiva de afluencia histórica en sede La Merced",
+            rol="SuperAdmin"
+        )
+        self.assertEqual(res["status"], "error")
+        self.assertEqual(res["categoria_error"], "datos_insuficientes")
+        self.assertEqual(res["codigo_http"], 400)
+        self.assertEqual(res["datos"]["estado"], "datos_insuficientes")
+
+    # 48. PREGUNTA REPRESENTATIVA: COMPORTAMIENTO HISTÓRICO SIN FECHAS ASIGNA COBERTURA COMPLETA
+    @patch("llm.services.coordinador_asistente.consultar_afluencia_historica")
+    def test_48_pregunta_representativa_comportamiento_historico_default_fechas(self, mock_afluencia):
+        mock_afluencia.return_value = {
+            "status": "success",
+            "periodo": {"fecha_inicio": "2026-04-10", "fecha_fin": "2026-09-28", "dias_calendario": 172},
+            "sede": "Central",
+            "fuente": "Tabla analítica AfluenciaHistoricaAgregada",
+            "limites_cobertura": {"sedes_con_historial_suficiente": ["Central"]},
+            "metricas": {"total_ingresos": 32779, "franjas_observadas": 1024},
+            "interpretacion_franjas_no_observadas": {"asume_cero": False},
+            "mensaje": "Comportamiento histórico sede Central."
+        }
+
+        res = procesar_pregunta(
+            "¿Cuál es el comportamiento histórico de afluencia en Central?",
+            rol="SuperAdmin"
+        )
+        self.assertEqual(res["status"], "success")
+        self.assertEqual(res["intencion"], "afluencia_historica")
+        self.assertEqual(res["periodo"]["fecha_inicio"], "2026-04-10")
+        self.assertEqual(res["periodo"]["fecha_fin"], "2026-09-28")
+        mock_afluencia.assert_called_once_with(
+            fecha_inicio="2026-04-10",
+            fecha_fin="2026-09-28",
+            sede="Central",
+            rol="SuperAdmin",
+            sede_permitida=None
+        )
+
+    # 49. VALIDACIÓN DE FECHAS EN AFLUENCIA HISTÓRICA (FECHAS INVERTIDAS)
+    @patch("llm.services.coordinador_asistente.consultar_afluencia_historica")
+    def test_49_afluencia_historica_fechas_invertidas_error_validacion(self, mock_afluencia):
+        mock_afluencia.side_effect = ValueError("La fecha de inicio debe ser anterior o igual a la fecha de fin.")
+
+        res = procesar_pregunta(
+            "Consulta descriptiva de afluencia histórica del 2026-06-01 al 2026-05-01 en sede Central",
+            rol="SuperAdmin"
+        )
+        self.assertEqual(res["status"], "error")
+        self.assertEqual(res["categoria_error"], "validacion")
+        self.assertEqual(res["codigo_http"], 400)
+        self.assertIn("anterior o igual", res["mensaje"])
+
+    # 50. PREGUNTA REPRESENTATIVA: PRONÓSTICO DE AFLUENCIA EN CENTRAL ÉXITO
+    @patch("llm.services.coordinador_asistente.predecir_afluencia_desde_bd")
+    def test_50_pregunta_representativa_pronostico_central_exito(self, mock_predecir):
+        mock_predecir.return_value = {
+            "status": "success",
+            "periodo": {"fecha": "2026-10-15", "hora": 10},
+            "sede": "Central",
+            "fuente": "Tabla analítica AfluenciaHistoricaAgregada y modelo ML HistGradientBoosting (metadatos_modelo_afluencia.json)",
+            "limites_cobertura": {
+                "fecha_minima_sistema": "2026-04-10",
+                "fecha_maxima_sistema": "2026-09-28",
+                "horario_operativo": "08:00 a 20:45 (lunes a viernes)",
+                "franja_20h_parcial": "20:00 a 20:45 (45 minutos por apagado del servidor)",
+                "sedes_con_historial_suficiente": ["Central"],
+                "sedes_con_datos_insuficientes": ["Tarma", "La Merced", "Oxapampa", "Paucartambo", "Yanahuanca"]
+            },
+            "prediccion": {
+                "nivel": "Medio",
+                "probabilidades": {"Alto": 0.1, "Bajo": 0.2, "Medio": 0.7},
+                "version_modelo": "1.0.0",
+                "calidad_minima_historial": True,
+                "confiable": True,
+                "modo_demostracion": False,
+                "es_franja_parcial": False,
+                "duracion_minutos": 60
+            },
+            "consulta": {"fecha": "2026-10-15", "hora": 10, "sede": "Central", "ultima_fecha_disponible": "2026-09-28"},
+            "variables_modelo": {},
+            "advertencia": ""
+        }
+
+        res = procesar_pregunta(
+            "¿Cuál será el nivel de afluencia en Central para el 2026-10-15 a las 10:00?",
+            rol="SuperAdmin"
+        )
+        self.assertEqual(res["status"], "success")
+        self.assertEqual(res["intencion"], "prediccion_afluencia")
+        self.assertEqual(res["sede_aplicada"], "Central")
+        self.assertEqual(res["periodo"]["fecha"], "2026-10-15")
+        self.assertEqual(res["periodo"]["hora"], 10)
+        self.assertIn("AfluenciaHistoricaAgregada", res["fuente"])
+        self.assertEqual(res["limites_cobertura"]["sedes_con_historial_suficiente"], ["Central"])
+        self.assertIn("Nivel Medio", res["mensaje"])
+        self.assertIn("Fuente:", res["mensaje"])
+        self.assertIn("Límites de cobertura:", res["mensaje"])
+
+    # 51. PREGUNTA REPRESENTATIVA: PRONÓSTICO EN TARMA DEVUELVE DATOS INSUFICIENTES
+    @patch("llm.services.coordinador_asistente.predecir_afluencia_desde_bd")
+    def test_51_pregunta_representativa_pronostico_tarma_datos_insuficientes(self, mock_predecir):
+        mock_predecir.side_effect = ValueError(
+            "Historial insuficiente: La sede 'Tarma' cuenta con 1 fecha(s) operativa(s) registrada(s) "
+            "en la base histórica analítica, no alcanzando el mínimo configurado de 15 fechas operativas "
+            "para generar un pronóstico confiable. No se completa con registros de prueba de RegistroIngresos."
+        )
+
+        res = procesar_pregunta(
+            "Pronóstico de afluencia en Tarma para el 2026-10-15 a las 10:00",
+            rol="SuperAdmin"
+        )
+        self.assertEqual(res["status"], "error")
+        self.assertEqual(res["categoria_error"], "datos_insuficientes")
+        self.assertEqual(res["codigo_http"], 400)
+        self.assertEqual(res["datos"]["estado"], "datos_insuficientes")
+        self.assertEqual(res["datos"]["sede"], "Tarma")
+        self.assertIn("Historial insuficiente", res["mensaje"])
+
+    # 52. PREGUNTA REPRESENTATIVA: PRONÓSTICO EN OTRA SEDE (OXAPAMPA) DEVUELVE DATOS INSUFICIENTES
+    @patch("llm.services.coordinador_asistente.predecir_afluencia_desde_bd")
+    def test_52_pregunta_representativa_pronostico_oxapampa_datos_insuficientes(self, mock_predecir):
+        mock_predecir.side_effect = ValueError(
+            "Historial insuficiente: La sede 'Oxapampa' no cuenta con datos históricos suficientes "
+            "para generar un pronóstico confiable (requiere al menos 15 fechas operativas registradas)."
+        )
+
+        res = procesar_pregunta(
+            "¿Cuál será el pronóstico de afluencia en Oxapampa para el 2026-10-15 a las 14:00?",
+            rol="SuperAdmin"
+        )
+        self.assertEqual(res["status"], "error")
+        self.assertEqual(res["categoria_error"], "datos_insuficientes")
+        self.assertEqual(res["codigo_http"], 400)
+        self.assertEqual(res["datos"]["estado"], "datos_insuficientes")
+        self.assertEqual(res["datos"]["sede"], "Oxapampa")
+
+    # 53. VALIDACIÓN DE SEDE INVÁLIDA EN PRONÓSTICO
+    def test_53_pronostico_sede_invalida_error_validacion(self):
+        res = procesar_pregunta(
+            "¿Cuál será el nivel de afluencia?",
+            rol="SuperAdmin",
+            sede="SedeInexistente",
+            fecha="2026-10-15",
+            hora=10
+        )
+        self.assertEqual(res["status"], "error")
+        self.assertEqual(res["categoria_error"], "validacion")
+        self.assertEqual(res["codigo_http"], 400)
+        self.assertIn("no es válida", res["mensaje"])
+
+    # 54. PREGUNTA REPRESENTATIVA: CONSULTA POR ALUMNO EXCLUYE 38 FILAS DE PRUEBA Y NO ATRIBUYE AGREGADOS
+    @patch("llm.services.coordinador_asistente.contar_ingresos_alumno_por_codigo")
+    def test_54_pregunta_representativa_alumno_excluye_pruebas_y_comunica_cero_reales(self, mock_conteo):
+        mock_conteo.return_value = {
+            "status": "success",
+            "codigo_mascarado": "20******56",
+            "total_ingresos": 0,
+            "dias_con_visita": 0,
+            "primer_ingreso": None,
+            "ultimo_ingreso": None,
+            "escuela": "",
+            "periodo_consultado": {"fecha_inicio": None, "fecha_fin": None},
+            "fuente": "RegistroIngresos (registros individuales de acceso por carnet/DNI)",
+            "cobertura_sistema": {
+                "fecha_minima": "2026-04-10",
+                "fecha_maxima": "2026-09-28",
+                "total_visitas_sistema": 38,
+                "total_pruebas_excluidas": 38,
+                "total_visitas_reales": 0,
+                "aviso": "Los registros individuales del sistema corresponden al periodo 2026-04-10 a 2026-09-28."
+            },
+            "mensaje": (
+                "No se encontraron ingresos reales registrados para el alumno con código 20******56 en el historial disponible. "
+                "Nota de auditoría: El sistema contiene 0 visitas reales registradas (aún no hay visitas individuales reales registradas en el sistema). "
+                "Se identificaron y excluyeron 38 registros manuales de prueba para garantizar la veracidad del conteo. "
+                "No se generan registros ni se atribuyen alumnos a los conteos agregados de molinetes."
+            )
+        }
+
+        res = procesar_pregunta(
+            "¿Cuántas veces ingresó el alumno 2021123456?",
+            rol="SuperAdmin"
+        )
+        self.assertEqual(res["status"], "success")
+        self.assertEqual(res["intencion"], "conteo_ingresos_alumno")
+        self.assertEqual(res["datos"]["total_ingresos"], 0)
+        self.assertIn("aún no hay visitas individuales reales registradas en el sistema", res["mensaje"])
+        self.assertIn("excluyeron 38 registros manuales de prueba", res["mensaje"])
+        self.assertIn("No se generan registros ni se atribuyen alumnos a los conteos agregados", res["mensaje"])
+        self.assertIn("RegistroIngresos", res["fuente"])
+        self.assertEqual(res["limites_cobertura"]["total_pruebas_excluidas"], 38)
+        self.assertEqual(res["limites_cobertura"]["total_visitas_reales"], 0)
+
+    # 55. SUPERVISOR ASIGNADO A TARMA EN AFLUENCIA HISTÓRICA FORZADO Y DEVUELVE DATOS INSUFICIENTES
+    @patch("llm.services.coordinador_asistente.consultar_afluencia_historica")
+    def test_55_supervisor_tarma_afluencia_historica_devuelve_datos_insuficientes(self, mock_afluencia):
+        mock_afluencia.side_effect = ValueError(
+            "Historial insuficiente: La sede 'Tarma' cuenta con 1 fecha(s) operativa(s) registrada(s)..."
+        )
+
+        res = procesar_pregunta(
+            "Consulta descriptiva de afluencia histórica del 2026-05-01 al 2026-05-31",
+            rol="Supervisor",
+            sede_permitida="Tarma"
+        )
+        self.assertEqual(res["status"], "error")
+        self.assertEqual(res["categoria_error"], "datos_insuficientes")
+        self.assertEqual(res["codigo_http"], 400)
+        self.assertEqual(res["sede_aplicada"], "Tarma")
+        mock_afluencia.assert_called_once_with(
+            fecha_inicio="2026-05-01",
+            fecha_fin="2026-05-31",
+            sede="Tarma",
+            rol="Supervisor",
+            sede_permitida="Tarma"
+        )
 
 
 if __name__ == "__main__":
