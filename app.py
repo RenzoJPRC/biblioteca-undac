@@ -123,7 +123,7 @@ def requerir_login_admin():
 
     debe_validar_csrf = (
         (request.method in METODOS_PROTEGIDOS and not request.path.startswith("/admin/api"))
-        or (request.method == "POST" and request.path in ["/admin/api/ml/predecir-afluencia", "/admin/api/asistente/consultar"])
+        or (request.method == "POST" and request.path in ["/admin/api/ml/predecir-afluencia", "/admin/api/ml/predecir-retorno", "/admin/api/asistente/consultar"])
     )
 
     if debe_validar_csrf:
@@ -143,7 +143,11 @@ def requerir_login_admin():
             "/admin/api/ml/informacion",
             "/admin/api/ml/historial-afluencia",
             "/admin/api/ml/predecir-afluencia",
+            "/admin/api/ml/analisis-individual",
+            "/admin/api/ml/predecir-retorno",
+            "/admin/api/ml/retorno-informacion",
             "/admin/asistente",
+            "/admin/asistente/metricas",
             "/admin/api/asistente/consultar",
             "/admin/api/dashboard_data",
             "/admin/reporte_rango",
@@ -175,7 +179,7 @@ def requerir_login_admin():
     if session.get("admin_rol") == "Consultor":
         # La consulta predictiva de ML y del asistente son de solo lectura / consulta en el coordinador
         es_consulta_permitida = (
-            request.method == "POST" and request.path in ["/admin/api/ml/predecir-afluencia", "/admin/api/asistente/consultar"]
+            request.method == "POST" and request.path in ["/admin/api/ml/predecir-afluencia", "/admin/api/ml/predecir-retorno", "/admin/api/asistente/consultar"]
         )
 
         if request.method in METODOS_PROTEGIDOS and request.path not in ["/admin/login", "/admin/logout"] and not es_consulta_permitida:
@@ -183,6 +187,14 @@ def requerir_login_admin():
 
         RUTAS_PERMITIDAS_CONSULTOR = {
             "/admin/login",
+            "/admin/logout",
+            "/admin/ml",
+            "/admin/api/ml/informacion",
+            "/admin/api/ml/historial-afluencia",
+            "/admin/api/ml/predecir-afluencia",
+            "/admin/api/ml/analisis-individual",
+            "/admin/api/ml/retorno-informacion",
+            "/admin/api/ml/predecir-retorno",
             "/admin/logout",
             "/admin/ml",
             "/admin/api/ml/informacion",

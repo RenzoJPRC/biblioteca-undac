@@ -36,14 +36,68 @@ def vista_asistente():
     rol = session.get("admin_rol")
     sede_asignada = session.get("admin_sede", "Central")
 
-    if rol == "Supervisor":
-        sedes = [sede_asignada]
+    from llm.services.proveedor_llm import obtener_configuracion
+    config_llm = obtener_configuracion()
+    llm_activo = config_llm.esta_disponible
+    llm_proveedor = config_llm.proveedor if llm_activo else "local"
+    llm_modelo = config_llm.modelo if llm_activo else "reglas_locales"
 
     return render_template(
         "admin_asistente.html",
         sedes=sedes,
-        sede_asignada=sede_asignada
+        sede_asignada=sede_asignada,
+        llm_activo=llm_activo,
+        llm_proveedor=llm_proveedor,
+        llm_modelo=llm_modelo
     )
+
+
+@admin_asistente_bp.route("/asistente/metricas", methods=["GET"])
+def vista_metricas_asistente():
+    """
+    Panel administrativo independiente para 'Uso del asistente'.
+    Exclusivo para roles autorizados (SuperAdmin, Supervisor).
+    """
+    rol = session.get("admin_rol")
+    if not rol or rol not in ["SuperAdmin", "Supervisor"]:
+        return respuesta_error("Acceso denegado. Se requiere rol autorizado para acceder a las métricas del asistente.", 403, "permiso")
+
+    from llm.services.proveedor_llm import obtener_configuracion
+    from llm.services.metricas_asistente import obtener_gestor_metricas
+
+    config_llm = obtener_configuracion()
+    gestor = obtener_gestor_metricas()
+    resumen = gestor.obtener_resumen()
+
+    return render_template(
+        "admin_asistente_metricas.html",
+        metricas=resumen,
+        llm_activo=config_llm.esta_disponible,
+        llm_proveedor=config_llm.proveedor if config_llm.esta_disponible else "local",
+        llm_modelo=config_llm.modelo if config_llm.esta_disponible else "reglas_locales",
+        llm_api_base=config_llm.api_base,
+        llm_timeout=config_llm.timeout
+    )
+
+
+@admin_asistente_bp.route("/api/asistente/metricas", methods=["GET"])
+def api_metricas_asistente():
+    """
+    Endpoint JSON para consultar telemetría agregada y consumo de tokens.
+    Exclusivo para roles autorizados (SuperAdmin, Supervisor).
+    """
+    rol = session.get("admin_rol")
+    if not rol or rol not in ["SuperAdmin", "Supervisor"]:
+        return respuesta_error("Acceso denegado. Se requiere rol autorizado para acceder a las métricas del asistente.", 403, "permiso")
+
+    from llm.services.metricas_asistente import obtener_gestor_metricas
+    gestor = obtener_gestor_metricas()
+    resumen = gestor.obtener_resumen()
+
+    return jsonify({
+        "status": "success",
+        "datos": resumen
+    }), 200
 
 
 @admin_asistente_bp.route("/api/asistente/consultar", methods=["POST"])

@@ -30,6 +30,7 @@ Thumbs.db
 # Archivos temporales y datos
 temp_db_analysis/
 scratch/
+llm/data/
 *.xlsx
 *.xls
 *.csv
