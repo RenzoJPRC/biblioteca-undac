@@ -10,8 +10,8 @@ SEDES_VALIDAS = {
     "yanahuanca": "Yanahuanca"
 }
 
-CAMPOS_CONTEXTO_PERMITIDOS = {"intencion", "fecha_inicio", "fecha_fin", "fecha", "sede"}
-INTENCIONES_VALIDAS_CONTEXTO = {"resumen_ingresos", "horas_mayor_afluencia", "prediccion_afluencia"}
+CAMPOS_CONTEXTO_PERMITIDOS = {"intencion", "fecha_inicio", "fecha_fin", "fecha", "sede", "codigo_matricula"}
+INTENCIONES_VALIDAS_CONTEXTO = {"resumen_ingresos", "horas_mayor_afluencia", "prediccion_afluencia", "conteo_ingresos_alumno", "afluencia_historica"}
 CAMPOS_SENSIBLES_PROHIBIDOS = {
     "nombre", "texto_persona", "dni", "persona_id", "id", "persona",
     "candidato", "opciones", "historial", "registros", "ultimo_registro",
@@ -293,6 +293,24 @@ def extraer_nombre_persona(pregunta_original):
     return ""
 
 
+def extraer_codigo_matricula(pregunta_original):
+    """
+    Extrae un código de matrícula mencionado en la pregunta.
+    Formatos soportados: 'código 2020123456', 'código de matrícula 2020123456', etc.
+    """
+    if not pregunta_original:
+        return ""
+    m = re.search(r"\bc[oó]digo(?:\s+de\s+matr[ií]cula)?\s*[:#]?\s*([0-9a-zA-Z]{4,25})\b", pregunta_original, re.IGNORECASE)
+    if m:
+        c = m.group(1).strip()
+        if not re.match(r"^(de|del|para|por|en|un|una|el|la|los|las|alumno|alumna)$", c, re.IGNORECASE):
+            return c
+    m2 = re.search(r"\balumno\s+(?:con\s+c[oó]digo\s+)?([0-9]{4,20})\b", pregunta_original, re.IGNORECASE)
+    if m2:
+        return m2.group(1).strip()
+    return ""
+
+
 def extraer_parametros_texto(pregunta_original, norm, fecha_referencia=None):
     """
     Extrae parámetros auxiliares (fechas, hora, sede) directamente del texto si están presentes.
@@ -379,6 +397,20 @@ def clasificar_intencion(pregunta, fecha_referencia=None):
     ))
 
     # =========================================================================
+    # 0. PRIORIDAD 0: CONTEO DE INGRESOS DE ALUMNO POR CÓDIGO DE MATRÍCULA
+    # =========================================================================
+    codigo_mat = extraer_codigo_matricula(pregunta_limpia)
+    if codigo_mat:
+        if re.search(r"\b(ingres[oó]|ingresos|veces|visitas?|conteo|cu[aá]ntas?|accesos?|asistencia)\b", norm):
+            params = dict(params_extra)
+            params["codigo_matricula"] = codigo_mat
+            return {
+                "intencion": "conteo_ingresos_alumno",
+                "parametros": params,
+                "origen": "regla_local"
+            }
+
+    # =========================================================================
     # 1. PRIORIDAD 1: HISTORIAL PERSONAL O ÚLTIMO INGRESO
     # =========================================================================
     patrones_ultimo = [
@@ -436,6 +468,26 @@ def clasificar_intencion(pregunta, fecha_referencia=None):
         if re.search(p, norm):
             return {
                 "intencion": "horas_mayor_afluencia",
+                "parametros": params_extra,
+                "origen": "regla_local"
+            }
+
+    # =========================================================================
+    # 2.5. PRIORIDAD 2.5: AFLUENCIA HISTÓRICA DESCRIPTIVA (consultas agregadas analíticas)
+    # =========================================================================
+    patrones_afluencia_hist = [
+        r"afluencia.*hist[oó]rica",
+        r"consulta.*descriptiva.*afluencia",
+        r"hist[oó]rico.*(?:de\s+)?afluencia",
+        r"comportamiento.*hist[oó]rico.*afluencia",
+        r"comportamiento.*hist[oó]rico",
+        r"afluencia.*en\s+(?:la\s+)?sede",
+        r"afluencia.*de\s+(?:la\s+)?sede"
+    ]
+    for p in patrones_afluencia_hist:
+        if re.search(p, norm):
+            return {
+                "intencion": "afluencia_historica",
                 "parametros": params_extra,
                 "origen": "regla_local"
             }

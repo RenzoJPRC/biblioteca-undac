@@ -6,6 +6,8 @@ from llm.services.consultas_biblioteca import (
     obtener_historial_persona,
     obtener_resumen_ingresos,
     obtener_horas_mayor_afluencia,
+    contar_ingresos_alumno_por_codigo,
+    consultar_afluencia_historica,
     SEDES_PERMITIDAS
 )
 from llm.services.motor_intenciones import (
@@ -18,6 +20,25 @@ from llm.services.motor_intenciones import (
     sanitizar_contexto
 )
 from ml.services.servicio_afluencia import predecir_afluencia_desde_bd
+
+import time
+import logging
+from llm.services.metricas_asistente import obtener_gestor_metricas
+from llm.services.filtro_privacidad import (
+    es_consulta_personal_o_identificable,
+    es_consulta_permitida_para_llm
+)
+from llm.services.proveedor_llm import (
+    obtener_configuracion,
+    ProveedorLLM,
+    LLMError,
+    LLMTimeoutError,
+    LLMNetworkError,
+    LLMAPIError,
+    LLMSafetyViolationError
+)
+
+logger = logging.getLogger(__name__)
 
 
 def procesar_pregunta(
@@ -243,10 +264,198 @@ def procesar_pregunta(
         f_ini = fecha_inicio or params_intencion.get("fecha_inicio")
         f_fin = fecha_fin or params_intencion.get("fecha_fin")
 
+    # 3.5. Evaluación estricta de privacidad por lista blanca:
+    # Solo las consultas agregadas o predictivas expresamente confirmadas pueden enviarse al LLM externo.
+    # No dependemos únicamente de detectar nombres con expresiones regulares:
+    # Ante cualquier duda, ambigüedad, seguimiento, término sospechoso o intención no confirmada,
+    # la consulta se deriva y resuelve EXCLUSIVAMENTE en el motor local.
+    es_permitida_llm, motivo_filtro = es_consulta_permitida_para_llm(
+        pregunta=pregunta_limpia,
+        intencion=intencion,
+        es_seguimiento=es_seguimiento,
+        seleccion_persona=seleccion_persona,
+        contexto=ctx_sanitizado
+    )
+
+    if es_permitida_llm:
+        config_llm = obtener_configuracion()
+        if config_llm.esta_disponible:
+            try:
+                t_inicio_llm = time.time()
+                proveedor = ProveedorLLM(config=config_llm)
+                params_comp = {
+                    "fecha_inicio": f_ini,
+                    "fecha_fin": f_fin,
+                    "fecha": fecha or params_intencion.get("fecha"),
+                    "hora": hora or params_intencion.get("hora"),
+                    "sede": sede_consulta_efectiva,
+                    "limite": limite
+                }
+                res_llm = proveedor.procesar_consulta(
+                    pregunta=pregunta_limpia,
+                    rol=rol_valido,
+                    sede_permitida=sede_consulta_efectiva,
+                    parametros_complementarios=params_comp
+                )
+
+                # Registrar métrica exitosa con tokens y tiempo real
+                try:
+                    t_total_ms = int((time.time() - t_inicio_llm) * 1000)
+                    metricas_llm = res_llm.get("metricas", {})
+                    tokens_llm = metricas_llm.get("tokens")
+                    t_llm_ms = metricas_llm.get("tiempo_ms", t_total_ms)
+                    gestor = obtener_gestor_metricas()
+                    gestor.registrar_interaccion(
+                        proveedor=res_llm.get("proveedor", "gemini"),
+                        modelo=res_llm.get("modelo"),
+                        intencion=res_llm.get("intencion", intencion),
+                        tiempo_ms=t_llm_ms,
+                        tokens=tokens_llm,
+                        exito=True,
+                        es_fallback=False
+                    )
+                except Exception as e_met:
+                    logger.warning("No se pudo registrar métrica LLM exitosa: %s", str(e_met))
+
+                res_llm["contexto"] = ctx_sanitizado
+                return res_llm
+            except (LLMTimeoutError, LLMNetworkError, LLMAPIError, LLMSafetyViolationError, LLMError, Exception) as err_llm:
+                logger.warning("Fallo o rechazo en proveedor LLM (%s). Activando fallback al motor local.", str(err_llm))
+
+                # Registrar evento de fallback al motor local
+                try:
+                    t_fallo_ms = int((time.time() - t_inicio_llm) * 1000) if 't_inicio_llm' in locals() else 0
+                    gestor = obtener_gestor_metricas()
+                    gestor.registrar_interaccion(
+                        proveedor=config_llm.proveedor,
+                        modelo=config_llm.modelo,
+                        intencion=intencion,
+                        tiempo_ms=t_fallo_ms,
+                        tokens=None,
+                        exito=False,
+                        es_fallback=True
+                    )
+                except Exception as e_met:
+                    logger.warning("No se pudo registrar métrica de fallback LLM: %s", str(e_met))
+                # Continúa inmediatamente al enrutamiento local de respaldo
+
     # 4. Enrutamiento seguro por intención
 
+    # --- INTENCIÓN: CONTEO_INGRESOS_ALUMNO ---
+    if intencion == "conteo_ingresos_alumno":
+        if rol_valido == "Consultor":
+            return {
+                "status": "error",
+                "categoria_error": "permiso",
+                "codigo_http": 403,
+                "intencion": intencion,
+                "sede_aplicada": sede_aplicada,
+                "mensaje": "Acceso denegado. El rol Consultor no tiene permiso para consultar informes individuales por alumno.",
+                "datos": {},
+                "requiere_aclaracion": False,
+                "requiere_parametros": False,
+                "opciones": [],
+                "contexto": {},
+                "origen": "consulta_segura"
+            }
+
+        codigo = params_intencion.get("codigo_matricula", "").strip()
+        if not codigo:
+            return {
+                "status": "requires_input",
+                "intencion": intencion,
+                "sede_aplicada": sede_aplicada,
+                "mensaje": "Para consultar el conteo de ingresos por código debe indicar el código de matrícula del alumno.",
+                "datos": {},
+                "requiere_aclaracion": False,
+                "requiere_parametros": True,
+                "parametros_faltantes": ["codigo_matricula"],
+                "opciones": [],
+                "contexto": ctx_sanitizado,
+                "origen": "consulta_segura"
+            }
+
+        f_ini = fecha_inicio or params_intencion.get("fecha_inicio")
+        f_fin = fecha_fin or params_intencion.get("fecha_fin")
+
+        try:
+            res_conteo = contar_ingresos_alumno_por_codigo(
+                codigo_matricula=codigo,
+                fecha_inicio=f_ini,
+                fecha_fin=f_fin,
+                rol=rol_valido,
+                sede_permitida=sede_consulta_efectiva
+            )
+            return {
+                "status": "success",
+                "intencion": intencion,
+                "sede_aplicada": sede_aplicada,
+                "periodo": res_conteo.get("periodo_consultado"),
+                "sede": sede_consulta_efectiva or "Central",
+                "fuente": res_conteo.get("fuente", "RegistroIngresos (registros individuales de acceso por carnet/DNI)"),
+                "limites_cobertura": res_conteo.get("cobertura_sistema"),
+                "mensaje": res_conteo["mensaje"],
+                "datos": res_conteo,
+                "requiere_aclaracion": False,
+                "requiere_parametros": False,
+                "opciones": [],
+                "contexto": sanitizar_contexto({
+                    "intencion": intencion,
+                    "fecha_inicio": f_ini,
+                    "fecha_fin": f_fin,
+                    "sede": sede_consulta_efectiva,
+                    "codigo_matricula": codigo
+                }),
+                "origen": "consulta_segura"
+            }
+        except PermissionError as e:
+            return {
+                "status": "error",
+                "categoria_error": "permiso",
+                "codigo_http": 403,
+                "intencion": intencion,
+                "sede_aplicada": sede_aplicada,
+                "mensaje": str(e),
+                "datos": {},
+                "requiere_aclaracion": False,
+                "requiere_parametros": False,
+                "opciones": [],
+                "contexto": {},
+                "origen": "consulta_segura"
+            }
+        except ValueError as e:
+            return {
+                "status": "error",
+                "categoria_error": "validacion",
+                "codigo_http": 400,
+                "intencion": intencion,
+                "sede_aplicada": sede_aplicada,
+                "mensaje": str(e),
+                "datos": {},
+                "requiere_aclaracion": False,
+                "requiere_parametros": False,
+                "opciones": [],
+                "contexto": ctx_sanitizado,
+                "origen": "consulta_segura"
+            }
+        except Exception:
+            return {
+                "status": "error",
+                "categoria_error": "servicio",
+                "codigo_http": 503,
+                "intencion": intencion,
+                "sede_aplicada": sede_aplicada,
+                "mensaje": "Ocurrió un error al consultar los ingresos por código en la base de datos.",
+                "datos": {},
+                "requiere_aclaracion": False,
+                "requiere_parametros": False,
+                "opciones": [],
+                "contexto": ctx_sanitizado,
+                "origen": "consulta_segura"
+            }
+
     # --- INTENCIÓN: HISTORIAL_PERSONA O ULTIMO_INGRESO_PERSONA ---
-    if intencion in ("historial_persona", "ultimo_ingreso_persona"):
+    elif intencion in ("historial_persona", "ultimo_ingreso_persona"):
         if rol_valido == "Consultor":
             return {
                 "status": "error",
@@ -596,6 +805,138 @@ def procesar_pregunta(
                 "origen": "consulta_segura"
             }
 
+    # --- INTENCIÓN: AFLUENCIA_HISTORICA ---
+    elif intencion == "afluencia_historica":
+        # 1. Determinar sede efectiva según rol
+        if rol_valido == "Supervisor":
+            if not sede_permitida or str(sede_permitida).strip() not in SEDES_PERMITIDAS:
+                return {
+                    "status": "error",
+                    "categoria_error": "permiso",
+                    "codigo_http": 403,
+                    "intencion": "afluencia_historica",
+                    "sede_aplicada": sede_aplicada,
+                    "mensaje": "El usuario supervisor debe tener una sede válida permitida.",
+                    "datos": {},
+                    "requiere_aclaracion": False,
+                    "requiere_parametros": False,
+                    "opciones": [],
+                    "contexto": ctx_sanitizado,
+                    "origen": "consulta_segura"
+                }
+            sede_consulta = str(sede_permitida).strip()
+            sede_aplicada = sede_consulta
+        else:
+            if sede and str(sede).strip() not in SEDES_PERMITIDAS:
+                sede_consulta = str(sede).strip()
+            elif sede_consulta_efectiva:
+                sede_consulta = sede_consulta_efectiva
+            else:
+                sede_consulta = "Central"
+            sede_aplicada = sede_consulta
+
+        # 2. Determinar fechas
+        f_ini = fecha_inicio or params_intencion.get("fecha_inicio")
+        f_fin = fecha_fin or params_intencion.get("fecha_fin")
+        f_puntual = fecha or params_intencion.get("fecha")
+
+        if not f_ini and not f_fin:
+            if f_puntual:
+                f_ini = f_puntual
+                f_fin = f_puntual
+            else:
+                f_ini = "2026-04-10"
+                f_fin = "2026-09-28"
+        elif f_ini and not f_fin:
+            f_fin = f_ini
+        elif f_fin and not f_ini:
+            f_ini = f_fin
+
+        # 3. Invocar herramienta analítica
+        try:
+            res_afluencia = consultar_afluencia_historica(
+                fecha_inicio=f_ini,
+                fecha_fin=f_fin,
+                sede=sede_consulta,
+                rol=rol_valido,
+                sede_permitida=sede_permitida if rol_valido == "Supervisor" else None
+            )
+
+            nuevo_ctx = {
+                "intencion": "afluencia_historica",
+                "fecha_inicio": res_afluencia["periodo"]["fecha_inicio"],
+                "fecha_fin": res_afluencia["periodo"]["fecha_fin"],
+                "sede": res_afluencia["sede"]
+            }
+
+            return {
+                "status": "success",
+                "intencion": "afluencia_historica",
+                "sede_aplicada": res_afluencia["sede"],
+                "periodo": res_afluencia["periodo"],
+                "sede": res_afluencia["sede"],
+                "fuente": res_afluencia["fuente"],
+                "limites_cobertura": res_afluencia["limites_cobertura"],
+                "mensaje": res_afluencia["mensaje"],
+                "datos": res_afluencia,
+                "requiere_aclaracion": False,
+                "requiere_parametros": False,
+                "opciones": [],
+                "contexto": sanitizar_contexto(nuevo_ctx),
+                "origen": "consulta_segura"
+            }
+        except ValueError as e:
+            msg_error = str(e)
+            es_insuficiente = "insuficiente" in msg_error.lower()
+            return {
+                "status": "error",
+                "categoria_error": "datos_insuficientes" if es_insuficiente else "validacion",
+                "codigo_http": 400,
+                "intencion": "afluencia_historica",
+                "sede_aplicada": sede_aplicada,
+                "mensaje": msg_error,
+                "datos": {
+                    "estado": "datos_insuficientes" if es_insuficiente else "error_validacion",
+                    "sede": sede_consulta,
+                    "detalle": msg_error
+                },
+                "requiere_aclaracion": False,
+                "requiere_parametros": False,
+                "opciones": [],
+                "contexto": ctx_sanitizado,
+                "origen": "consulta_segura"
+            }
+        except PermissionError as e:
+            return {
+                "status": "error",
+                "categoria_error": "permiso",
+                "codigo_http": 403,
+                "intencion": "afluencia_historica",
+                "sede_aplicada": sede_aplicada,
+                "mensaje": str(e),
+                "datos": {},
+                "requiere_aclaracion": False,
+                "requiere_parametros": False,
+                "opciones": [],
+                "contexto": ctx_sanitizado,
+                "origen": "consulta_segura"
+            }
+        except Exception:
+            return {
+                "status": "error",
+                "categoria_error": "servicio",
+                "codigo_http": 503,
+                "intencion": "afluencia_historica",
+                "sede_aplicada": sede_aplicada,
+                "mensaje": "Ocurrió un error al consultar la afluencia histórica descriptiva en la base de datos.",
+                "datos": {},
+                "requiere_aclaracion": False,
+                "requiere_parametros": False,
+                "opciones": [],
+                "contexto": ctx_sanitizado,
+                "origen": "consulta_segura"
+            }
+
     # --- INTENCIÓN: PREDICCION_AFLUENCIA ---
     elif intencion == "prediccion_afluencia":
         # Determinar sede efectiva según rol
@@ -618,6 +959,21 @@ def procesar_pregunta(
             sede_efectiva = str(sede_permitida).strip()
             sede_aplicada = sede_efectiva
         else:
+            if sede and str(sede).strip() not in SEDES_PERMITIDAS:
+                return {
+                    "status": "error",
+                    "categoria_error": "validacion",
+                    "codigo_http": 400,
+                    "intencion": "prediccion_afluencia",
+                    "sede_aplicada": str(sede).strip(),
+                    "mensaje": f"La sede '{sede}' no es válida. Sedes permitidas: {', '.join(sorted(SEDES_PERMITIDAS))}.",
+                    "datos": {},
+                    "requiere_aclaracion": False,
+                    "requiere_parametros": False,
+                    "opciones": [],
+                    "contexto": ctx_sanitizado,
+                    "origen": "machine_learning"
+                }
             sede_candidata = str(sede).strip() if (sede and str(sede).strip() in SEDES_PERMITIDAS) else params_intencion.get("sede")
             if sede_candidata and str(sede_candidata).strip() in SEDES_PERMITIDAS:
                 sede_efectiva = str(sede_candidata).strip()
@@ -682,9 +1038,9 @@ def procesar_pregunta(
                 sede=sede_efectiva
             )
             nivel = pred_res["prediccion"]["nivel"]
+            ult_fecha_txt = pred_res.get("consulta", {}).get("ultima_fecha_disponible", "2026-09-28")
             if pred_res.get("prediccion", {}).get("modo_demostracion"):
                 dias_ant = pred_res.get("consulta", {}).get("dias_antiguedad_ultimo_registro", 0)
-                ult_fecha_txt = pred_res.get("consulta", {}).get("ultima_fecha_disponible", "")
                 try:
                     from datetime import datetime as dt
                     ult_f_corta = dt.strptime(ult_fecha_txt, "%Y-%m-%d").strftime("%d/%m")
@@ -693,10 +1049,16 @@ def procesar_pregunta(
                 msg = (
                     f"Predicción de afluencia para el {fecha_efectiva} a las {hora_int}:00 en la sede {sede_efectiva}: "
                     f"Nivel {nivel}. (Aviso: resultado en modo demostración; el último registro es del {ult_f_corta} y está "
-                    f"{dias_ant} días antes de la fecha objetivo, por lo que no es confiable para uso operativo)."
+                    f"{dias_ant} días antes de la fecha objetivo, por lo que no es confiable para uso operativo). "
+                    f"Fuente: Tabla analítica AfluenciaHistoricaAgregada y modelo ML HistGradientBoosting. "
+                    f"Límites de cobertura: Sede Central (08:00 a 20:45)."
                 )
             else:
-                msg = f"Predicción de afluencia para el {fecha_efectiva} a las {hora_int}:00 en la sede {sede_efectiva}: Nivel {nivel}."
+                msg = (
+                    f"Predicción de afluencia para el {fecha_efectiva} a las {hora_int}:00 en la sede {sede_efectiva}: Nivel {nivel}. "
+                    f"Fuente: Tabla analítica AfluenciaHistoricaAgregada y modelo ML HistGradientBoosting. "
+                    f"Límites de cobertura: Sede Central (08:00 a 20:45)."
+                )
 
             nuevo_ctx = {
                 "intencion": "prediccion_afluencia",
@@ -705,16 +1067,57 @@ def procesar_pregunta(
             if sede_efectiva:
                 nuevo_ctx["sede"] = sede_efectiva
 
+            limites_cob = pred_res.get("limites_cobertura", {
+                "fecha_minima_sistema": "2026-04-10",
+                "fecha_maxima_sistema": ult_fecha_txt,
+                "horario_operativo": "08:00 a 20:45 (lunes a viernes)",
+                "franja_20h_parcial": "20:00 a 20:45 (45 minutos por apagado del servidor)",
+                "sedes_con_historial_suficiente": ["Central"],
+                "sedes_con_datos_insuficientes": ["Tarma", "La Merced", "Oxapampa", "Paucartambo", "Yanahuanca"]
+            })
+
             return {
                 "status": "success",
                 "intencion": "prediccion_afluencia",
                 "sede_aplicada": sede_aplicada,
+                "periodo": pred_res.get("periodo", {
+                    "fecha": str(fecha_efectiva),
+                    "hora": hora_int
+                }),
+                "sede": sede_efectiva,
+                "fuente": pred_res.get("fuente", "Tabla analítica AfluenciaHistoricaAgregada y modelo ML HistGradientBoosting (metadatos_modelo_afluencia.json)"),
+                "limites_cobertura": limites_cob,
                 "mensaje": msg,
                 "datos": pred_res,
                 "requiere_aclaracion": False,
                 "requiere_parametros": False,
                 "opciones": [],
                 "contexto": sanitizar_contexto(nuevo_ctx),
+                "origen": "machine_learning"
+            }
+        except ValueError as val_err:
+            msg_error = str(val_err)
+            es_insuficiente = (
+                "insuficiente" in msg_error.lower()
+                or "se necesitan al menos" in msg_error.lower()
+                or "no cuenta con datos" in msg_error.lower()
+            )
+            return {
+                "status": "error",
+                "categoria_error": "datos_insuficientes" if es_insuficiente else "validacion",
+                "codigo_http": 400,
+                "intencion": "prediccion_afluencia",
+                "sede_aplicada": sede_aplicada,
+                "mensaje": msg_error,
+                "datos": {
+                    "estado": "datos_insuficientes" if es_insuficiente else "error_validacion",
+                    "sede": sede_efectiva,
+                    "detalle": msg_error
+                },
+                "requiere_aclaracion": False,
+                "requiere_parametros": False,
+                "opciones": [],
+                "contexto": ctx_sanitizado,
                 "origen": "machine_learning"
             }
         except Exception:
@@ -739,7 +1142,7 @@ def procesar_pregunta(
             "status": "requires_input",
             "intencion": "intencion_desconocida",
             "sede_aplicada": sede_aplicada,
-            "mensaje": "No se reconoció la intención de la pregunta. Ejemplos admitidos: '¿Cuántas veces ingresó [Nombre]?', '¿Cuándo fue el último ingreso de [Nombre]?', 'Resumen de ingresos', 'Horas de mayor afluencia' o 'Predicción de afluencia'.",
+            "mensaje": "No se reconoció la intención de la pregunta. Ejemplos admitidos: '¿Cuántas veces ingresó [Nombre]?', '¿Cuándo fue el último ingreso de [Nombre]?', 'Resumen de ingresos', 'Horas de mayor afluencia', 'Consulta descriptiva de afluencia histórica' o 'Predicción de afluencia'.",
             "datos": {},
             "requiere_aclaracion": False,
             "requiere_parametros": False,
@@ -748,7 +1151,8 @@ def procesar_pregunta(
                 "¿Cuándo fue el último ingreso de [Nombre]?",
                 "Resumen de ingresos del 2026-09-01 al 2026-09-30",
                 "Horas de mayor afluencia del 2026-09-01 al 2026-09-30",
-                "Predicción de afluencia para 2026-10-15 a las 10:00"
+                "Consulta descriptiva de afluencia histórica del 2026-05-01 al 2026-05-31 en Central",
+                "Predicción de afluencia para 2026-10-15 a las 10:00 en Central"
             ],
             "contexto": {},
             "origen": "regla_local"

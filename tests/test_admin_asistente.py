@@ -1,3 +1,4 @@
+import os
 import unittest
 from unittest.mock import patch
 import json
@@ -10,6 +11,11 @@ class TestAdminAsistente(unittest.TestCase):
         self.app = app
         self.app.config["TESTING"] = True
         self.client = self.app.test_client()
+        self._env_patch = patch.dict(os.environ, {"LLM_ACTIVADO": "false"})
+        self._env_patch.start()
+
+    def tearDown(self):
+        self._env_patch.stop()
 
     def _obtener_cliente_con_sesion(self, user="admin", rol="SuperAdmin", sede="Central"):
         with self.client.session_transaction() as sess:

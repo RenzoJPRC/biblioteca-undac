@@ -7,6 +7,8 @@ from llm.services.consultas_biblioteca import (
     obtener_historial_persona,
     obtener_resumen_ingresos,
     obtener_horas_mayor_afluencia,
+    contar_ingresos_alumno_por_codigo,
+    consultar_afluencia_historica,
     escapar_like,
     enmascarar_codigo,
     _es_error_tabla_inexistente
@@ -16,6 +18,7 @@ from llm.services.motor_intenciones import (
     clasificar_intencion,
     normalizar_texto,
     resolver_expresion_temporal,
+    extraer_codigo_matricula,
     es_pregunta_seguimiento,
     es_seguimiento_ambiguo,
     sanitizar_contexto
@@ -619,6 +622,308 @@ class TestModuloLLMConsultas(unittest.TestCase):
         self.assertNotIn("persona_id", limpio)
         self.assertNotIn("respuesta", limpio)
         self.assertNotIn("datos", limpio)
+
+    # 7. CONTEO PARAMETRIZADO DE INGRESOS DE ALUMNO POR CÓDIGO
+
+    def test_40_contar_ingresos_alumno_valida_codigo(self):
+        """Código de matrícula vacío, no string o muy corto/largo debe lanzar ValueError."""
+        with self.assertRaises(ValueError):
+            contar_ingresos_alumno_por_codigo("", rol="SuperAdmin")
+        with self.assertRaises(ValueError):
+            contar_ingresos_alumno_por_codigo("ab", rol="SuperAdmin")
+        with self.assertRaises(ValueError):
+            contar_ingresos_alumno_por_codigo("a" * 35, rol="SuperAdmin")
+
+    def test_41_contar_ingresos_alumno_bloquea_consultor(self):
+        """El rol Consultor no tiene permiso para consultar informes individuales por alumno."""
+        with self.assertRaises(PermissionError):
+            contar_ingresos_alumno_por_codigo("2020123456", rol="Consultor")
+
+    def test_42_contar_ingresos_alumno_valida_rango_fechas(self):
+        """fecha_inicio posterior a fecha_fin debe lanzar ValueError."""
+        with self.assertRaises(ValueError):
+            contar_ingresos_alumno_por_codigo(
+                "2020123456",
+                fecha_inicio="2026-09-30",
+                fecha_fin="2026-09-01",
+                rol="SuperAdmin"
+            )
+
+    def test_43_contar_ingresos_alumno_consulta_parametrizada_superadmin(self):
+        """Consulta exitosa con SuperAdmin: retorna conteo, código enmascarado y cobertura del sistema."""
+        with patch("llm.services.consultas_biblioteca.get_db_cursor") as mock_db:
+            mock_cursor = MagicMock()
+            mock_db.return_value.__enter__.return_value = (MagicMock(), mock_cursor)
+
+            # Simular primer SELECT (conteo) y segundo SELECT (cobertura global)
+            mock_cursor.fetchone.side_effect = [
+                (3, datetime(2026, 4, 15, 10, 30), datetime(2026, 5, 20, 16, 45), 2, "Ingeniería de Sistemas"),
+                (datetime(2026, 4, 10, 12, 0), datetime(2026, 9, 28, 15, 56), 38)
+            ]
+
+            res = contar_ingresos_alumno_por_codigo(
+                "2020123456",
+                fecha_inicio="2026-04-01",
+                fecha_fin="2026-06-30",
+                rol="SuperAdmin"
+            )
+
+            self.assertEqual(res["status"], "success")
+            self.assertEqual(res["total_ingresos"], 3)
+            self.assertEqual(res["dias_con_visita"], 2)
+            self.assertEqual(res["codigo_mascarado"], "20******56")
+            self.assertIn("2026-04-10", res["mensaje"])
+            self.assertIn("2026-09-28", res["mensaje"])
+            self.assertIn("38 visitas", res["mensaje"])
+
+            # Verificar que cursor.execute fue llamado con marcadores parametrizados (?)
+            llamadas = mock_cursor.execute.call_args_list
+            self.assertGreaterEqual(len(llamadas), 2)
+            sql_conteo, params_conteo = llamadas[0][0]
+            self.assertIn("A.CodigoMatricula = ?", sql_conteo)
+            self.assertEqual(params_conteo[0], "2020123456")
+
+    def test_44_contar_ingresos_alumno_supervisor_filtra_sede(self):
+        """Supervisor sin sede válida lanza ValueError; con sede válida aplica filtro."""
+        with self.assertRaises(ValueError):
+            contar_ingresos_alumno_por_codigo("2020123456", rol="Supervisor", sede_permitida=None)
+
+        with patch("llm.services.consultas_biblioteca.get_db_cursor") as mock_db:
+            mock_cursor = MagicMock()
+            mock_db.return_value.__enter__.return_value = (MagicMock(), mock_cursor)
+            mock_cursor.fetchone.side_effect = [
+                (1, datetime(2026, 4, 15, 10, 0), datetime(2026, 4, 15, 10, 0), 1, "Sistemas"),
+                (datetime(2026, 4, 10), datetime(2026, 9, 28), 38)
+            ]
+
+            res = contar_ingresos_alumno_por_codigo(
+                "2020123456",
+                rol="Supervisor",
+                sede_permitida="Central"
+            )
+            self.assertEqual(res["status"], "success")
+            sql_conteo, params_conteo = mock_cursor.execute.call_args_list[0][0]
+            self.assertIn("ISNULL(R.Sede, 'Central') = ?", sql_conteo)
+            self.assertIn("Central", params_conteo)
+
+    def test_45_extraer_codigo_matricula_y_clasificar_intencion(self):
+        """extraer_codigo_matricula y clasificar_intencion detectan correctamente conteo_ingresos_alumno."""
+        pregunta = "¿Cuántas veces ingresó el alumno con código 2021123456 entre 2026-04-10 y 2026-05-10?"
+        cod = extraer_codigo_matricula(pregunta)
+        self.assertEqual(cod, "2021123456")
+
+        cl = clasificar_intencion(pregunta)
+        self.assertEqual(cl["intencion"], "conteo_ingresos_alumno")
+        self.assertEqual(cl["parametros"]["codigo_matricula"], "2021123456")
+
+    def test_46_contar_ingresos_alumno_excluye_filas_prueba(self):
+        """contar_ingresos_alumno_por_codigo filtra EsPrueba = 1 y reporta exclusión de pruebas."""
+        with patch("llm.services.consultas_biblioteca.get_db_cursor") as mock_db:
+            mock_cursor = MagicMock()
+            mock_db.return_value.__enter__.return_value = (MagicMock(), mock_cursor)
+
+            # Simular: 0 visitas reales encontradas para el alumno; cobertura global: 38 registros, los 38 son prueba
+            mock_cursor.fetchone.side_effect = [
+                (0, None, None, 0, "Ingeniería de Minas"),
+                (datetime(2026, 4, 10), datetime(2026, 9, 28), 38, 38, 0)
+            ]
+
+            res = contar_ingresos_alumno_por_codigo("2021123456", rol="SuperAdmin")
+            self.assertEqual(res["status"], "success")
+            self.assertEqual(res["total_ingresos"], 0)
+            self.assertIn("No se encontraron ingresos reales", res["mensaje"])
+            self.assertIn("excluyeron 38 registros manuales de prueba", res["mensaje"])
+
+            sql_conteo = mock_cursor.execute.call_args_list[0][0][0]
+            self.assertIn("ISNULL(R.EsPrueba, 0) = 0", sql_conteo)
+
+    def test_47_distingue_visitas_reales_de_pruebas(self):
+        """Las visitas reales futuras (EsPrueba = 0) sí se contabilizan, distinguiéndolas de las pruebas."""
+        with patch("llm.services.consultas_biblioteca.get_db_cursor") as mock_db:
+            mock_cursor = MagicMock()
+            mock_db.return_value.__enter__.return_value = (MagicMock(), mock_cursor)
+
+            # Simular: 5 visitas reales para el alumno; cobertura global: 43 registros (38 pruebas, 5 reales)
+            mock_cursor.fetchone.side_effect = [
+                (5, datetime(2026, 10, 15, 9, 0), datetime(2026, 10, 20, 14, 0), 3, "Educación"),
+                (datetime(2026, 4, 10), datetime(2026, 10, 20), 43, 38, 5)
+            ]
+
+            res = contar_ingresos_alumno_por_codigo("2022987654", rol="SuperAdmin")
+            self.assertEqual(res["status"], "success")
+            self.assertEqual(res["total_ingresos"], 5)
+            self.assertEqual(res["dias_con_visita"], 3)
+            self.assertIn("registra 5 ingreso(s) real(es)", res["mensaje"])
+            self.assertIn("El sistema contiene 5 visitas reales", res["mensaje"])
+            self.assertIn("excluyeron 38 registros manuales de prueba", res["mensaje"])
+
+    # 48. CONSULTA DESCRIPTIVA DE AFLUENCIA HISTÓRICA: SEDE CENTRAL ÉXITO
+    def test_48_consultar_afluencia_historica_central_exito(self):
+        """Sede Central consulta historial disponible; reporta periodo, sede, fuente, límites y no asume cero."""
+        with patch("llm.services.consultas_biblioteca.get_db_cursor") as mock_db:
+            mock_cursor = MagicMock()
+            mock_db.return_value.__enter__.return_value = (MagicMock(), mock_cursor)
+
+            # Simular: suficiencia -> 82 fechas, 1024 franjas, 32779 ingresos, min=2026-04-10, max=2026-09-28
+            mock_cursor.fetchone.return_value = (82, 1024, 32779, date(2026, 4, 10), date(2026, 9, 28))
+
+            # Simular: filas rango -> 3 franjas observadas (una a las 10h, una a las 14h, una a las 20h con franja parcial)
+            mock_cursor.fetchall.return_value = [
+                (date(2026, 5, 4), 10, 45, 0),
+                (date(2026, 5, 4), 14, 60, 0),
+                (date(2026, 5, 4), 20, 15, 1)  # Franja parcial a las 20h
+            ]
+
+            res = consultar_afluencia_historica(
+                fecha_inicio="2026-05-01",
+                fecha_fin="2026-05-31",
+                sede="Central",
+                rol="SuperAdmin"
+            )
+
+            self.assertEqual(res["status"], "success")
+            self.assertEqual(res["sede"], "Central")
+            self.assertEqual(res["periodo"]["fecha_inicio"], "2026-05-01")
+            self.assertEqual(res["periodo"]["fecha_fin"], "2026-05-31")
+            self.assertIn("AfluenciaHistoricaAgregada", res["fuente"])
+            self.assertIn("02_ingresos_reales_actual.csv", res["fuente"])
+
+            # Límites de cobertura
+            limites = res["limites_cobertura"]
+            self.assertEqual(limites["sedes_con_historial_suficiente"], ["Central"])
+            self.assertIn("Tarma", limites["sedes_con_datos_insuficientes"])
+            self.assertIn("45 minutos", limites["franja_20h_parcial"])
+
+            # Métricas calculadas
+            metricas = res["metricas"]
+            self.assertEqual(metricas["total_ingresos"], 120)
+            self.assertEqual(metricas["franjas_observadas"], 3)
+            self.assertEqual(metricas["dias_con_registros"], 1)
+            self.assertEqual(metricas["franjas_parciales_20h"], 1)
+            self.assertEqual(metricas["ingresos_franjas_parciales_20h"], 15)
+
+            # Verificación de que las franjas no observadas NO se interpretan como cero
+            no_obs = res["interpretacion_franjas_no_observadas"]
+            self.assertFalse(no_obs["asume_cero"])
+            self.assertIn("NO se asumen como cero visitas", no_obs["aviso"])
+            self.assertIn("NO se interpretan automáticamente como cero ingresos", res["mensaje"])
+
+    # 49. CONSULTA HISTÓRICA: TARMA DEVUELVE DATOS INSUFICIENTES
+    def test_49_consultar_afluencia_historica_tarma_datos_insuficientes(self):
+        """Sede Tarma cuenta con 1 fecha operativa (< 15) y debe lanzar ValueError de datos insuficientes."""
+        with patch("llm.services.consultas_biblioteca.get_db_cursor") as mock_db:
+            mock_cursor = MagicMock()
+            mock_db.return_value.__enter__.return_value = (MagicMock(), mock_cursor)
+
+            # Tarma solo tiene 1 fecha en la tabla histórica
+            mock_cursor.fetchone.return_value = (1, 1, 1, date(2026, 4, 10), date(2026, 4, 10))
+
+            with self.assertRaises(ValueError) as ctx_err:
+                consultar_afluencia_historica(
+                    fecha_inicio="2026-05-01",
+                    fecha_fin="2026-05-31",
+                    sede="Tarma",
+                    rol="SuperAdmin"
+                )
+
+            msg = str(ctx_err.exception)
+            self.assertIn("Historial insuficiente", msg)
+            self.assertIn("Tarma", msg)
+            self.assertIn("1 fecha(s)", msg)
+            self.assertIn("mínimo configurado de 15 fechas", msg)
+            self.assertIn("No se completa con registros de prueba", msg)
+
+    # 50. CONSULTA HISTÓRICA: OTRAS SEDES DEVUELVEN DATOS INSUFICIENTES
+    def test_50_consultar_afluencia_historica_otras_sedes_datos_insuficientes(self):
+        """Sedes sin datos (La Merced, Oxapampa, Paucartambo, Yanahuanca) lanzan ValueError de datos insuficientes."""
+        with patch("llm.services.consultas_biblioteca.get_db_cursor") as mock_db:
+            mock_cursor = MagicMock()
+            mock_db.return_value.__enter__.return_value = (MagicMock(), mock_cursor)
+
+            # 0 fechas para La Merced
+            mock_cursor.fetchone.return_value = (0, 0, 0, None, None)
+
+            with self.assertRaises(ValueError) as ctx_err:
+                consultar_afluencia_historica(
+                    fecha_inicio="2026-05-01",
+                    fecha_fin="2026-05-31",
+                    sede="La Merced",
+                    rol="SuperAdmin"
+                )
+
+            msg = str(ctx_err.exception)
+            self.assertIn("Historial insuficiente", msg)
+            self.assertIn("La Merced", msg)
+            self.assertIn("0 fecha(s)", msg)
+
+    # 51. CONSULTA HISTÓRICA: VALIDACIONES DE PARÁMETROS
+    def test_51_consultar_afluencia_historica_validaciones_parametros(self):
+        """Valida fechas invertidas, formato incorrecto, rango excesivo y sede inválida."""
+        # Fechas invertidas
+        with self.assertRaises(ValueError) as err_inv:
+            consultar_afluencia_historica("2026-06-01", "2026-05-01", sede="Central", rol="SuperAdmin")
+        self.assertIn("anterior o igual", str(err_inv.exception))
+
+        # Formato de fecha inválido
+        with self.assertRaises(ValueError):
+            consultar_afluencia_historica("fecha-erronea", "2026-05-01", sede="Central", rol="SuperAdmin")
+
+        # Rango mayor a 366 días
+        with self.assertRaises(ValueError) as err_rango:
+            consultar_afluencia_historica("2025-01-01", "2026-06-01", sede="Central", rol="SuperAdmin")
+        self.assertIn("366 días", str(err_rango.exception))
+
+        # Sede inválida
+        with self.assertRaises(ValueError) as err_sede:
+            consultar_afluencia_historica("2026-05-01", "2026-05-31", sede="SedeInexistente", rol="SuperAdmin")
+        self.assertIn("no es válida", str(err_sede.exception))
+
+    # 52. CONSULTA HISTÓRICA: SUPERVISOR FORZADO A SU SEDE PERMITIDA
+    def test_52_consultar_afluencia_historica_supervisor_sede_forzada(self):
+        """Supervisor con sede_permitida='Central' se fuerza a Central aunque intente consultar otra."""
+        # Supervisor sin sede_permitida debe lanzar ValueError
+        with self.assertRaises(ValueError):
+            consultar_afluencia_historica("2026-05-01", "2026-05-31", sede="Tarma", rol="Supervisor", sede_permitida=None)
+
+        with patch("llm.services.consultas_biblioteca.get_db_cursor") as mock_db:
+            mock_cursor = MagicMock()
+            mock_db.return_value.__enter__.return_value = (MagicMock(), mock_cursor)
+            mock_cursor.fetchone.return_value = (82, 1024, 32779, date(2026, 4, 10), date(2026, 9, 28))
+            mock_cursor.fetchall.return_value = []
+
+            res = consultar_afluencia_historica(
+                "2026-05-01", "2026-05-31",
+                sede="Tarma",
+                rol="Supervisor",
+                sede_permitida="Central"
+            )
+            self.assertEqual(res["status"], "success")
+            self.assertEqual(res["sede"], "Central")
+            sql_ejecutado, params = mock_cursor.execute.call_args_list[0][0]
+            self.assertIn("Central", params)
+
+    # 53. CONTEO DE ALUMNO: EXCLUYE PRUEBAS Y NO ATRIBUYE ALUMNOS A CONTEOS AGREGADOS
+    def test_53_contar_ingresos_alumno_sin_visitas_reales_excluye_pruebas_y_no_atribuye_agregados(self):
+        """Cuando total_reales=0, comunica que aún no hay visitas reales, excluye 38 pruebas y no atribuye agregados."""
+        with patch("llm.services.consultas_biblioteca.get_db_cursor") as mock_db:
+            mock_cursor = MagicMock()
+            mock_db.return_value.__enter__.return_value = (MagicMock(), mock_cursor)
+
+            # Simular: 0 visitas reales para el alumno; sistema contiene 38 pruebas manuales y 0 reales
+            mock_cursor.fetchone.side_effect = [
+                (0, None, None, 0, "Ingeniería de Sistemas"),
+                (datetime(2026, 4, 10), datetime(2026, 9, 28), 38, 38, 0)
+            ]
+
+            res = contar_ingresos_alumno_por_codigo("2021123456", rol="SuperAdmin")
+            self.assertEqual(res["status"], "success")
+            self.assertEqual(res["total_ingresos"], 0)
+            self.assertIn("aún no hay visitas individuales reales registradas en el sistema", res["mensaje"])
+            self.assertIn("excluyeron 38 registros manuales de prueba", res["mensaje"])
+            self.assertIn("No se generan registros ni se atribuyen alumnos a los conteos agregados", res["mensaje"])
+            self.assertIn("RegistroIngresos", res["fuente"])
+            self.assertEqual(res["cobertura_sistema"]["total_pruebas_excluidas"], 38)
+            self.assertEqual(res["cobertura_sistema"]["total_visitas_reales"], 0)
 
 
 if __name__ == "__main__":
