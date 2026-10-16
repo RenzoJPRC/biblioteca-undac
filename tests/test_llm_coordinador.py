@@ -998,6 +998,193 @@ class TestCoordinadorAsistente(unittest.TestCase):
             sede_permitida="Tarma"
         )
 
+    # 56. CASO CLAVE: RESOLUCIÓN DESDE TEXTO DE RANGO EN ESPAÑOL (1 DE JUNIO AL 31 DE JULIO DE 2026)
+    @patch("llm.services.coordinador_asistente.obtener_resumen_ingresos")
+    def test_56_caso_clave_ingresos_alumnos_rango_texto_espanol(self, mock_resumen):
+        mock_resumen.return_value = {
+            "status": "success",
+            "fecha_inicio": "2026-06-01",
+            "fecha_fin": "2026-07-31",
+            "dias_rango": 61,
+            "total_ingresos": 18168,
+            "ingresos_por_sede": {"Central": 18168},
+            "ingresos_por_tipo_persona": {"Alumno": 18168},
+            "referencia_horaria": "Hora almacenada en la base de datos"
+        }
+
+        res = procesar_pregunta(
+            "¿Cuántos ingresos de alumnos hubo entre el 1 de junio y el 31 de julio de 2026?",
+            rol="SuperAdmin"
+        )
+        self.assertEqual(res["status"], "success")
+        self.assertEqual(res["intencion"], "resumen_ingresos")
+        self.assertFalse(res["requiere_parametros"])
+        self.assertFalse(res["requiere_aclaracion"])
+        self.assertEqual(res["datos"]["total_ingresos"], 18168)
+        self.assertIn("18,168", res["mensaje"])
+        self.assertIn("2026-06-01", res["mensaje"])
+        self.assertIn("2026-07-31", res["mensaje"])
+        mock_resumen.assert_called_once_with(
+            fecha_inicio="2026-06-01",
+            fecha_fin="2026-07-31",
+            rol="SuperAdmin",
+            sede_permitida=None
+        )
+
+    # 57. VARIANTES DE FECHAS EN ESPAÑOL: DEL 1 AL 15 DE JULIO DE 2026
+    @patch("llm.services.coordinador_asistente.obtener_resumen_ingresos")
+    def test_57_rango_mismo_mes_espanol(self, mock_resumen):
+        mock_resumen.return_value = {
+            "status": "success",
+            "fecha_inicio": "2026-07-01",
+            "fecha_fin": "2026-07-15",
+            "total_ingresos": 500
+        }
+        res = procesar_pregunta("¿Cuántos ingresos hubo del 1 al 15 de julio de 2026?", rol="SuperAdmin")
+        self.assertEqual(res["status"], "success")
+        mock_resumen.assert_called_once_with(
+            fecha_inicio="2026-07-01",
+            fecha_fin="2026-07-15",
+            rol="SuperAdmin",
+            sede_permitida=None
+        )
+
+    # 58. MES COMPLETO EN ESPAÑOL: EN JUNIO DE 2026
+    @patch("llm.services.coordinador_asistente.obtener_resumen_ingresos")
+    def test_58_mes_completo_espanol(self, mock_resumen):
+        mock_resumen.return_value = {
+            "status": "success",
+            "fecha_inicio": "2026-06-01",
+            "fecha_fin": "2026-06-30",
+            "total_ingresos": 9000
+        }
+        res = procesar_pregunta("¿Cuántos ingresos de alumnos hubo en junio de 2026?", rol="SuperAdmin")
+        self.assertEqual(res["status"], "success")
+        mock_resumen.assert_called_once_with(
+            fecha_inicio="2026-06-01",
+            fecha_fin="2026-06-30",
+            rol="SuperAdmin",
+            sede_permitida=None
+        )
+
+    # 59. FECHAS AUSENTES: PIDE ACLARACIÓN EN LENGUAJE NATURAL Y DEJA FORMULARIO OPCIONAL
+    @patch("llm.services.coordinador_asistente.obtener_resumen_ingresos")
+    def test_59_fechas_ausentes_pide_aclaracion_natural(self, mock_resumen):
+        res = procesar_pregunta("¿Cuántos ingresos de alumnos hubo?", rol="SuperAdmin")
+        self.assertEqual(res["status"], "requires_input")
+        self.assertTrue(res["requiere_parametros"])
+        self.assertEqual(res["parametros_faltantes"], ["fecha_inicio", "fecha_fin"])
+        self.assertIn("¿Para qué periodo", res["mensaje"])
+        self.assertIn("entre el 1 de junio y el 31 de julio de 2026", res["mensaje"])
+        self.assertTrue(len(res["opciones"]) > 0)
+        mock_resumen.assert_not_called()
+
+    # 60. FECHA AMBIGUA (MES SIN AÑO): NO INVENTA PERIODO Y PIDE ACLARACIÓN
+    @patch("llm.services.coordinador_asistente.obtener_resumen_ingresos")
+    def test_60_fecha_ambigua_mes_sin_anio(self, mock_resumen):
+        res = procesar_pregunta("¿Cuántos ingresos de alumnos hubo en junio?", rol="SuperAdmin")
+        self.assertEqual(res["status"], "requires_input")
+        self.assertTrue(res["requiere_parametros"])
+        self.assertIn("¿A qué año corresponde", res["mensaje"])
+        mock_resumen.assert_not_called()
+
+    # 61. FECHA INVÁLIDA (31 DE JUNIO): DETECTADA Y RECHAZADA SIN CONSULTAR BD
+    @patch("llm.services.coordinador_asistente.obtener_resumen_ingresos")
+    def test_61_fecha_invalida_rechazada_sin_inventar(self, mock_resumen):
+        res = procesar_pregunta(
+            "¿Cuántos ingresos de alumnos hubo entre el 1 de junio y el 31 de junio de 2026?",
+            rol="SuperAdmin"
+        )
+        self.assertEqual(res["status"], "requires_input")
+        self.assertTrue(res["requiere_parametros"])
+        self.assertIn("no es válida", res["mensaje"])
+        mock_resumen.assert_not_called()
+
+    # 62. CONSERVACIÓN DE PROCESAMIENTO LOCAL DE CONSULTAS PERSONALES CON CÓDIGO Y FECHAS EN ESPAÑOL
+    @patch("llm.services.coordinador_asistente.contar_ingresos_alumno_por_codigo")
+    def test_62_consulta_personal_codigo_con_fechas_conserva_local(self, mock_conteo):
+        mock_conteo.return_value = {
+            "status": "success",
+            "codigo_mascarado": "20******56",
+            "total_ingresos": 0,
+            "periodo_consultado": {"fecha_inicio": "2026-06-01", "fecha_fin": "2026-07-31"},
+            "mensaje": "No se encontraron ingresos para el alumno 20******56 del 2026-06-01 al 2026-07-31."
+        }
+        res = procesar_pregunta(
+            "¿Cuántas veces vino el alumno 2021123456 entre el 1 de junio y el 31 de julio de 2026?",
+            rol="SuperAdmin"
+        )
+        self.assertEqual(res["status"], "success")
+        self.assertEqual(res["intencion"], "conteo_ingresos_alumno")
+        self.assertEqual(res["origen"], "consulta_segura")
+        mock_conteo.assert_called_once_with(
+            codigo_matricula="2021123456",
+            fecha_inicio="2026-06-01",
+            fecha_fin="2026-07-31",
+            rol="SuperAdmin",
+            sede_permitida=None
+        )
+
+    # 63. CONSERVACIÓN DE PROCESAMIENTO LOCAL DE CONSULTAS PERSONALES CON NOMBRE Y FECHAS EN ESPAÑOL
+    @patch("llm.services.coordinador_asistente.obtener_historial_persona")
+    @patch("llm.services.coordinador_asistente.buscar_personas")
+    def test_63_consulta_personal_nombre_con_fechas_conserva_local(self, mock_buscar, mock_historial):
+        mock_buscar.return_value = [
+            {"tipo_persona": "Alumno", "persona_id": 1, "nombre": "Juan Perez", "codigo_mascarado": "20******00"}
+        ]
+        mock_historial.return_value = {
+            "status": "success",
+            "tipo_persona": "Alumno",
+            "persona_id": 1,
+            "total_ingresos": 4,
+            "registros": []
+        }
+        res = procesar_pregunta(
+            "¿Cuántas veces ingresó Juan Perez entre el 1 de junio y el 31 de julio de 2026?",
+            rol="SuperAdmin"
+        )
+        self.assertEqual(res["status"], "success")
+        self.assertEqual(res["intencion"], "historial_persona")
+        self.assertEqual(res["origen"], "consulta_segura")
+        mock_buscar.assert_called_once_with("Juan Perez")
+
+    # 64. FILTRO DE PRIVACIDAD BLOQUEA LLM EN CONSULTAS PERSONALES INCLUSO CON FECHAS EN ESPAÑOL
+    def test_64_filtro_privacidad_bloquea_llm_en_consultas_personales(self):
+        from llm.services.filtro_privacidad import es_consulta_permitida_para_llm
+        permitida, motivo = es_consulta_permitida_para_llm(
+            "¿Cuántas veces vino el alumno 2021123456 entre el 1 de junio y el 31 de julio de 2026?",
+            "conteo_ingresos_alumno",
+            False
+        )
+        self.assertFalse(permitida)
+        self.assertIn("codigo_matricula_detectado", motivo)
+
+        permitida2, motivo2 = es_consulta_permitida_para_llm(
+            "¿Cuántos ingresos de alumnos hubo entre el 1 de junio y el 31 de julio de 2026?",
+            "resumen_ingresos",
+            False
+        )
+        self.assertTrue(permitida2)
+        self.assertEqual(motivo2, "consulta_agregada_autorizada")
+
+    # 65. CONSULTA SIN GEMINI DISPONIBLE RESUELVE EN MOTOR LOCAL CON ÉXITO
+    @patch("llm.services.coordinador_asistente.obtener_resumen_ingresos")
+    def test_65_fallback_local_inmediato_cuando_llm_desactivado(self, mock_resumen):
+        mock_resumen.return_value = {
+            "status": "success",
+            "fecha_inicio": "2026-06-01",
+            "fecha_fin": "2026-07-31",
+            "total_ingresos": 18168
+        }
+        with patch.dict(os.environ, {"LLM_ACTIVADO": "false"}):
+            res = procesar_pregunta(
+                "¿Cuántos ingresos de alumnos hubo entre el 1 de junio y el 31 de julio de 2026?",
+                rol="SuperAdmin"
+            )
+            self.assertEqual(res["status"], "success")
+            self.assertEqual(res["origen"], "consulta_segura")
+            self.assertIn("18,168", res["mensaje"])
+
 
 if __name__ == "__main__":
     unittest.main()

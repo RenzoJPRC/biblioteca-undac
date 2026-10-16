@@ -296,6 +296,270 @@ class TestMetricasAsistente(unittest.TestCase):
         data = resp_api.get_json()
         self.assertEqual(data["categoria_error"], "permiso")
 
+    # =========================================================================
+    # 5. PRUEBAS ENFOCADAS: TOKENS SIN DESGLOSE Y CASO RENDER GEMINI
+    # =========================================================================
+
+    @patch("requests.post")
+    def test_10_llamada_directa_con_tokens_sin_desglose(self, mock_post):
+        """Llamada directa donde el proveedor reporta total mayor a la suma de prompt y completion registra tokens_sin_desglose."""
+        cfg = ConfiguracionLLM()
+        cfg.proveedor = "gemini"
+        cfg.activado = True
+        cfg.api_key = "AIzaSyFakeTestKey"
+        cfg.modelo = "gemini-2.0-flash"
+        proveedor = ProveedorLLM(config=cfg)
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "choices": [{"message": {"role": "assistant", "content": "La biblioteca abre de lunes a viernes."}}],
+            "usage": {
+                "prompt_tokens": 500,
+                "completion_tokens": 40,
+                "total_tokens": 600  # 60 tokens sin desglose en el usage
+            }
+        }
+        mock_post.return_value = mock_resp
+
+        resultado = proveedor.procesar_consulta("¿Cuál es el horario?", rol="SuperAdmin")
+        tokens = resultado["metricas"]["tokens"]
+
+        self.assertTrue(tokens["disponible"])
+        self.assertEqual(tokens["prompt_tokens"], 500)
+        self.assertEqual(tokens["completion_tokens"], 40)
+        self.assertEqual(tokens["tokens_sin_desglose"], 60)
+        self.assertEqual(tokens["total_tokens"], 600)
+        self.assertEqual(tokens["prompt_tokens"] + tokens["completion_tokens"] + tokens["tokens_sin_desglose"], tokens["total_tokens"])
+        self.assertEqual(tokens["llamadas_api"], 1)
+
+    @patch("requests.post")
+    def test_11_llamada_directa_coincidencia_aritmetica_estricta(self, mock_post):
+        """Llamada directa con desglose exacto reporta tokens_sin_desglose en 0."""
+        cfg = ConfiguracionLLM()
+        cfg.proveedor = "gemini"
+        cfg.activado = True
+        cfg.api_key = "AIzaSyFakeTestKey"
+        cfg.modelo = "gemini-2.0-flash"
+        proveedor = ProveedorLLM(config=cfg)
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "choices": [{"message": {"role": "assistant", "content": "Respuesta directa estándar."}}],
+            "usage": {
+                "prompt_tokens": 200,
+                "completion_tokens": 30,
+                "total_tokens": 230
+            }
+        }
+        mock_post.return_value = mock_resp
+
+        resultado = proveedor.procesar_consulta("Consulta directa", rol="SuperAdmin")
+        tokens = resultado["metricas"]["tokens"]
+
+        self.assertTrue(tokens["disponible"])
+        self.assertEqual(tokens["prompt_tokens"], 200)
+        self.assertEqual(tokens["completion_tokens"], 30)
+        self.assertEqual(tokens["tokens_sin_desglose"], 0)
+        self.assertEqual(tokens["total_tokens"], 230)
+        self.assertEqual(tokens["prompt_tokens"] + tokens["completion_tokens"] + tokens["tokens_sin_desglose"], tokens["total_tokens"])
+        self.assertEqual(tokens["llamadas_api"], 1)
+
+    @patch("requests.post")
+    def test_12_ciclo_dos_llamadas_herramienta_caso_render_con_tokens_sin_desglose(self, mock_post):
+        """
+        Caso exacto de Render verificado:
+        - 1 solicitud, 2 llamadas al LLM (tool call + síntesis), 0 fallback.
+        - Llamada 1: prompt=550, completion=0, total=650.
+        - Llamada 2: prompt=587, completion=49, total=650.
+        - Preserva exactamente los valores reportados: prompt=1,137, completion=49, total=1,300.
+        - Registra la diferencia aritmética de 114 como tokens_sin_desglose (1,137 + 49 + 114 = 1,300).
+        - Presupuesto calculado estrictamente con total_tokens reportado (1,300).
+        """
+        cfg = ConfiguracionLLM()
+        cfg.proveedor = "gemini"
+        cfg.activado = True
+        cfg.api_key = "AIzaSyFakeTestKey"
+        cfg.modelo = "gemini-2.0-flash"
+        proveedor = ProveedorLLM(config=cfg)
+
+        # Llamada 1: Gemini decide invocar obtener_resumen_ingresos
+        resp1 = MagicMock()
+        resp1.status_code = 200
+        resp1.json.return_value = {
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [{
+                        "id": "call_rend_1",
+                        "type": "function",
+                        "function": {
+                            "name": "obtener_resumen_ingresos",
+                            "arguments": json.dumps({"fecha_inicio": "2026-06-01", "fecha_fin": "2026-07-31"})
+                        }
+                    }]
+                }
+            }],
+            "usage": {
+                "prompt_tokens": 550,
+                "completion_tokens": 0,
+                "total_tokens": 650
+            }
+        }
+
+        # Llamada 2: Gemini recibe los datos agregados y sintetiza la respuesta final
+        resp2 = MagicMock()
+        resp2.status_code = 200
+        resp2.json.return_value = {
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "content": "Entre el 1 de junio y el 31 de julio de 2026 hubo 18,168 ingresos registrados."
+                }
+            }],
+            "usage": {
+                "prompt_tokens": 587,
+                "completion_tokens": 49,
+                "total_tokens": 650
+            }
+        }
+        mock_post.side_effect = [resp1, resp2]
+
+        with patch("llm.services.proveedor_llm.obtener_resumen_ingresos") as mock_tool:
+            mock_tool.return_value = {
+                "total_ingresos": 18168,
+                "fecha_inicio": "2026-06-01",
+                "fecha_fin": "2026-07-31",
+                "sede": None,
+                "status": "success"
+            }
+
+            res = proveedor.procesar_consulta(
+                "¿Cuántos ingresos de alumnos hubo entre el 1 de junio y el 31 de julio de 2026?",
+                rol="SuperAdmin"
+            )
+
+            tokens = res["metricas"]["tokens"]
+            self.assertTrue(tokens["disponible"])
+            self.assertEqual(tokens["prompt_tokens"], 1137)       # 550 + 587
+            self.assertEqual(tokens["completion_tokens"], 49)     # 0 + 49 reportado por proveedor
+            self.assertEqual(tokens["tokens_sin_desglose"], 114)  # 1300 - (1137 + 49)
+            self.assertEqual(tokens["total_tokens"], 1300)        # 650 + 650
+            self.assertEqual(tokens["llamadas_api"], 2)
+            # Verificación aritmética estricta
+            self.assertEqual(
+                tokens["prompt_tokens"] + tokens["completion_tokens"] + tokens["tokens_sin_desglose"],
+                tokens["total_tokens"]
+            )
+
+            # Probar registro en el gestor de métricas y cálculo de presupuesto configurable
+            with patch.dict(os.environ, {"LLM_PRESUPUESTO_TOKENS": "100000"}):
+                reg = self.gestor.registrar_interaccion(
+                    proveedor="gemini",
+                    modelo="gemini-2.0-flash",
+                    intencion=res["intencion"],
+                    tiempo_ms=res["metricas"]["tiempo_ms"],
+                    tokens=tokens,
+                    exito=True,
+                    es_fallback=False
+                )
+
+                self.assertEqual(reg["prompt_tokens"], 1137)
+                self.assertEqual(reg["completion_tokens"], 49)
+                self.assertEqual(reg["tokens_sin_desglose"], 114)
+                self.assertEqual(reg["total_tokens"], 1300)
+                self.assertEqual(
+                    reg["prompt_tokens"] + reg["completion_tokens"] + reg["tokens_sin_desglose"],
+                    reg["total_tokens"]
+                )
+
+                resumen = self.gestor.obtener_resumen()
+                tok_resumen = resumen["tokens"]
+                self.assertEqual(tok_resumen["prompt_tokens"], 1137)
+                self.assertEqual(tok_resumen["completion_tokens"], 49)
+                self.assertEqual(tok_resumen["tokens_sin_desglose"], 114)
+                self.assertEqual(tok_resumen["total_tokens"], 1300)
+                self.assertEqual(
+                    tok_resumen["prompt_tokens"] + tok_resumen["completion_tokens"] + tok_resumen["tokens_sin_desglose"],
+                    tok_resumen["total_tokens"]
+                )
+
+                # Verificación de cálculo del porcentaje del presupuesto usando total_tokens reportado
+                presupuesto = resumen["presupuesto"]
+                self.assertTrue(presupuesto["configurado"])
+                self.assertEqual(presupuesto["limite_tokens"], 100000)
+                # 1,300 / 100,000 * 100 = 1.3%
+                self.assertEqual(presupuesto["porcentaje"], 1.3)
+                self.assertEqual(presupuesto["etiqueta"], "Porcentaje del presupuesto configurado")
+
+    def test_13_normalizacion_de_registros_previos_con_discrepancia_al_cargar(self):
+        """Registros previos en archivo con discrepancia histórica (1137, 49, 1300) preservan valores y calculan tokens_sin_desglose."""
+        datos_previos = [{
+            "id": "met_prev_01",
+            "timestamp": "2026-10-16T00:00:00",
+            "proveedor": "gemini",
+            "modelo": "gemini-2.0-flash",
+            "intencion": "resumen_ingresos",
+            "tiempo_ms": 650,
+            "prompt_tokens": 1137,
+            "completion_tokens": 49,
+            "total_tokens": 1300,
+            "tokens_disponibles": True,
+            "llamadas_api": 2,
+            "exito": True,
+            "es_fallback": False
+        }]
+
+        # Escribir en archivo temporal
+        with open(self.archivo_tmp, "w", encoding="utf-8") as f:
+            json.dump(datos_previos, f)
+
+        # Crear gestor apuntando a ese archivo
+        gestor_recuperado = GestorMetricasAsistente(archivo_persistencia=self.archivo_tmp)
+        resumen = gestor_recuperado.obtener_resumen()
+
+        tok = resumen["tokens"]
+        self.assertTrue(tok["disponible"])
+        self.assertEqual(tok["prompt_tokens"], 1137)
+        self.assertEqual(tok["completion_tokens"], 49)
+        self.assertEqual(tok["tokens_sin_desglose"], 114)
+        self.assertEqual(tok["total_tokens"], 1300)
+        self.assertEqual(tok["prompt_tokens"] + tok["completion_tokens"] + tok["tokens_sin_desglose"], tok["total_tokens"])
+
+    def test_14_panel_metricas_renderiza_tokens_sin_desglose(self):
+        """El panel HTML de métricas renderiza visualmente el campo 'Tokens sin desglose' y su valor."""
+        with patch("llm.services.metricas_asistente.obtener_gestor_metricas", return_value=self.gestor):
+            self.gestor.registrar_interaccion(
+                proveedor="gemini",
+                modelo="gemini-2.0-flash",
+                intencion="resumen_ingresos",
+                tiempo_ms=750,
+                tokens={
+                    "disponible": True,
+                    "prompt_tokens": 1137,
+                    "completion_tokens": 49,
+                    "tokens_sin_desglose": 114,
+                    "total_tokens": 1300,
+                    "llamadas_api": 2
+                },
+                exito=True,
+                es_fallback=False
+            )
+
+            with self.client.session_transaction() as sess:
+                sess["admin_user"] = "superadmin"
+                sess["admin_rol"] = "SuperAdmin"
+
+            resp_html = self.client.get("/admin/asistente/metricas")
+            self.assertEqual(resp_html.status_code, 200)
+            self.assertIn(b"Tokens sin desglose:", resp_html.data)
+            self.assertIn(b"114", resp_html.data)
+            self.assertIn(b"(+114 sin desglose)", resp_html.data)
+            self.assertIn(b"1,300", resp_html.data)
+
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -1,5 +1,7 @@
 import re
+import calendar
 from datetime import date, datetime, timedelta
+from typing import Optional, Dict, Any, Tuple
 
 SEDES_VALIDAS = {
     "central": "Central",
@@ -18,6 +20,22 @@ CAMPOS_SENSIBLES_PROHIBIDOS = {
     "respuesta", "mensaje", "datos"
 }
 
+MESES_ESPANOL = {
+    "enero": 1,
+    "febrero": 2,
+    "marzo": 3,
+    "abril": 4,
+    "mayo": 5,
+    "junio": 6,
+    "julio": 7,
+    "agosto": 8,
+    "septiembre": 9,
+    "setiembre": 9,
+    "octubre": 10,
+    "noviembre": 11,
+    "diciembre": 12
+}
+
 
 def obtener_fecha_referencia():
     """
@@ -31,44 +49,375 @@ def obtener_fecha_referencia():
         return datetime.now().date()
 
 
-def resolver_expresion_temporal(texto, fecha_referencia=None):
+def validar_fecha_espanol(dia: int, mes: int, anio: int) -> Optional[date]:
     """
-    Resuelve expresiones temporales relativas y absolutas a fechas ISO (YYYY-MM-DD).
-    Soporta:
-    - 'ayer', 'de ayer', 'para ayer' -> día anterior
-    - 'hoy', 'de hoy', 'para hoy' -> día actual
-    - 'anteayer', 'antier' -> dos días anteriores
-    - 'la semana pasada' -> lunes a domingo de la semana calendario anterior
-    - 'el mes pasado' -> primer y último día del mes calendario anterior
-    - 'del YYYY-MM-DD al YYYY-MM-DD' -> rango explícito
-    - 'YYYY-MM-DD' -> fecha puntual explícita
+    Valida y construye un objeto date verificando límites de mes y bisiestos.
+    Retorna None si el día o mes es inválido para el año especificado (ej. 31 de junio).
+    """
+    if not (1 <= mes <= 12):
+        return None
+    if not (1900 <= anio <= 2100):
+        return None
+    _, max_dias = calendar.monthrange(anio, mes)
+    if not (1 <= dia <= max_dias):
+        return None
+    try:
+        return date(anio, mes, dia)
+    except (ValueError, TypeError):
+        return None
+
+
+def extraer_fechas_texto_espanol(texto: str, fecha_referencia=None) -> Optional[Dict[str, Any]]:
+    """
+    Extrae e interpreta expresiones de fechas y rangos en español y formato numérico/ISO.
+    Valida días por mes, rangos válidos (inicio <= fin) y límites de 366 días.
+    Detecta también fechas ambiguas o incompletas (ej. mes sin año).
     """
     if not texto or not isinstance(texto, str):
         return None
 
-    ref = fecha_referencia if isinstance(fecha_referencia, (date, datetime)) else obtener_fecha_referencia()
-    if isinstance(ref, datetime):
-        ref = ref.date()
+    # 1. Rango explícito en formato ISO: del YYYY-MM-DD al YYYY-MM-DD / entre YYYY-MM-DD y YYYY-MM-DD
+    m_rango_iso = re.search(
+        r"\b(?:del?\s+|entre\s+(?:el\s+)?|desde\s+(?:el\s+)?)"
+        r"(\d{4}-\d{2}-\d{2})"
+        r"\s+(?:al?\s+|y\s+(?:el\s+)?|hasta\s+(?:el\s+)?)"
+        r"(\d{4}-\d{2}-\d{2})\b",
+        texto,
+        re.IGNORECASE
+    )
+    if m_rango_iso:
+        try:
+            f1 = date.fromisoformat(m_rango_iso.group(1))
+            f2 = date.fromisoformat(m_rango_iso.group(2))
+            if f1 > f2:
+                return {
+                    "error_temporal": "rango_invalido",
+                    "mensaje_error": "La fecha de inicio debe ser anterior o igual a la fecha de fin."
+                }
+            if (f2 - f1).days > 366:
+                return {
+                    "error_temporal": "rango_excesivo",
+                    "mensaje_error": "El rango consultado excede el límite máximo permitido de 366 días."
+                }
+            return {
+                "fecha_inicio": f1.isoformat(),
+                "fecha_fin": f2.isoformat(),
+                "tipo_periodo": "rango"
+            }
+        except ValueError:
+            return {
+                "error_temporal": "fecha_invalida",
+                "mensaje_error": "El formato de fecha no es válido."
+            }
 
-    # 1. Rango explícito: del YYYY-MM-DD al YYYY-MM-DD
-    m_rango = re.search(r"\bdel\s+(\d{4}-\d{2}-\d{2})\s+al\s+(\d{4}-\d{2}-\d{2})\b", texto, re.IGNORECASE)
-    if m_rango:
+    # 2. Rango explícito en español (dos fechas completas o entre distintos meses):
+    # Ej: 'entre el 1 de junio y el 31 de julio de 2026', 'del 1 de junio al 31 de julio de 2026',
+    #     'desde el 1 de junio hasta el 31 de julio de 2026', 'de 1 de junio a 31 de julio de 2026'
+    m_rango_meses = re.search(
+        r"\b(?:entre\s+(?:el\s+)?|del?\s+(?:el\s+)?|desde\s+(?:el\s+)?)"
+        r"(\d{1,2})\s+de\s+([a-záéíóúñ]+)(?:\s+de\s+(\d{4}))?"
+        r"\s+(?:y\s+(?:el\s+)?|al?\s+(?:el\s+)?|hasta\s+(?:el\s+)?)"
+        r"(\d{1,2})\s+de\s+([a-záéíóúñ]+)\s+de\s+(\d{4})\b",
+        texto,
+        re.IGNORECASE
+    )
+    if m_rango_meses:
+        m1_nom = normalizar_texto(m_rango_meses.group(2))
+        m2_nom = normalizar_texto(m_rango_meses.group(5))
+        if m1_nom in MESES_ESPANOL and m2_nom in MESES_ESPANOL:
+            d1 = int(m_rango_meses.group(1))
+            m1 = MESES_ESPANOL[m1_nom]
+            y2 = int(m_rango_meses.group(6))
+            y1 = int(m_rango_meses.group(3)) if m_rango_meses.group(3) else y2
+            d2 = int(m_rango_meses.group(4))
+            m2 = MESES_ESPANOL[m2_nom]
+
+            f1 = validar_fecha_espanol(d1, m1, y1)
+            if not f1:
+                return {
+                    "error_temporal": "fecha_invalida",
+                    "mensaje_error": f"La fecha {d1} de {m1_nom} de {y1} no es válida."
+                }
+            f2 = validar_fecha_espanol(d2, m2, y2)
+            if not f2:
+                return {
+                    "error_temporal": "fecha_invalida",
+                    "mensaje_error": f"La fecha {d2} de {m2_nom} de {y2} no es válida."
+                }
+            if f1 > f2:
+                return {
+                    "error_temporal": "rango_invalido",
+                    "mensaje_error": "La fecha de inicio debe ser anterior o igual a la fecha de fin."
+                }
+            if (f2 - f1).days > 366:
+                return {
+                    "error_temporal": "rango_excesivo",
+                    "mensaje_error": "El rango consultado excede el límite máximo permitido de 366 días."
+                }
+            return {
+                "fecha_inicio": f1.isoformat(),
+                "fecha_fin": f2.isoformat(),
+                "tipo_periodo": "rango"
+            }
+
+    # 3. Rango explícito en español dentro del mismo mes:
+    # Ej: 'del 1 al 15 de julio de 2026', 'entre el 1 y el 15 de julio de 2026'
+    m_rango_mismo_mes = re.search(
+        r"\b(?:entre\s+(?:el\s+)?|del?\s+(?:el\s+)?|desde\s+(?:el\s+)?)"
+        r"(\d{1,2})"
+        r"\s+(?:y\s+(?:el\s+)?|al?\s+(?:el\s+)?|hasta\s+(?:el\s+)?)"
+        r"(\d{1,2})\s+de\s+([a-záéíóúñ]+)\s+de\s+(\d{4})\b",
+        texto,
+        re.IGNORECASE
+    )
+    if m_rango_mismo_mes:
+        m_nom = normalizar_texto(m_rango_mismo_mes.group(3))
+        if m_nom in MESES_ESPANOL:
+            d1 = int(m_rango_mismo_mes.group(1))
+            d2 = int(m_rango_mismo_mes.group(2))
+            m = MESES_ESPANOL[m_nom]
+            y = int(m_rango_mismo_mes.group(4))
+
+            f1 = validar_fecha_espanol(d1, m, y)
+            if not f1:
+                return {
+                    "error_temporal": "fecha_invalida",
+                    "mensaje_error": f"La fecha {d1} de {m_nom} de {y} no es válida."
+                }
+            f2 = validar_fecha_espanol(d2, m, y)
+            if not f2:
+                return {
+                    "error_temporal": "fecha_invalida",
+                    "mensaje_error": f"La fecha {d2} de {m_nom} de {y} no es válida."
+                }
+            if f1 > f2:
+                return {
+                    "error_temporal": "rango_invalido",
+                    "mensaje_error": "La fecha de inicio debe ser anterior o igual a la fecha de fin."
+                }
+            return {
+                "fecha_inicio": f1.isoformat(),
+                "fecha_fin": f2.isoformat(),
+                "tipo_periodo": "rango"
+            }
+
+    # 4. Rango de meses completos: 'entre junio y julio de 2026', 'de junio a julio de 2026'
+    m_rango_meses_comp = re.search(
+        r"\b(?:entre\s+(?:el\s+mes\s+de\s+)?|del?\s+(?:mes\s+de\s+)?|desde\s+(?:el\s+mes\s+de\s+)?)"
+        r"([a-záéíóúñ]+)"
+        r"\s+(?:y\s+(?:el\s+mes\s+de\s+)?|al?\s+(?:mes\s+de\s+)?|hasta\s+(?:el\s+mes\s+de\s+)?)"
+        r"([a-záéíóúñ]+)\s+de\s+(\d{4})\b",
+        texto,
+        re.IGNORECASE
+    )
+    if m_rango_meses_comp:
+        m1_nom = normalizar_texto(m_rango_meses_comp.group(1))
+        m2_nom = normalizar_texto(m_rango_meses_comp.group(2))
+        if m1_nom in MESES_ESPANOL and m2_nom in MESES_ESPANOL:
+            y = int(m_rango_meses_comp.group(3))
+            m1 = MESES_ESPANOL[m1_nom]
+            m2 = MESES_ESPANOL[m2_nom]
+            _, last_day = calendar.monthrange(y, m2)
+            f1 = date(y, m1, 1)
+            f2 = date(y, m2, last_day)
+            if f1 > f2:
+                return {
+                    "error_temporal": "rango_invalido",
+                    "mensaje_error": "La fecha de inicio debe ser anterior o igual a la fecha de fin."
+                }
+            if (f2 - f1).days > 366:
+                return {
+                    "error_temporal": "rango_excesivo",
+                    "mensaje_error": "El rango consultado excede el límite máximo permitido de 366 días."
+                }
+            return {
+                "fecha_inicio": f1.isoformat(),
+                "fecha_fin": f2.isoformat(),
+                "tipo_periodo": "rango"
+            }
+
+    # 5. Fecha puntual en español: 'el 15 de julio de 2026', '15 de julio de 2026'
+    m_fecha_esp = re.search(
+        r"\b(?:el\s+|para\s+el\s+|del?\s+)?"
+        r"(\d{1,2})\s+de\s+([a-záéíóúñ]+)\s+de\s+(\d{4})\b",
+        texto,
+        re.IGNORECASE
+    )
+    if m_fecha_esp:
+        m_nom = normalizar_texto(m_fecha_esp.group(2))
+        if m_nom in MESES_ESPANOL:
+            d = int(m_fecha_esp.group(1))
+            m = MESES_ESPANOL[m_nom]
+            y = int(m_fecha_esp.group(3))
+            f = validar_fecha_espanol(d, m, y)
+            if not f:
+                return {
+                    "error_temporal": "fecha_invalida",
+                    "mensaje_error": f"La fecha {d} de {m_nom} de {y} no es válida."
+                }
+            f_str = f.isoformat()
+            return {
+                "fecha_inicio": f_str,
+                "fecha_fin": f_str,
+                "fecha": f_str,
+                "tipo_periodo": "fecha_fija"
+            }
+
+    # 6. Mes completo: 'en junio de 2026', 'durante junio de 2026', 'en el mes de junio de 2026'
+    m_mes_comp = re.search(
+        r"\b(?:(?:en|durante|para)\s+(?:el\s+mes\s+de\s+)?|el\s+mes\s+de\s+|mes\s+de\s+)"
+        r"([a-záéíóúñ]+)\s+de\s+(\d{4})\b",
+        texto,
+        re.IGNORECASE
+    )
+    if m_mes_comp:
+        m_nom = normalizar_texto(m_mes_comp.group(1))
+        if m_nom in MESES_ESPANOL:
+            y = int(m_mes_comp.group(2))
+            m = MESES_ESPANOL[m_nom]
+            _, last_day = calendar.monthrange(y, m)
+            f1 = date(y, m, 1)
+            f2 = date(y, m, last_day)
+            return {
+                "fecha_inicio": f1.isoformat(),
+                "fecha_fin": f2.isoformat(),
+                "tipo_periodo": "mes_completo"
+            }
+
+    # 7. Rango numérico DD/MM/YYYY o DD-MM-YYYY: 'del 01/06/2026 al 31/07/2026'
+    m_rango_num = re.search(
+        r"\b(?:del?\s+|entre\s+(?:el\s+)?|desde\s+(?:el\s+)?)"
+        r"(\d{1,2})[/-](\d{1,2})[/-](\d{4})"
+        r"\s+(?:al?\s+|y\s+(?:el\s+)?|hasta\s+(?:el\s+)?)"
+        r"(\d{1,2})[/-](\d{1,2})[/-](\d{4})\b",
+        texto,
+        re.IGNORECASE
+    )
+    if m_rango_num:
+        d1, m1, y1 = int(m_rango_num.group(1)), int(m_rango_num.group(2)), int(m_rango_num.group(3))
+        d2, m2, y2 = int(m_rango_num.group(4)), int(m_rango_num.group(5)), int(m_rango_num.group(6))
+        f1 = validar_fecha_espanol(d1, m1, y1)
+        f2 = validar_fecha_espanol(d2, m2, y2)
+        if not f1 or not f2:
+            return {
+                "error_temporal": "fecha_invalida",
+                "mensaje_error": "Una de las fechas indicadas en el rango no es válida."
+            }
+        if f1 > f2:
+            return {
+                "error_temporal": "rango_invalido",
+                "mensaje_error": "La fecha de inicio debe ser anterior o igual a la fecha de fin."
+            }
+        if (f2 - f1).days > 366:
+            return {
+                "error_temporal": "rango_excesivo",
+                "mensaje_error": "El rango consultado excede el límite máximo permitido de 366 días."
+            }
         return {
-            "fecha_inicio": m_rango.group(1),
-            "fecha_fin": m_rango.group(2),
+            "fecha_inicio": f1.isoformat(),
+            "fecha_fin": f2.isoformat(),
             "tipo_periodo": "rango"
         }
 
-    # 2. Fecha explícita única: YYYY-MM-DD
-    m_fecha = re.search(r"\b(\d{4}-\d{2}-\d{2})\b", texto)
-    if m_fecha:
-        f_str = m_fecha.group(1)
+    # 8. Fecha puntual numérica DD/MM/YYYY o YYYY-MM-DD
+    m_fecha_iso = re.search(r"\b(\d{4}-\d{2}-\d{2})\b", texto)
+    if m_fecha_iso:
+        try:
+            f = date.fromisoformat(m_fecha_iso.group(1))
+            f_str = f.isoformat()
+            return {
+                "fecha_inicio": f_str,
+                "fecha_fin": f_str,
+                "fecha": f_str,
+                "tipo_periodo": "fecha_fija"
+            }
+        except ValueError:
+            return {
+                "error_temporal": "fecha_invalida",
+                "mensaje_error": "La fecha ISO no es válida."
+            }
+
+    m_fecha_num = re.search(r"\b(\d{1,2})[/-](\d{1,2})[/-](\d{4})\b", texto)
+    if m_fecha_num:
+        d, m, y = int(m_fecha_num.group(1)), int(m_fecha_num.group(2)), int(m_fecha_num.group(3))
+        f = validar_fecha_espanol(d, m, y)
+        if not f:
+            return {
+                "error_temporal": "fecha_invalida",
+                "mensaje_error": "La fecha numérica indicada no es válida."
+            }
+        f_str = f.isoformat()
         return {
             "fecha_inicio": f_str,
             "fecha_fin": f_str,
             "fecha": f_str,
             "tipo_periodo": "fecha_fija"
         }
+
+    # 9. Detección de ambigüedad: Rango de días sin año ('del 1 al 15 de julio')
+    for m_rango_sin_anio in re.finditer(
+        r"\b(?:entre\s+(?:el\s+)?|del?\s+(?:el\s+)?|desde\s+(?:el\s+)?)"
+        r"(\d{1,2})"
+        r"\s+(?:y\s+(?:el\s+)?|al?\s+(?:el\s+)?|hasta\s+(?:el\s+)?)"
+        r"(\d{1,2})\s+de\s+([a-záéíóúñ]+)\b",
+        texto,
+        re.IGNORECASE
+    ):
+        m_nom = normalizar_texto(m_rango_sin_anio.group(3))
+        if m_nom in MESES_ESPANOL:
+            return {
+                "error_temporal": "fecha_ambigua",
+                "mensaje_error": f"¿A qué año corresponde el periodo del {m_rango_sin_anio.group(1)} al {m_rango_sin_anio.group(2)} de {m_nom}? Por favor indique el año (por ejemplo: 'del {m_rango_sin_anio.group(1)} al {m_rango_sin_anio.group(2)} de {m_nom} de 2026')."
+            }
+
+    # 10. Detección de ambigüedad: Fecha puntual sin año ('el 15 de julio')
+    for m_puntual_sin_anio in re.finditer(
+        r"\b(?:el\s+|para\s+el\s+|del?\s+)?"
+        r"(\d{1,2})\s+de\s+([a-záéíóúñ]+)\b",
+        texto,
+        re.IGNORECASE
+    ):
+        m_nom = normalizar_texto(m_puntual_sin_anio.group(2))
+        if m_nom in MESES_ESPANOL and m_nom not in ("hoy", "ayer"):
+            return {
+                "error_temporal": "fecha_ambigua",
+                "mensaje_error": f"¿A qué año corresponde la fecha {m_puntual_sin_anio.group(1)} de {m_nom}? Por favor indique el año (por ejemplo: '{m_puntual_sin_anio.group(1)} de {m_nom} de 2026')."
+            }
+
+    # 11. Detección de ambigüedad: Mes mencionado sin año ('en junio', 'durante julio')
+    for m_mes in re.finditer(r"\b([a-záéíóúñ]+)\b", texto, re.IGNORECASE):
+        m_nom = normalizar_texto(m_mes.group(1))
+        if m_nom in MESES_ESPANOL and m_nom not in ("hoy", "ayer"):
+            return {
+                "error_temporal": "fecha_ambigua",
+                "mensaje_error": f"¿A qué año corresponde el mes de {m_nom}? Por favor especifique el año (por ejemplo: '{m_nom} de 2026')."
+            }
+
+    return None
+
+
+def resolver_expresion_temporal(texto, fecha_referencia=None):
+    """
+    Resuelve expresiones temporales relativas y absolutas a fechas ISO (YYYY-MM-DD).
+    Soporta:
+    - Fechas y rangos explícitos en español (vía extraer_fechas_texto_espanol)
+    - 'ayer', 'de ayer', 'para ayer' -> día anterior
+    - 'hoy', 'de hoy', 'para hoy' -> día actual
+    - 'anteayer', 'antier' -> dos días anteriores
+    - 'la semana pasada' -> lunes a domingo de la semana calendario anterior
+    - 'el mes pasado' -> primer y último día del mes calendario anterior
+    """
+    if not texto or not isinstance(texto, str):
+        return None
+
+    # Primero intentar resolver expresiones explícitas en español o numéricas
+    res_esp = extraer_fechas_texto_espanol(texto, fecha_referencia)
+    if res_esp:
+        return res_esp
+
+    ref = fecha_referencia if isinstance(fecha_referencia, (date, datetime)) else obtener_fecha_referencia()
+    if isinstance(ref, datetime):
+        ref = ref.date()
 
     norm = normalizar_texto(texto)
 
@@ -283,7 +632,7 @@ def extraer_nombre_persona(pregunta_original):
         if m:
             nombre = m.group(1).strip()
             nombre = re.sub(
-                r"\b(hoy|ayer|en|el|la|los|las|de|por|para|esta|semana|mes|pasado|biblioteca|sede)\b.*$",
+                r"\b(hoy|ayer|entre|del|desde|en|el|la|los|las|de|por|para|esta|semana|mes|pasado|biblioteca|sede)\b.*$",
                 "",
                 nombre,
                 flags=re.IGNORECASE
@@ -317,30 +666,22 @@ def extraer_parametros_texto(pregunta_original, norm, fecha_referencia=None):
     """
     params = {}
 
-    # 1. Rango de fechas: 'del YYYY-MM-DD al YYYY-MM-DD'
-    m_rango = re.search(r"\bdel\s+(\d{4}-\d{2}-\d{2})\s+al\s+(\d{4}-\d{2}-\d{2})\b", pregunta_original, re.IGNORECASE)
-    if m_rango:
-        params["fecha_inicio"] = m_rango.group(1)
-        params["fecha_fin"] = m_rango.group(2)
+    # 1. Extracción y validación temporal centralizada (fechas en español, ISO, relativas o errores)
+    temp = resolver_expresion_temporal(pregunta_original, fecha_referencia)
+    if temp:
+        if "error_temporal" in temp:
+            params["error_temporal"] = temp["error_temporal"]
+            params["mensaje_error_temporal"] = temp.get("mensaje_error")
+        if "fecha_inicio" in temp:
+            params["fecha_inicio"] = temp["fecha_inicio"]
+        if "fecha_fin" in temp:
+            params["fecha_fin"] = temp["fecha_fin"]
+        if "fecha" in temp:
+            params["fecha"] = temp["fecha"]
+        if "tipo_periodo" in temp:
+            params["tipo_periodo"] = temp["tipo_periodo"]
 
-    # 2. Fecha única: YYYY-MM-DD
-    if "fecha_inicio" not in params:
-        m_fecha = re.search(r"\b(\d{4}-\d{2}-\d{2})\b", pregunta_original)
-        if m_fecha:
-            params["fecha"] = m_fecha.group(1)
-
-    # 3. Expresiones temporales relativas si no hay fechas explícitas
-    if "fecha_inicio" not in params and "fecha" not in params:
-        temp = resolver_expresion_temporal(pregunta_original, fecha_referencia)
-        if temp:
-            if "fecha_inicio" in temp:
-                params["fecha_inicio"] = temp["fecha_inicio"]
-            if "fecha_fin" in temp:
-                params["fecha_fin"] = temp["fecha_fin"]
-            if "fecha" in temp:
-                params["fecha"] = temp["fecha"]
-
-    # 4. Hora: 'a las 10:00', 'a las 10', 'a la 1'
+    # 2. Hora: 'a las 10:00', 'a las 10', 'a la 1'
     m_hora = re.search(r"\b(?:a\s+las\s+|a\s+la\s+|hora\s+)(\d{1,2})(?::00)?\b", norm)
     if m_hora:
         try:
@@ -350,7 +691,7 @@ def extraer_parametros_texto(pregunta_original, norm, fecha_referencia=None):
         except (ValueError, TypeError):
             pass
 
-    # 5. Sede
+    # 3. Sede
     for sede_clave, sede_nom in SEDES_VALIDAS.items():
         if re.search(r"\b(?:sede\s+)?" + re.escape(sede_clave) + r"\b", norm):
             params["sede"] = sede_nom

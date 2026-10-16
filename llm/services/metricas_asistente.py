@@ -32,15 +32,31 @@ class GestorMetricasAsistente:
         self._cargar_desde_archivo()
 
     def _cargar_desde_archivo(self) -> None:
-        """Carga el historial previo desde archivo JSON si existe."""
+        """Carga el historial previo desde archivo JSON si existe y preserva el desglose de tokens."""
         if not self.archivo_persistencia.exists():
             return
         try:
             with open(self.archivo_persistencia, "r", encoding="utf-8") as f:
                 datos = json.load(f)
                 if isinstance(datos, list):
-                    # Validar que no contengan campos prohibidos
-                    self._registros = [r for r in datos if isinstance(r, dict)][-MAX_REGISTROS_HISTORIAL:]
+                    # Validar formato y calcular tokens_sin_desglose si existen registros previos
+                    registros_limpios = []
+                    for r in datos:
+                        if not isinstance(r, dict):
+                            continue
+                        if r.get("tokens_disponibles"):
+                            p = r.get("prompt_tokens")
+                            c = r.get("completion_tokens")
+                            t = r.get("total_tokens")
+                            sin_d = r.get("tokens_sin_desglose")
+                            if t is not None:
+                                suma = (int(p) if p is not None else 0) + (int(c) if c is not None else 0)
+                                if sin_d is None:
+                                    r["tokens_sin_desglose"] = max(0, int(t) - suma)
+                                else:
+                                    r["tokens_sin_desglose"] = max(0, int(sin_d))
+                        registros_limpios.append(r)
+                    self._registros = registros_limpios[-MAX_REGISTROS_HISTORIAL:]
         except Exception as e:
             logger.warning("No se pudo cargar el archivo de métricas previo: %s", str(e))
             self._registros = []
@@ -67,9 +83,12 @@ class GestorMetricasAsistente:
         """
         Registra una interacción exclusivamente con metadatos operativos agregados.
         Garantiza que nunca se almacenen textos de usuario, respuestas ni datos personales.
+        Conserva los valores exactos reportados por el proveedor (prompt_tokens, completion_tokens y total_tokens),
+        registrando cualquier diferencia como tokens_sin_desglose.
         """
         prompt_tokens = None
         completion_tokens = None
+        tokens_sin_desglose = 0
         total_tokens = None
         tokens_disponibles = False
         llamadas_api = 1
@@ -80,10 +99,16 @@ class GestorMetricasAsistente:
                 p = tokens.get("prompt_tokens")
                 c = tokens.get("completion_tokens")
                 t = tokens.get("total_tokens")
+                sin_d = tokens.get("tokens_sin_desglose")
                 if t is not None:
                     prompt_tokens = int(p) if p is not None else None
                     completion_tokens = int(c) if c is not None else None
                     total_tokens = int(t)
+                    if sin_d is not None:
+                        tokens_sin_desglose = max(0, int(sin_d))
+                    else:
+                        suma = (prompt_tokens or 0) + (completion_tokens or 0)
+                        tokens_sin_desglose = max(0, total_tokens - suma)
                     tokens_disponibles = True
 
         registro = {
@@ -95,6 +120,7 @@ class GestorMetricasAsistente:
             "tiempo_ms": max(0, int(tiempo_ms)),
             "prompt_tokens": prompt_tokens,
             "completion_tokens": completion_tokens,
+            "tokens_sin_desglose": tokens_sin_desglose,
             "total_tokens": total_tokens,
             "tokens_disponibles": tokens_disponibles,
             "llamadas_api": llamadas_api,
@@ -125,6 +151,8 @@ class GestorMetricasAsistente:
         """
         Calcula estadísticas acumuladas exactas sobre las interacciones registradas.
         Si no hay consumo de tokens reportado, reporta 'No disponible' sin inventar cifras.
+        Preserva prompt_tokens, completion_tokens y total_tokens reportados,
+        reflejando tokens_sin_desglose si total_tokens excede la suma desglosada.
         """
         with self._lock:
             registros = list(self._registros)
@@ -151,19 +179,21 @@ class GestorMetricasAsistente:
             prompt_acumulado = sum(r.get("prompt_tokens") or 0 for r in registros_con_tokens)
             completion_acumulado = sum(r.get("completion_tokens") or 0 for r in registros_con_tokens)
             total_acumulado = sum(r.get("total_tokens") or 0 for r in registros_con_tokens)
+            tokens_sin_desglose_acumulado = max(0, total_acumulado - (prompt_acumulado + completion_acumulado))
             tokens_disponibles = True
         else:
             prompt_acumulado = None
             completion_acumulado = None
+            tokens_sin_desglose_acumulado = 0
             total_acumulado = None
             tokens_disponibles = False
 
-        # Presupuesto configurable
+        # Presupuesto configurable (calculado estrictamente con el total_tokens reportado)
         presupuesto_limite = self.obtener_presupuesto_configurado()
         if presupuesto_limite is not None:
             presupuesto_configurado = True
             etiqueta_presupuesto = "Porcentaje del presupuesto configurado"
-            if total_acumulado is not None:
+            if total_acumulado is not None and total_acumulado >= 0:
                 porcentaje_presupuesto = round((total_acumulado / presupuesto_limite) * 100, 2)
             else:
                 porcentaje_presupuesto = 0.0
@@ -185,6 +215,7 @@ class GestorMetricasAsistente:
                 "tiempo_ms": r.get("tiempo_ms"),
                 "prompt_tokens": r.get("prompt_tokens") if r.get("tokens_disponibles") else None,
                 "completion_tokens": r.get("completion_tokens") if r.get("tokens_disponibles") else None,
+                "tokens_sin_desglose": r.get("tokens_sin_desglose", 0) if r.get("tokens_disponibles") else 0,
                 "total_tokens": r.get("total_tokens") if r.get("tokens_disponibles") else None,
                 "tokens_disponibles": r.get("tokens_disponibles"),
                 "llamadas_api": r.get("llamadas_api", 1),
@@ -207,6 +238,7 @@ class GestorMetricasAsistente:
                 "disponible": tokens_disponibles,
                 "prompt_tokens": prompt_acumulado,
                 "completion_tokens": completion_acumulado,
+                "tokens_sin_desglose": tokens_sin_desglose_acumulado,
                 "total_tokens": total_acumulado,
                 "interacciones_con_tokens": conteo_con_tokens
             },

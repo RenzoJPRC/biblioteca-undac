@@ -236,6 +236,7 @@ REGLAS DE SEGURIDAD ESTRICTAS:
 3. Si la herramienta indica que los datos son insuficientes o que la biblioteca está cerrada por feriado o receso, comunica esa situación textualmente sin elucubrar.
 4. No tienes acceso a datos personales de alumnos, docentes ni personas individuales. Si detectas preguntas sobre personas específicas, indica que esas consultas deben resolverse mediante el módulo local administrativo.
 5. Mantén respuestas concisas, profesionales y basadas fielmente en los datos estructurados.
+6. Si la consulta del usuario no especifica fechas suficientes o estas son ambiguas, solicita la aclaración con ejemplos de fechas en lenguaje natural; nunca inventes ni asumas un periodo.
 """
 
 
@@ -444,9 +445,17 @@ class ProveedorLLM:
                     usage_2 = datos_sintesis.get("usage") if isinstance(datos_sintesis, dict) else None
                     mensaje_final = datos_sintesis["choices"][0]["message"]["content"].strip()
                 else:
-                    mensaje_final = "Consulta completada a partir de los datos analíticos del sistema."
+                    if nombre_tool == "obtener_resumen_ingresos":
+                        t_ing = datos_herramienta.get("total_ingresos", 0)
+                        mensaje_final = f"Resumen de ingresos del {datos_herramienta.get('fecha_inicio')} al {datos_herramienta.get('fecha_fin')}: Total de {t_ing:,} ingresos registrados."
+                    else:
+                        mensaje_final = "Consulta completada a partir de los datos analíticos del sistema."
             except Exception:
-                mensaje_final = "Consulta completada a partir de los datos analíticos del sistema."
+                if nombre_tool == "obtener_resumen_ingresos":
+                    t_ing = datos_herramienta.get("total_ingresos", 0)
+                    mensaje_final = f"Resumen de ingresos del {datos_herramienta.get('fecha_inicio')} al {datos_herramienta.get('fecha_fin')}: Total de {t_ing:,} ingresos registrados."
+                else:
+                    mensaje_final = "Consulta completada a partir de los datos analíticos del sistema."
 
             # Validación de salida (Output Guardrail) sobre la síntesis del LLM
             es_valida, mensaje_sanitizado, motivo = validar_y_sanitizar_respuesta_llm(mensaje_final)
@@ -462,7 +471,7 @@ class ProveedorLLM:
                 raise LLMSafetyViolationError(f"Respuesta directa del LLM rechazada por política de seguridad: {motivo}")
             mensaje_final = mensaje_sanitizado
 
-        # 4. Cálculo exacto de consumo de tokens a partir del campo usage real
+        # 4. Extracción exacta de consumo de tokens reportado por el proveedor
         def _extraer_enteros_tokens(usage_dict):
             if not isinstance(usage_dict, dict):
                 return None, None, None
@@ -472,6 +481,11 @@ class ProveedorLLM:
             p = int(p) if isinstance(p, (int, float)) and not isinstance(p, bool) else None
             c = int(c) if isinstance(c, (int, float)) and not isinstance(c, bool) else None
             t = int(t) if isinstance(t, (int, float)) and not isinstance(t, bool) else None
+
+            # Si el proveedor no reporta total_tokens pero sí entrada y salida, inferir suma
+            if t is None and p is not None and c is not None:
+                t = p + c
+
             return p, c, t
 
         if num_llamadas == 2:
@@ -481,10 +495,17 @@ class ProveedorLLM:
                 p_tot = ((p1 or 0) + (p2 or 0)) if (p1 is not None or p2 is not None) else None
                 c_tot = ((c1 or 0) + (c2 or 0)) if (c1 is not None or c2 is not None) else None
                 t_tot = (t1 or 0) + (t2 or 0)
+
+                # Si el total no coincide con la suma de entrada y salida,
+                # registrar la diferencia como tokens_sin_desglose en vez de sumarla silenciosamente a salida
+                suma_desglosada = (p_tot or 0) + (c_tot or 0)
+                tokens_sin_desglose = max(0, t_tot - suma_desglosada) if (t_tot is not None and t_tot > suma_desglosada) else 0
+
                 tokens_info = {
                     "disponible": True,
                     "prompt_tokens": p_tot,
                     "completion_tokens": c_tot,
+                    "tokens_sin_desglose": tokens_sin_desglose,
                     "total_tokens": t_tot,
                     "llamadas_api": 2
                 }
@@ -493,16 +514,21 @@ class ProveedorLLM:
                     "disponible": False,
                     "prompt_tokens": None,
                     "completion_tokens": None,
+                    "tokens_sin_desglose": 0,
                     "total_tokens": None,
                     "llamadas_api": 2
                 }
         else:
             p1, c1, t1 = _extraer_enteros_tokens(usage_1)
             if t1 is not None:
+                suma_desglosada = (p1 or 0) + (c1 or 0)
+                tokens_sin_desglose = max(0, t1 - suma_desglosada) if (t1 is not None and t1 > suma_desglosada) else 0
+
                 tokens_info = {
                     "disponible": True,
                     "prompt_tokens": p1,
                     "completion_tokens": c1,
+                    "tokens_sin_desglose": tokens_sin_desglose,
                     "total_tokens": t1,
                     "llamadas_api": 1
                 }
@@ -511,6 +537,7 @@ class ProveedorLLM:
                     "disponible": False,
                     "prompt_tokens": None,
                     "completion_tokens": None,
+                    "tokens_sin_desglose": 0,
                     "total_tokens": None,
                     "llamadas_api": 1
                 }

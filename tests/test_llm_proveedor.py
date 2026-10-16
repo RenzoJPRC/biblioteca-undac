@@ -702,6 +702,207 @@ class TestProveedorLLM(unittest.TestCase):
             self.assertTrue(cfg.activado)
             self.assertFalse(cfg.esta_disponible)
 
+    @patch("requests.post")
+    def test_34_gemini_consulta_agregada_texto_rango_fechas_espanol_invoca_tool_segura(self, mock_post):
+        """Caso clave: Consulta analítica con fechas en español resuelve mediante tool segura sin SQL."""
+        env_vars = {
+            "LLM_PROVEEDOR": "gemini",
+            "LLM_ACTIVADO": "true",
+            "LLM_API_KEY": "AIzaSyFakeKeyForTestingOnly",
+            "LLM_MODELO": "gemini-2.0-flash",
+            "LLM_API_BASE": "https://generativelanguage.googleapis.com/v1beta/openai"
+        }
+        with patch.dict(os.environ, env_vars, clear=True):
+            # 1. Simulación respuesta de Gemini solicitando tool call para obtener_resumen_ingresos
+            resp_tool_call = MagicMock()
+            resp_tool_call.status_code = 200
+            resp_tool_call.json.return_value = {
+                "id": "chatcmpl-gemini-34-1",
+                "object": "chat.completion",
+                "model": "gemini-2.0-flash",
+                "choices": [{
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [{
+                            "id": "call_gemini_resumen",
+                            "type": "function",
+                            "function": {
+                                "name": "obtener_resumen_ingresos",
+                                "arguments": json.dumps({"fecha_inicio": "2026-06-01", "fecha_fin": "2026-07-31"})
+                            }
+                        }]
+                    },
+                    "finish_reason": "tool_calls"
+                }],
+                "usage": {"prompt_tokens": 120, "completion_tokens": 30, "total_tokens": 150}
+            }
+
+            # 2. Simulación respuesta de síntesis de Gemini tras recibir datos de la herramienta segura
+            resp_sintesis = MagicMock()
+            resp_sintesis.status_code = 200
+            resp_sintesis.json.return_value = {
+                "id": "chatcmpl-gemini-34-2",
+                "object": "chat.completion",
+                "model": "gemini-2.0-flash",
+                "choices": [{
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": "Entre el 1 de junio y el 31 de julio de 2026 se registraron un total de 18,168 ingresos de alumnos en la biblioteca."
+                    },
+                    "finish_reason": "stop"
+                }],
+                "usage": {"prompt_tokens": 80, "completion_tokens": 40, "total_tokens": 120}
+            }
+
+            mock_post.side_effect = [resp_tool_call, resp_sintesis]
+
+            with patch("llm.services.proveedor_llm.obtener_resumen_ingresos") as mock_resumen:
+                mock_resumen.return_value = {
+                    "status": "success",
+                    "fecha_inicio": "2026-06-01",
+                    "fecha_fin": "2026-07-31",
+                    "total_ingresos": 18168,
+                    "ingresos_por_tipo_persona": {"Alumno": 18168}
+                }
+
+                from llm.services.coordinador_asistente import procesar_pregunta
+                resultado = procesar_pregunta(
+                    "¿Cuántos ingresos de alumnos hubo entre el 1 de junio y el 31 de julio de 2026?",
+                    rol="SuperAdmin"
+                )
+
+                self.assertEqual(resultado["status"], "success")
+                self.assertEqual(resultado["origen"], "llm_externo")
+                self.assertIn("18,168", resultado["mensaje"])
+                mock_resumen.assert_called_once_with(
+                    fecha_inicio="2026-06-01",
+                    fecha_fin="2026-07-31",
+                    rol="SuperAdmin",
+                    sede_permitida=None
+                )
+
+                # Confirmar que en los mensajes enviados no hay generación de SQL
+                prompt_enviado = mock_post.call_args_list[0][1]["json"]["messages"][1]["content"]
+                self.assertIn("fecha_inicio=2026-06-01", prompt_enviado)
+                self.assertIn("fecha_fin=2026-07-31", prompt_enviado)
+
+    @patch("requests.post")
+    def test_35_coherencia_tokens_dos_llamadas_herramienta_caso_render(self, mock_post):
+        """Valida que en 2 llamadas con herramienta (caso Render) se conserven prompt y completion, registrando tokens_sin_desglose."""
+        cfg = ConfiguracionLLM()
+        cfg.proveedor = "gemini"
+        cfg.activado = True
+        cfg.api_key = "AIzaSyFakeRenderTestKey"
+        cfg.modelo = "gemini-2.0-flash"
+        proveedor = ProveedorLLM(config=cfg)
+
+        # Llamada 1: Tool call de Gemini (completion_tokens=0 en capa compatible, total=650, prompt=550)
+        resp1 = MagicMock()
+        resp1.status_code = 200
+        resp1.json.return_value = {
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [{
+                        "id": "call_rend_tools",
+                        "type": "function",
+                        "function": {
+                            "name": "obtener_resumen_ingresos",
+                            "arguments": json.dumps({"fecha_inicio": "2026-06-01", "fecha_fin": "2026-07-31"})
+                        }
+                    }]
+                }
+            }],
+            "usage": {
+                "prompt_tokens": 550,
+                "completion_tokens": 0,
+                "total_tokens": 650
+            }
+        }
+
+        # Llamada 2: Síntesis de Gemini (completion_tokens=49, total=650, prompt=587)
+        resp2 = MagicMock()
+        resp2.status_code = 200
+        resp2.json.return_value = {
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "content": "Entre el 1 de junio y el 31 de julio de 2026 hubo 18,168 ingresos registrados."
+                }
+            }],
+            "usage": {
+                "prompt_tokens": 587,
+                "completion_tokens": 49,
+                "total_tokens": 650
+            }
+        }
+        mock_post.side_effect = [resp1, resp2]
+
+        with patch("llm.services.proveedor_llm.obtener_resumen_ingresos") as mock_tool:
+            mock_tool.return_value = {
+                "total_ingresos": 18168,
+                "fecha_inicio": "2026-06-01",
+                "fecha_fin": "2026-07-31",
+                "sede": None,
+                "status": "success"
+            }
+
+            res = proveedor.procesar_consulta(
+                "¿Cuántos ingresos de alumnos hubo entre el 1 de junio y el 31 de julio de 2026?",
+                rol="SuperAdmin"
+            )
+
+            tok = res["metricas"]["tokens"]
+            self.assertTrue(tok["disponible"])
+            self.assertEqual(tok["llamadas_api"], 2)
+            self.assertEqual(tok["prompt_tokens"], 1137)
+            self.assertEqual(tok["completion_tokens"], 49)
+            self.assertEqual(tok["tokens_sin_desglose"], 114)
+            self.assertEqual(tok["total_tokens"], 1300)
+            self.assertEqual(tok["prompt_tokens"] + tok["completion_tokens"] + tok["tokens_sin_desglose"], tok["total_tokens"])
+
+    @patch("requests.post")
+    def test_36_coherencia_tokens_llamada_directa_con_pensamiento(self, mock_post):
+        """Valida que en llamada directa sin herramientas se registre tokens_sin_desglose cuando total excede prompt + completion."""
+        cfg = ConfiguracionLLM()
+        cfg.proveedor = "gemini"
+        cfg.activado = True
+        cfg.api_key = "AIzaSyFakeDirectTestKey"
+        cfg.modelo = "gemini-2.0-flash"
+        proveedor = ProveedorLLM(config=cfg)
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "content": "La biblioteca atiende de 08:00 a 20:00."
+                }
+            }],
+            "usage": {
+                "prompt_tokens": 400,
+                "completion_tokens": 35,
+                "total_tokens": 485  # 50 tokens sin desglose
+            }
+        }
+        mock_post.return_value = mock_resp
+
+        res = proveedor.procesar_consulta("¿Cuál es el horario de atención?", rol="SuperAdmin")
+        tok = res["metricas"]["tokens"]
+
+        self.assertTrue(tok["disponible"])
+        self.assertEqual(tok["llamadas_api"], 1)
+        self.assertEqual(tok["prompt_tokens"], 400)
+        self.assertEqual(tok["completion_tokens"], 35)
+        self.assertEqual(tok["tokens_sin_desglose"], 50)
+        self.assertEqual(tok["total_tokens"], 485)
+        self.assertEqual(tok["prompt_tokens"] + tok["completion_tokens"] + tok["tokens_sin_desglose"], tok["total_tokens"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -925,6 +925,88 @@ class TestModuloLLMConsultas(unittest.TestCase):
             self.assertEqual(res["cobertura_sistema"]["total_pruebas_excluidas"], 38)
             self.assertEqual(res["cobertura_sistema"]["total_visitas_reales"], 0)
 
+    # 54. DETECCIÓN Y VALIDACIÓN: RANGO EN ESPAÑOL (ENTRE EL 1 DE JUNIO Y EL 31 DE JULIO DE 2026)
+    def test_54_extraer_fechas_texto_espanol_rango_completo(self):
+        from llm.services.motor_intenciones import extraer_fechas_texto_espanol, resolver_expresion_temporal
+        texto = "¿Cuántos ingresos de alumnos hubo entre el 1 de junio y el 31 de julio de 2026?"
+        res = extraer_fechas_texto_espanol(texto)
+        self.assertIsNotNone(res)
+        self.assertEqual(res["fecha_inicio"], "2026-06-01")
+        self.assertEqual(res["fecha_fin"], "2026-07-31")
+        self.assertEqual(res["tipo_periodo"], "rango")
+
+        # Confirmar también a través de resolver_expresion_temporal
+        res_temp = resolver_expresion_temporal(texto)
+        self.assertEqual(res_temp["fecha_inicio"], "2026-06-01")
+        self.assertEqual(res_temp["fecha_fin"], "2026-07-31")
+
+    # 55. DETECCIÓN Y VALIDACIÓN: RANGO DENTRO DEL MISMO MES
+    def test_55_extraer_fechas_texto_espanol_mismo_mes(self):
+        from llm.services.motor_intenciones import extraer_fechas_texto_espanol
+        texto = "del 1 al 15 de julio de 2026"
+        res = extraer_fechas_texto_espanol(texto)
+        self.assertIsNotNone(res)
+        self.assertEqual(res["fecha_inicio"], "2026-07-01")
+        self.assertEqual(res["fecha_fin"], "2026-07-15")
+
+    # 56. DETECCIÓN Y VALIDACIÓN: MES COMPLETO EN ESPAÑOL
+    def test_56_extraer_fechas_texto_espanol_mes_completo(self):
+        from llm.services.motor_intenciones import extraer_fechas_texto_espanol
+        texto = "en junio de 2026"
+        res = extraer_fechas_texto_espanol(texto)
+        self.assertIsNotNone(res)
+        self.assertEqual(res["fecha_inicio"], "2026-06-01")
+        self.assertEqual(res["fecha_fin"], "2026-06-30")
+        self.assertEqual(res["tipo_periodo"], "mes_completo")
+
+    # 57. DETECCIÓN Y VALIDACIÓN: RANGO DE MESES COMPLETOS
+    def test_57_extraer_fechas_texto_espanol_rango_meses(self):
+        from llm.services.motor_intenciones import extraer_fechas_texto_espanol
+        texto = "entre junio y julio de 2026"
+        res = extraer_fechas_texto_espanol(texto)
+        self.assertIsNotNone(res)
+        self.assertEqual(res["fecha_inicio"], "2026-06-01")
+        self.assertEqual(res["fecha_fin"], "2026-07-31")
+
+    # 58. DETECCIÓN Y VALIDACIÓN: FECHA PUNTUAL EN ESPAÑOL
+    def test_58_extraer_fechas_texto_espanol_fecha_puntual(self):
+        from llm.services.motor_intenciones import extraer_fechas_texto_espanol
+        texto = "el 15 de julio de 2026"
+        res = extraer_fechas_texto_espanol(texto)
+        self.assertIsNotNone(res)
+        self.assertEqual(res["fecha"], "2026-07-15")
+        self.assertEqual(res["fecha_inicio"], "2026-07-15")
+        self.assertEqual(res["fecha_fin"], "2026-07-15")
+
+    # 59. DETECCIÓN Y VALIDACIÓN: FECHA INVÁLIDA (31 DE JUNIO) RECHAZADA
+    def test_59_extraer_fechas_texto_espanol_fecha_invalida(self):
+        from llm.services.motor_intenciones import extraer_fechas_texto_espanol
+        texto = "entre el 1 de junio y el 31 de junio de 2026"
+        res = extraer_fechas_texto_espanol(texto)
+        self.assertIsNotNone(res)
+        self.assertEqual(res.get("error_temporal"), "fecha_invalida")
+        self.assertIn("31 de junio", res.get("mensaje_error"))
+
+    # 60. DETECCIÓN Y VALIDACIÓN: FECHA AMBIGUA (MES SIN AÑO)
+    def test_60_extraer_fechas_texto_espanol_fecha_ambigua(self):
+        from llm.services.motor_intenciones import extraer_fechas_texto_espanol
+        res_mes = extraer_fechas_texto_espanol("¿Cuántos ingresos hubo en junio?")
+        self.assertIsNotNone(res_mes)
+        self.assertEqual(res_mes.get("error_temporal"), "fecha_ambigua")
+        self.assertIn("junio", res_mes.get("mensaje_error"))
+
+        res_rango = extraer_fechas_texto_espanol("del 1 al 15 de julio")
+        self.assertIsNotNone(res_rango)
+        self.assertEqual(res_rango.get("error_temporal"), "fecha_ambigua")
+
+    # 61. DETECCIÓN Y VALIDACIÓN: RANGO INVERTIDO RECHAZADO
+    def test_61_extraer_fechas_texto_espanol_rango_invertido(self):
+        from llm.services.motor_intenciones import extraer_fechas_texto_espanol
+        texto = "del 31 de julio al 1 de junio de 2026"
+        res = extraer_fechas_texto_espanol(texto)
+        self.assertIsNotNone(res)
+        self.assertEqual(res.get("error_temporal"), "rango_invalido")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -680,6 +680,27 @@ def procesar_pregunta(
 
     # --- INTENCIÓN: RESUMEN_INGRESOS ---
     elif intencion == "resumen_ingresos":
+        # Manejo de error temporal explícito o ambigüedad detectada
+        if params_intencion.get("error_temporal"):
+            msg_err = params_intencion.get("mensaje_error_temporal") or "La fecha o periodo especificado no es válido."
+            return {
+                "status": "requires_input",
+                "intencion": "resumen_ingresos",
+                "sede_aplicada": sede_aplicada,
+                "mensaje": f"{msg_err} Por favor especifique un rango de fechas válido, por ejemplo: 'entre el 1 de junio y el 31 de julio de 2026' o 'el mes pasado'. Si lo prefiere, también puede ingresar las fechas en los parámetros complementarios.",
+                "datos": {},
+                "requiere_aclaracion": False,
+                "requiere_parametros": True,
+                "parametros_faltantes": ["fecha_inicio", "fecha_fin"],
+                "opciones": [
+                    "¿Cuántos ingresos hubo ayer?",
+                    "¿Cuántos ingresos hubo la semana pasada?",
+                    "¿Cuántos ingresos hubo el mes pasado?"
+                ],
+                "contexto": ctx_sanitizado,
+                "origen": "consulta_segura"
+            }
+
         f_ini = fecha_inicio or params_intencion.get("fecha_inicio")
         f_fin = fecha_fin or params_intencion.get("fecha_fin")
         if not f_ini or not f_fin:
@@ -687,12 +708,16 @@ def procesar_pregunta(
                 "status": "requires_input",
                 "intencion": "resumen_ingresos",
                 "sede_aplicada": sede_aplicada,
-                "mensaje": "Para consultar el resumen de ingresos debe especificar la fecha de inicio y la fecha de fin (formato YYYY-MM-DD).",
+                "mensaje": "¿Para qué periodo o rango de fechas desea consultar los ingresos? Por ejemplo, puede indicar 'entre el 1 de junio y el 31 de julio de 2026', 'el mes pasado' o 'en junio de 2026'. Si lo prefiere, también puede ingresar las fechas en los parámetros complementarios.",
                 "datos": {},
                 "requiere_aclaracion": False,
                 "requiere_parametros": True,
                 "parametros_faltantes": ["fecha_inicio", "fecha_fin"],
-                "opciones": [],
+                "opciones": [
+                    "¿Cuántos ingresos hubo ayer?",
+                    "¿Cuántos ingresos hubo la semana pasada?",
+                    "¿Cuántos ingresos hubo el mes pasado?"
+                ],
                 "contexto": ctx_sanitizado,
                 "origen": "consulta_segura"
             }
@@ -712,11 +737,13 @@ def procesar_pregunta(
             if sede_consulta_efectiva:
                 nuevo_ctx["sede"] = sede_consulta_efectiva
 
+            total_ing = resumen.get('total_ingresos', 0)
+            total_fmt = f"{total_ing:,}"
             return {
                 "status": "success",
                 "intencion": "resumen_ingresos",
                 "sede_aplicada": sede_aplicada,
-                "mensaje": f"Resumen de ingresos del {resumen['fecha_inicio']} al {resumen['fecha_fin']}: Total de {resumen['total_ingresos']} ingresos registrados.",
+                "mensaje": f"Resumen de ingresos del {resumen['fecha_inicio']} al {resumen['fecha_fin']}: Total de {total_fmt} ingresos registrados.",
                 "datos": resumen,
                 "requiere_aclaracion": False,
                 "requiere_parametros": False,
@@ -742,6 +769,26 @@ def procesar_pregunta(
 
     # --- INTENCIÓN: HORAS_MAYOR_AFLUENCIA ---
     elif intencion == "horas_mayor_afluencia":
+        if params_intencion.get("error_temporal"):
+            msg_err = params_intencion.get("mensaje_error_temporal") or "La fecha o periodo especificado no es válido."
+            return {
+                "status": "requires_input",
+                "intencion": "horas_mayor_afluencia",
+                "sede_aplicada": sede_aplicada,
+                "mensaje": f"{msg_err} Por favor especifique un rango de fechas válido, por ejemplo: 'entre el 1 de junio y el 31 de julio de 2026' o 'el mes pasado'. Si lo prefiere, también puede ingresar las fechas en los parámetros complementarios.",
+                "datos": {},
+                "requiere_aclaracion": False,
+                "requiere_parametros": True,
+                "parametros_faltantes": ["fecha_inicio", "fecha_fin"],
+                "opciones": [
+                    "¿Cuáles fueron las horas pico de ayer?",
+                    "¿Cuáles fueron las horas pico la semana pasada?",
+                    "¿Cuáles fueron las horas pico el mes pasado?"
+                ],
+                "contexto": ctx_sanitizado,
+                "origen": "consulta_segura"
+            }
+
         f_ini = fecha_inicio or params_intencion.get("fecha_inicio")
         f_fin = fecha_fin or params_intencion.get("fecha_fin")
         if not f_ini or not f_fin:
@@ -749,12 +796,16 @@ def procesar_pregunta(
                 "status": "requires_input",
                 "intencion": "horas_mayor_afluencia",
                 "sede_aplicada": sede_aplicada,
-                "mensaje": "Para consultar las horas de mayor afluencia debe especificar la fecha de inicio y la fecha de fin (formato YYYY-MM-DD).",
+                "mensaje": "¿Para qué periodo o rango de fechas desea consultar las horas de mayor afluencia? Por ejemplo, puede indicar 'entre el 1 de junio y el 31 de julio de 2026', 'el mes pasado' o 'en junio de 2026'. Si lo prefiere, también puede ingresar las fechas en los parámetros complementarios.",
                 "datos": {},
                 "requiere_aclaracion": False,
                 "requiere_parametros": True,
                 "parametros_faltantes": ["fecha_inicio", "fecha_fin"],
-                "opciones": [],
+                "opciones": [
+                    "¿Cuáles fueron las horas pico de ayer?",
+                    "¿Cuáles fueron las horas pico la semana pasada?",
+                    "¿Cuáles fueron las horas pico el mes pasado?"
+                ],
                 "contexto": ctx_sanitizado,
                 "origen": "consulta_segura"
             }

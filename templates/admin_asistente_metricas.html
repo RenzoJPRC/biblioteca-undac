@@ -81,6 +81,9 @@
                 <div class="mt-2 text-[11px] text-slate-500 space-y-0.5">
                     <p>Entrada (Prompt): <span class="font-bold text-slate-700 font-mono">{{ "{:,}".format(metricas.tokens.prompt_tokens or 0) }}</span></p>
                     <p>Salida (Completion): <span class="font-bold text-slate-700 font-mono">{{ "{:,}".format(metricas.tokens.completion_tokens or 0) }}</span></p>
+                    {% if metricas.tokens.tokens_sin_desglose and metricas.tokens.tokens_sin_desglose > 0 %}
+                    <p class="text-amber-600 font-medium">Tokens sin desglose: <span class="font-bold font-mono">{{ "{:,}".format(metricas.tokens.tokens_sin_desglose) }}</span></p>
+                    {% endif %}
                 </div>
                 {% else %}
                 <p class="text-xl font-bold text-slate-400 tracking-tight">
@@ -272,6 +275,9 @@
                         <td class="px-4 py-3 text-right font-mono font-bold text-slate-800 whitespace-nowrap">
                             {% if reg.tokens_disponibles and reg.total_tokens is not none %}
                                 {{ "{:,}".format(reg.total_tokens) }}
+                                {% if reg.tokens_sin_desglose and reg.tokens_sin_desglose > 0 %}
+                                <span class="text-[9px] text-amber-600 font-normal block">(+{{ "{:,}".format(reg.tokens_sin_desglose) }} sin desglose)</span>
+                                {% endif %}
                                 {% if reg.llamadas_api > 1 %}
                                 <span class="text-[9px] text-indigo-500 font-normal block">({{ reg.llamadas_api }} llamadas)</span>
                                 {% endif %}
