@@ -1,0 +1,51 @@
+{
+    "nombre": "Modelo de Predicción de Retorno Individual de Alumno",
+    "version": "1.0.0",
+    "algoritmo": "HistGradientBoostingClassifier",
+    "definicion_volver_manana": "Probabilidad estimada de que el alumno registre al menos un ingreso en el siguiente día hábil operativo de biblioteca (lunes a viernes, excluyendo fines de semana, feriados y cierres institucionales programados).",
+    "criterio_suficiencia": {
+        "minimo_dias_activos": 3,
+        "justificacion": "Alumnos con 1 o 2 días activos en la ventana de 2 meses no presentan un patrón recurrente demostrable; para ellos se reporta 'historial insuficiente' sin emitir probabilidad."
+    },
+    "variables": [
+        "dias_activos",
+        "total_visitas",
+        "recencia_dias",
+        "visitas_ultimos_7d",
+        "visitas_ultimos_14d",
+        "afinidad_dia_semana",
+        "visito_hoy",
+        "tasa_asistencia"
+    ],
+    "variables_excluidas_por_privacidad": [
+        "DNI",
+        "NombreCompleto",
+        "CorreoInstitucional",
+        "CorreoPersonal"
+    ],
+    "filtros_integridad": "ISNULL(EsPrueba, 0) = 0 (38 registros manuales de prueba estrictamente excluidos)",
+    "estrategia_validacion": "Partición cronológica estricta: Entrenamiento en Junio 2026, Evaluación en Julio 2026 (sin fuga temporal)",
+    "metricas_evaluacion_cronologica_julio": {
+        "auc_roc": 0.6843,
+        "brier_score": 0.1684,
+        "accuracy": 0.7123,
+        "precision": 0.4218,
+        "recall": 0.497,
+        "f1_score": 0.4563,
+        "umbral_decision": 0.35,
+        "muestras_entrenamiento_junio": 6630,
+        "muestras_evaluacion_julio": 21386
+    },
+    "periodo_disponible": {
+        "fecha_inicio": "2026-06-01",
+        "fecha_fin": "2026-07-31",
+        "total_fechas_operativas": 39,
+        "total_ingresos_reales": 18168
+    },
+    "limitaciones_periodo": [
+        "Periodo de observación acotado a 2 meses académicos (junio y julio de 2026).",
+        "No se cuenta con semestres previos para modelar estacionalidad anual o cambios de ciclo.",
+        "Cierres institucionales (27 de julio y vacaciones de agosto) suspenden la atención y desplazan el siguiente día operativo.",
+        "Estudiantes con menos de 3 días activos (45.6% de la población) quedan clasificados como 'historial insuficiente'."
+    ]
+}

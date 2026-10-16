@@ -30,11 +30,13 @@ Thumbs.db
 # Archivos temporales y datos
 temp_db_analysis/
 scratch/
+llm/data/
 *.xlsx
 *.xls
 *.csv
 *.zip
 !modulo_google_maps_undac.zip
+!ml/data/dataset_afluencia_real_preparado.csv
 !.env.example
 
 # Cloudflare y credenciales
