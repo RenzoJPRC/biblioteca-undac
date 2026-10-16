@@ -36,6 +36,7 @@ llm/data/
 *.csv
 *.zip
 !modulo_google_maps_undac.zip
+!ml/data/dataset_afluencia_real_preparado.csv
 !.env.example
 
 # Cloudflare y credenciales

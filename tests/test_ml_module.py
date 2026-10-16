@@ -514,7 +514,7 @@ class TestModuloMachineLearning(unittest.TestCase):
         with patch("ml.services.datos_afluencia.obtener_historial_agrupado") as mock_hist:
             mock_hist.return_value = pd.DataFrame(datos_mock)
             resultado = predecir_afluencia_desde_bd(
-                fecha=date(2026, 10, 31),
+                fecha=date(2026, 10, 30),
                 hora=10,
                 sede="Central"
             )
@@ -523,11 +523,11 @@ class TestModuloMachineLearning(unittest.TestCase):
             self.assertTrue(resultado["prediccion"]["modo_demostracion"])
             self.assertFalse(resultado["prediccion"]["confiable"])
             self.assertTrue(resultado["consulta"]["es_desactualizado"])
-            self.assertEqual(resultado["consulta"]["dias_antiguedad_ultimo_registro"], 33)
+            self.assertEqual(resultado["consulta"]["dias_antiguedad_ultimo_registro"], 32)
             self.assertIn("MODO DEMOSTRACIÓN - NO CONFIABLE", resultado["advertencia"])
-            self.assertIn("el último registro es del 28/09 y está 33 días antes de la fecha objetivo 2026-10-31", resultado["advertencia"])
+            self.assertIn("el último registro es del 28/09 y está 32 días antes de la fecha objetivo 2026-10-30", resultado["advertencia"])
             self.assertIn("El último registro en base de datos es del 28/09", resultado["consulta"]["motivos_advertencia"][0])
-            self.assertIn("está 33 días antes de la fecha objetivo consultada", resultado["consulta"]["motivos_advertencia"][0])
+            self.assertIn("está 32 días antes de la fecha objetivo consultada", resultado["consulta"]["motivos_advertencia"][0])
 
     def test_27_prediccion_historial_insuficiente_marca_modo_demostracion(self):
         """Predicción con menos de 15 fechas debe marcar historial insuficiente y modo demostración."""

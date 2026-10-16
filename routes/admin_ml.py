@@ -8,6 +8,11 @@ from ml.services.servicio_afluencia import (
     obtener_informacion_modelo,
     predecir_afluencia_desde_bd
 )
+from ml.services.analisis_individual import (
+    obtener_analisis_descriptivo_ingresos,
+    predecir_retorno_alumno,
+    PredictorRetornoAlumno
+)
 
 
 admin_ml_bp = Blueprint(
@@ -42,11 +47,41 @@ def vista_machine_learning():
     if rol == "Supervisor":
         sedes = [sede_asignada]
 
+    try:
+        analisis_descriptivo = obtener_analisis_descriptivo_ingresos(sede="Central")
+        if rol == "Consultor" and isinstance(analisis_descriptivo, dict):
+            analisis_descriptivo["ranking_alumnos_por_visitas"] = []
+            analisis_descriptivo["ranking_alumnos_por_dias"] = []
+            analisis_descriptivo["acceso_ranking_alumnos"] = False
+            analisis_descriptivo["mensaje_permiso"] = "El rol Consultor no tiene autorización para visualizar rankings individuales de alumnos."
+        else:
+            if isinstance(analisis_descriptivo, dict):
+                analisis_descriptivo["acceso_ranking_alumnos"] = True
+    except Exception as error:
+        print(f"Error cargando análisis descriptivo en vista ML: {error}")
+        analisis_descriptivo = {}
+
+    try:
+        predictor_retorno = PredictorRetornoAlumno.obtener_instancia()
+        metadatos_retorno = predictor_retorno.metadatos
+    except Exception as error:
+        print(f"Error cargando metadatos de retorno en vista ML: {error}")
+        metadatos_retorno = {}
+
+    try:
+        info_afluencia = obtener_informacion_modelo()
+    except Exception as error:
+        print(f"Error cargando información de afluencia en vista ML: {error}")
+        info_afluencia = {}
+
     return render_template(
         "admin_ml.html",
         sedes=sedes,
         sede_asignada=sede_asignada,
-        fecha_hoy=datetime.now(ZoneInfo("America/Lima")).date().isoformat()
+        fecha_hoy=datetime.now(ZoneInfo("America/Lima")).date().isoformat(),
+        analisis_descriptivo=analisis_descriptivo,
+        metadatos_retorno=metadatos_retorno,
+        info_afluencia=info_afluencia
     )
 
 
@@ -204,3 +239,111 @@ def api_predecir_afluencia():
             "No fue posible realizar la predicción.",
             500
         )
+
+
+@admin_ml_bp.route("/api/ml/analisis-individual", methods=["GET"])
+def api_analisis_individual():
+    """
+    Devuelve métricas descriptivas individuales:
+    - Visitas por mes, escuela/carrera, sala, hora y frecuencia de uso por alumno.
+    - Excluye estrictamente registros de prueba (EsPrueba = 0).
+    - NUNCA expone DNI ni datos personales sensibles.
+    """
+    fecha_inicio = request.args.get("fecha_inicio")
+    fecha_fin = request.args.get("fecha_fin")
+    sede = request.args.get("sede", "Central")
+
+    rol = session.get("admin_rol")
+    sede_administrador = str(session.get("admin_sede", "")).strip()
+
+    if rol == "Supervisor":
+        if not sede_administrador:
+            return respuesta_error("El usuario supervisor no tiene una sede asignada.", 403)
+        sede_consulta = sede_administrador
+    else:
+        sede_consulta = sede if sede else "Central"
+
+    try:
+        resultado = obtener_analisis_descriptivo_ingresos(
+            fecha_inicio=fecha_inicio,
+            fecha_fin=fecha_fin,
+            sede=sede_consulta
+        )
+        if rol == "Consultor" and isinstance(resultado, dict):
+            resultado["ranking_alumnos_por_visitas"] = []
+            resultado["ranking_alumnos_por_dias"] = []
+            resultado["acceso_ranking_alumnos"] = False
+            resultado["mensaje_permiso"] = "El rol Consultor no tiene autorización para visualizar rankings individuales de alumnos."
+        else:
+            if isinstance(resultado, dict):
+                resultado["acceso_ranking_alumnos"] = True
+        return jsonify(resultado)
+    except ValueError as error:
+        return respuesta_error(str(error), 400)
+    except ConnectionError as error:
+        print(f"Error de conexión en análisis individual ML: {error}")
+        return respuesta_error("No se pudo conectar con la base de datos.", 503)
+    except Exception as error:
+        print(f"Error inesperado en análisis individual ML: {error}")
+        return respuesta_error("No fue posible obtener el análisis individual.", 500)
+
+
+@admin_ml_bp.route("/api/ml/predecir-retorno", methods=["POST"])
+def api_predecir_retorno():
+    """
+    Predice la probabilidad de que un alumno retorne al siguiente día hábil operativo:
+    Recibe:
+    {
+        "codigo_matricula": "2020123456",
+        "fecha_referencia": "2026-07-31" (opcional)
+    }
+    """
+    rol = session.get("admin_rol")
+    if rol == "Consultor":
+        return respuesta_error(
+            "Acceso denegado. El rol Consultor no tiene autorización para consultas individuales por alumno.",
+            403
+        )
+
+    datos = request.get_json(silent=True)
+    if not datos:
+        return respuesta_error("Debe enviar los datos en formato JSON.", 400)
+
+    codigo_matricula = str(datos.get("codigo_matricula", "")).strip()
+    alumno_id = datos.get("alumno_id")
+    fecha_referencia = datos.get("fecha_referencia")
+
+    if not codigo_matricula and not alumno_id:
+        return respuesta_error("Debe indicar el código de matrícula o el identificador del alumno.", 400)
+
+    try:
+        resultado = predecir_retorno_alumno(
+            codigo_matricula=codigo_matricula if codigo_matricula else None,
+            alumno_id=alumno_id if alumno_id else None,
+            fecha_referencia=fecha_referencia
+        )
+        return jsonify(resultado)
+    except ValueError as error:
+        return respuesta_error(str(error), 400)
+    except ConnectionError as error:
+        print(f"Error de conexión en predicción de retorno: {error}")
+        return respuesta_error("No se pudo conectar con la base de datos.", 503)
+    except Exception as error:
+        print(f"Error inesperado en predicción de retorno: {error}")
+        return respuesta_error("No fue posible procesar la predicción de retorno.", 500)
+
+
+@admin_ml_bp.route("/api/ml/retorno-informacion", methods=["GET"])
+def api_informacion_modelo_retorno():
+    """
+    Devuelve metadatos, métricas de validación cronológica y limitaciones del modelo de retorno.
+    """
+    try:
+        predictor = PredictorRetornoAlumno.obtener_instancia()
+        return jsonify({
+            "status": "success",
+            "metadatos": predictor.metadatos
+        })
+    except Exception as error:
+        print(f"Error obteniendo metadatos del modelo de retorno: {error}")
+        return respuesta_error("No se pudo obtener los metadatos del modelo de retorno.", 500)

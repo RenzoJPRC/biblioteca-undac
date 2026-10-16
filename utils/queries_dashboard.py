@@ -19,8 +19,8 @@ def obtener_datos_dashboard(f_inicio, f_fin, sede_filtro=None, hora_inicio=None,
         base_params.extend([hora_inicio, hora_fin])
         filtro_label += f" ({hora_inicio} - {hora_fin})"
 
-    date_where_g = date_where
-    date_where_r = date_where
+    date_where_g = date_where + " AND ISNULL(EsPrueba, 0) = 0"
+    date_where_r = date_where + " AND ISNULL(R.EsPrueba, 0) = 0"
     params_g = list(base_params)
     params_r = list(base_params)
 
@@ -190,6 +190,8 @@ def obtener_registros_csv(f_inicio, f_fin, sede_filtro=None, hora_inicio=None, h
             base_params = [f_inicio, f_fin]
         else:
             date_where = "CAST(R.FechaHora AS DATE) = CAST(SYSDATETIMEOFFSET() AT TIME ZONE 'SA Pacific Standard Time' AS DATE)"
+
+        date_where += " AND ISNULL(R.EsPrueba, 0) = 0"
 
         if hora_inicio and hora_fin:
             date_where += " AND CAST(R.FechaHora AS TIME) >= ? AND CAST(R.FechaHora AS TIME) <= ?"

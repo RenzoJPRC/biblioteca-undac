@@ -2,321 +2,1237 @@
 
 {% block content %}
 
+<!-- ENCABEZADO PRINCIPAL -->
 <header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-8 shrink-0">
     <div>
-        <h2 class="text-lg font-bold text-slate-700">
-            Predicción de Afluencia
+        <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+            <i class="ph ph-brain text-indigo-600 text-xl"></i>
+            Módulo de Machine Learning y Analítica
         </h2>
-        <p class="text-xs text-indigo-500 font-bold uppercase tracking-wide">
-            Módulo de Machine Learning
+        <p class="text-xs text-indigo-600 font-bold uppercase tracking-wide">
+            Biblioteca Central UNDAC · Supervisión y Modelado Predictivo
         </p>
     </div>
 
-    <div class="hidden sm:flex items-center gap-2 text-xs text-slate-500">
-        <i class="ph ph-brain text-2xl text-indigo-500"></i>
-        <span>Modelo predictivo UNDAC</span>
+    <div class="hidden sm:flex items-center gap-3 text-xs text-slate-500">
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            2 Modelos Activos
+        </span>
+        <span class="text-slate-300">|</span>
+        <span class="font-medium text-slate-600">Sede: {{ sede_asignada }}</span>
     </div>
 </header>
 
 <div class="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
 
-    <!-- Descripción -->
-    <section class="bg-indigo-50 border border-indigo-200 rounded-xl p-5">
-        <div class="flex items-start gap-4">
-            <div class="bg-indigo-600 text-white p-3 rounded-xl shrink-0">
-                <i class="ph ph-brain text-2xl"></i>
-            </div>
 
-            <div>
-                <h3 class="font-bold text-indigo-900">
-                    Estimación del nivel de ingresos
-                </h3>
-                <p class="text-sm text-indigo-700 mt-1">
-                    El modelo analiza el historial de ingresos de la biblioteca,
-                    patrones horarios, promedios históricos y tendencias recientes
-                    para estimar si la afluencia será baja, media o alta.
-                </p>
-            </div>
-        </div>
-    </section>
+    <!-- NAVEGACIÓN POR SECCIONES (TABS) -->
+    <div class="border-b border-slate-200 flex gap-2 sm:gap-4 overflow-x-auto pb-px">
+        <button id="tab-btn-afluencia" onclick="cambiarSeccion('afluencia')"
+            class="tab-btn active px-4 py-3 font-bold text-xs uppercase tracking-wider border-b-2 border-indigo-600 text-indigo-600 flex items-center gap-2 transition-all shrink-0">
+            <i class="ph ph-chart-line-up text-lg"></i>
+            1. Pronóstico de Afluencia General
+        </button>
 
-    <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <button id="tab-btn-individual" onclick="cambiarSeccion('individual')"
+            class="tab-btn px-4 py-3 font-bold text-xs uppercase tracking-wider border-b-2 border-transparent text-slate-500 hover:text-slate-800 flex items-center gap-2 transition-all shrink-0">
+            <i class="ph ph-users-three text-lg"></i>
+            2. Análisis Individual de Visitas
+        </button>
 
-        <!-- Formulario -->
-        <section class="xl:col-span-1 bg-white border border-slate-200 rounded-xl shadow-sm">
-            <div class="p-5 border-b border-slate-100">
-                <h3 class="font-bold text-slate-700 flex items-center gap-2">
-                    <i class="ph ph-sliders-horizontal text-indigo-500 text-xl"></i>
-                    Datos de consulta
-                </h3>
-            </div>
+        <button id="tab-btn-retorno" onclick="cambiarSeccion('retorno')"
+            class="tab-btn px-4 py-3 font-bold text-xs uppercase tracking-wider border-b-2 border-transparent text-slate-500 hover:text-slate-800 flex items-center gap-2 transition-all shrink-0">
+            <i class="ph ph-arrow-counter-clockwise text-lg"></i>
+            3. Predicción de Retorno
+            <span class="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded border border-amber-300 lowercase font-semibold">experimental</span>
+        </button>
+    </div>
 
-            <form id="form-prediccion" class="p-5 space-y-5">
+    <!-- ================================================================= -->
+    <!-- SECCIÓN 1: PRONÓSTICO DE AFLUENCIA GENERAL                        -->
+    <!-- ================================================================= -->
+    <div id="seccion-afluencia" class="seccion-contenido space-y-6">
 
-                <div>
-                    <label for="fecha" class="block text-xs font-bold text-slate-500 uppercase mb-2">
-                        Fecha objetivo
-                    </label>
-
-                    <input type="date" id="fecha" value="{{ fecha_hoy }}" required class="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm
-                               focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+        <!-- Banner Explicativo de Cobertura y Fuentes -->
+        <section class="bg-indigo-50 border border-indigo-200 rounded-xl p-5">
+            <div class="flex items-start gap-4">
+                <div class="bg-indigo-600 text-white p-3 rounded-xl shrink-0">
+                    <i class="ph ph-chart-polar text-2xl"></i>
                 </div>
-
                 <div>
-                    <label for="hora" class="block text-xs font-bold text-slate-500 uppercase mb-2">
-                        Hora
-                    </label>
-
-                    <select id="hora" required class="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm
-                               bg-white focus:ring-2 focus:ring-indigo-500 outline-none">
-
-                        {% for hora in range(8, 21) %}
-                        <option value="{{ hora }}" {% if hora==10 %}selected{% endif %}>
-                            {{ "%02d:00"|format(hora) }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <div>
-                    <label for="sede" class="block text-xs font-bold text-slate-500 uppercase mb-2">
-                        Sede
-                    </label>
-
-                    <select id="sede" required {% if session.get('admin_rol')=='Supervisor' %}disabled{% endif %} class="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm
-                               bg-white focus:ring-2 focus:ring-indigo-500 outline-none
-                               disabled:bg-slate-100 disabled:text-slate-500">
-
-                        {% for sede in sedes %}
-                        <option value="{{ sede }}" {% if sede==sede_asignada %}selected{% endif %}>
-                            {{ sede }}
-                        </option>
-                        {% endfor %}
-                    </select>
-
-                    {% if session.get('admin_rol') == 'Supervisor' %}
-                    <p class="text-[11px] text-slate-400 mt-2">
-                        La sede está determinada por la cuenta del supervisor.
+                    <div class="flex flex-wrap items-center gap-2">
+                        <h3 class="font-bold text-indigo-950 text-base">
+                            Modelo Predictivo de Afluencia por Hora (Nivel Sede)
+                        </h3>
+                        <span class="text-[10px] font-bold uppercase tracking-wider bg-indigo-200 text-indigo-800 px-2 py-0.5 rounded">
+                            RandomForestClassifier (300 árboles)
+                        </span>
+                    </div>
+                    <p class="text-xs text-indigo-800 mt-1 leading-relaxed">
+                        <strong>Fuente de información:</strong> Registros consolidados de los molinetes de acceso físico a la sede.
+                        <strong>Cobertura temporal:</strong> 10/04/2026 al 28/09/2026 en horario de 08:00 a 20:45 (lunes a viernes).
+                        La franja 20:00–20:45 es <strong>parcial (45 minutos)</strong> por cierre y apagado del servidor. Se excluyeron del entrenamiento feriados nacionales, vacaciones del 01 al 23 de agosto, el cierre del 27/07 y franjas atípicas.
                     </p>
-                    {% endif %}
+                    <div class="flex flex-wrap items-center gap-3 mt-3 pt-3 border-t border-indigo-200/80 text-xs">
+                        <span class="font-bold text-indigo-900">Estado de historial por sede:</span>
+                        <span class="inline-flex items-center gap-1 text-emerald-800 font-medium">
+                            <i class="ph ph-check-circle text-emerald-600"></i> Central (Suficiente)
+                        </span>
+                        <span class="inline-flex items-center gap-1 text-slate-500 font-normal">
+                            <i class="ph ph-warning-circle text-amber-500"></i> Tarma, La Merced, Oxapampa, Paucartambo, Yanahuanca (Historial insuficiente &lt; 15 fechas)
+                        </span>
+                    </div>
                 </div>
-
-                <button type="submit" id="btn-predecir" class="w-full flex justify-center items-center gap-2 bg-indigo-600
-                           hover:bg-indigo-500 text-white font-bold py-3 rounded-lg
-                           transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
-
-                    <i class="ph ph-sparkle text-xl"></i>
-                    <span>Generar predicción</span>
-                </button>
-            </form>
+            </div>
         </section>
 
-        <!-- Resultados -->
-        <section class="xl:col-span-2 bg-white border border-slate-200 rounded-xl shadow-sm">
-            <div class="p-5 border-b border-slate-100 flex justify-between items-center">
-                <h3 class="font-bold text-slate-700 flex items-center gap-2">
-                    <i class="ph ph-chart-donut text-indigo-500 text-xl"></i>
-                    Resultado del modelo
-                </h3>
+        <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
 
-                <span id="estado-modelo" class="text-[10px] font-bold uppercase bg-slate-100 text-slate-500
-                           px-3 py-1 rounded-full">
-                    Esperando consulta
-                </span>
-            </div>
-
-            <!-- Estado inicial -->
-            <div id="resultado-vacio" class="min-h-[390px] flex flex-col justify-center items-center text-center p-8">
-                <div class="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mb-4">
-                    <i class="ph ph-chart-line-up text-4xl text-slate-400"></i>
+            <!-- Formulario de Consulta -->
+            <section class="xl:col-span-1 bg-white border border-slate-200 rounded-xl shadow-sm">
+                <div class="p-5 border-b border-slate-100">
+                    <h3 class="font-bold text-slate-700 flex items-center gap-2">
+                        <i class="ph ph-sliders-horizontal text-indigo-500 text-xl"></i>
+                        Parámetros de consulta
+                    </h3>
                 </div>
 
-                <h4 class="font-bold text-slate-600">
-                    Todavía no se ha generado una predicción
-                </h4>
-
-                <p class="text-sm text-slate-400 max-w-md mt-2">
-                    Seleccione una fecha, una hora y una sede para consultar
-                    el nivel estimado de afluencia.
-                </p>
-            </div>
-
-            <!-- Resultado generado -->
-            <div id="resultado-contenido" class="hidden p-5 space-y-6">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
-
-                    <div class="flex flex-col items-center justify-center text-center">
-                        <p class="text-xs font-bold text-slate-400 uppercase">
-                            Nivel estimado
-                        </p>
-
-                        <div id="circulo-nivel" class="w-36 h-36 rounded-full flex flex-col items-center
-                                   justify-center mt-4 border-8">
-                            <i id="icono-nivel" class="ph ph-users-three text-3xl"></i>
-                            <span id="nivel-predicho" class="text-2xl font-black mt-1">
-                                —
-                            </span>
-                        </div>
-
-                        <p id="descripcion-nivel" class="text-sm text-slate-500 mt-4 max-w-xs">
-                        </p>
+                <form id="form-prediccion" class="p-5 space-y-4">
+                    <div>
+                        <label for="fecha" class="block text-xs font-bold text-slate-500 uppercase mb-2">
+                            Fecha objetivo
+                        </label>
+                        <input type="date" id="fecha" value="{{ fecha_hoy }}" required
+                            class="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
                     </div>
 
-                    <div class="relative min-h-[260px]">
-                        <canvas id="grafico-probabilidades"></canvas>
+                    <div>
+                        <label for="hora" class="block text-xs font-bold text-slate-500 uppercase mb-2">
+                            Hora operativa
+                        </label>
+                        <select id="hora" required class="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm bg-white focus:ring-2 focus:ring-indigo-500 outline-none">
+                            {% for hora in range(8, 21) %}
+                            <option value="{{ hora }}" {% if hora==10 %}selected{% endif %}>
+                                {{ "%02d:00"|format(hora) }} {% if hora == 20 %}(20:00 - 20:45 parcial){% endif %}
+                            </option>
+                            {% endfor %}
+                        </select>
                     </div>
+
+                    <div>
+                        <label for="sede" class="block text-xs font-bold text-slate-500 uppercase mb-2">
+                            Sede universitaria
+                        </label>
+                        <select id="sede" required {% if session.get('admin_rol')=='Supervisor' %}disabled{% endif %}
+                            class="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm bg-white focus:ring-2 focus:ring-indigo-500 outline-none disabled:bg-slate-100 disabled:text-slate-500">
+                            {% for sede in sedes %}
+                            <option value="{{ sede }}" {% if sede==sede_asignada %}selected{% endif %}>
+                                {{ sede }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        {% if session.get('admin_rol') == 'Supervisor' %}
+                        <p class="text-[11px] text-slate-400 mt-1.5">
+                            Sede asignada por la cuenta del supervisor.
+                        </p>
+                        {% endif %}
+                    </div>
+
+                    <button type="submit" id="btn-predecir"
+                        class="w-full flex justify-center items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
+                        <i class="ph ph-sparkle text-xl"></i>
+                        <span>Generar pronóstico de afluencia</span>
+                    </button>
+                </form>
+            </section>
+
+            <!-- Panel de Resultados del Pronóstico -->
+            <section class="xl:col-span-2 bg-white border border-slate-200 rounded-xl shadow-sm">
+                <div class="p-5 border-b border-slate-100 flex justify-between items-center">
+                    <h3 class="font-bold text-slate-700 flex items-center gap-2">
+                        <i class="ph ph-chart-donut text-indigo-500 text-xl"></i>
+                        Resultado del pronóstico
+                    </h3>
+                    <span id="estado-modelo" class="text-[10px] font-bold uppercase bg-slate-100 text-slate-500 px-3 py-1 rounded-full">
+                        Esperando consulta
+                    </span>
                 </div>
 
-                <!-- Probabilidad estimada por el modelo -->
-                <div class="bg-slate-50 border border-slate-200 rounded-xl p-5">
-                    <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 flex items-center justify-between">
-                        <span>Probabilidad estimada por el modelo</span>
+                <!-- Estado inicial vacío -->
+                <div id="resultado-vacio" class="min-h-[380px] flex flex-col justify-center items-center text-center p-8">
+                    <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-3">
+                        <i class="ph ph-chart-line-up text-3xl text-slate-400"></i>
+                    </div>
+                    <h4 class="font-bold text-slate-600 text-sm">
+                        Todavía no se ha generado una estimación
                     </h4>
-
-                    <div id="barras-probabilidad" class="space-y-3">
-                        <!-- Generado dinámicamente -->
-                    </div>
-                </div>
-
-                <!-- Factores considerados -->
-                <div class="bg-slate-50 border border-slate-200 rounded-xl p-5">
-                    <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
-                        <i class="ph ph-list-checks text-indigo-500 text-lg"></i>
-                        <span>Factores considerados</span>
-                    </h4>
-
-                    <div id="factores-considerados" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-                        <!-- Generado dinámicamente -->
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div class="bg-slate-50 rounded-lg p-4 border border-slate-100">
-                        <p class="text-[10px] font-bold uppercase text-slate-400">
-                            Fecha consultada
-                        </p>
-                        <p id="dato-fecha" class="font-bold text-slate-700 mt-1">—</p>
-                    </div>
-
-                    <div class="bg-slate-50 rounded-lg p-4 border border-slate-100">
-                        <p class="text-[10px] font-bold uppercase text-slate-400">
-                            Historial utilizado
-                        </p>
-                        <p id="dato-historial" class="font-bold text-slate-700 mt-1">—</p>
-                    </div>
-
-                    <div class="bg-slate-50 rounded-lg p-4 border border-slate-100">
-                        <p class="text-[10px] font-bold uppercase text-slate-400">
-                            Último registro
-                        </p>
-                        <p id="dato-ultima-fecha" class="font-bold text-slate-700 mt-1">—</p>
-                    </div>
-                </div>
-
-                <!-- Advertencia cuando fechas_historicas < 15 -->
-                <div id="contenedor-advertencia-historial" class="hidden bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
-                    <i class="ph ph-warning-circle text-amber-600 text-xl shrink-0 mt-0.5"></i>
-                    <p class="text-xs text-amber-800 font-medium">
-                        La predicción utiliza un historial limitado y debe interpretarse de manera referencial.
+                    <p class="text-xs text-slate-400 max-w-sm mt-1">
+                        Seleccione una fecha, hora y sede para consultar el nivel esperado de ingresos por molinetes.
                     </p>
                 </div>
 
-                <!-- Advertencia general del modelo -->
-                <div class="bg-indigo-50 border border-indigo-200 rounded-lg p-4 flex items-start gap-3">
-                    <i class="ph ph-info text-indigo-600 text-xl shrink-0"></i>
-                    <p id="advertencia-modelo" class="text-xs text-indigo-800"></p>
+                <!-- Contenido generado -->
+                <div id="resultado-contenido" class="hidden p-5 space-y-5">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+                        <div class="flex flex-col items-center justify-center text-center">
+                            <p class="text-xs font-bold text-slate-400 uppercase">
+                                Nivel de afluencia estimado
+                            </p>
+                            <div id="circulo-nivel" class="w-32 h-32 rounded-full flex flex-col items-center justify-center mt-3 border-8">
+                                <i id="icono-nivel" class="ph ph-users-three text-2xl"></i>
+                                <span id="nivel-predicho" class="text-xl font-black mt-1">—</span>
+                            </div>
+                            <p id="descripcion-nivel" class="text-xs text-slate-500 mt-3 max-w-xs"></p>
+                        </div>
+
+                        <div class="relative min-h-[220px]">
+                            <canvas id="grafico-probabilidades"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Barras de Probabilidad -->
+                    <div class="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                        <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
+                            Probabilidad por clase estimada
+                        </h4>
+                        <div id="barras-probabilidad" class="space-y-2.5"></div>
+                    </div>
+
+                    <!-- Factores considerados -->
+                    <div class="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                        <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                            <i class="ph ph-list-checks text-indigo-500 text-base"></i>
+                            <span>Variables del modelo analizadas</span>
+                        </h4>
+                        <div id="factores-considerados" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5"></div>
+                    </div>
+
+                    <!-- Metadatos de la consulta -->
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div class="bg-slate-50 rounded-lg p-3 border border-slate-100">
+                            <p class="text-[10px] font-bold uppercase text-slate-400">Fecha consultada</p>
+                            <p id="dato-fecha" class="text-xs font-bold text-slate-700 mt-1">—</p>
+                        </div>
+                        <div class="bg-slate-50 rounded-lg p-3 border border-slate-100">
+                            <p class="text-[10px] font-bold uppercase text-slate-400">Historial utilizado</p>
+                            <p id="dato-historial" class="text-xs font-bold text-slate-700 mt-1">—</p>
+                        </div>
+                        <div class="bg-slate-50 rounded-lg p-3 border border-slate-100">
+                            <p class="text-[10px] font-bold uppercase text-slate-400">Último registro disponible</p>
+                            <p id="dato-ultima-fecha" class="text-xs font-bold text-slate-700 mt-1">—</p>
+                        </div>
+                    </div>
+
+                    <div id="contenedor-advertencia-historial" class="hidden bg-amber-50 border border-amber-200 rounded-lg p-3.5 flex items-start gap-2.5">
+                        <i class="ph ph-warning-circle text-amber-600 text-lg shrink-0 mt-0.5"></i>
+                        <p class="text-xs text-amber-800 font-medium"></p>
+                    </div>
+
+                    <div class="bg-indigo-50 border border-indigo-200 rounded-lg p-3.5 flex items-start gap-2.5">
+                        <i class="ph ph-info text-indigo-600 text-lg shrink-0 mt-0.5"></i>
+                        <p id="advertencia-modelo" class="text-xs text-indigo-800"></p>
+                    </div>
+                </div>
+
+                <!-- Biblioteca cerrada (feriado, fin de semana o receso institucional) -->
+                <div id="resultado-cerrado" class="hidden min-h-[380px] flex-col justify-center items-center text-center p-8 space-y-4">
+                    <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center border border-slate-200">
+                        <i class="ph ph-door-closed text-3xl text-slate-500"></i>
+                    </div>
+                    <div class="max-w-md space-y-2">
+                        <span class="text-[10px] font-bold uppercase tracking-wider bg-slate-200 text-slate-700 px-3 py-1 rounded-full">
+                            Sin Atención Operativa
+                        </span>
+                        <h4 class="font-bold text-slate-800 text-base">
+                            Biblioteca cerrada; no corresponde emitir un pronóstico operativo
+                        </h4>
+                        <p id="motivo-cierre-texto" class="text-xs text-slate-500 leading-relaxed">
+                            La fecha u horario consultado corresponde a un día en el que la biblioteca permanece cerrada conforme al calendario institucional.
+                        </p>
+                    </div>
+                    <div class="bg-amber-50 border border-amber-200 rounded-xl p-3.5 text-xs text-amber-900 max-w-md text-left flex items-start gap-2.5">
+                        <i class="ph ph-info text-amber-600 text-base shrink-0 mt-0.5"></i>
+                        <p class="leading-relaxed text-[11px]">
+                            <strong>Criterio institucional:</strong> Los modelos predictivos no emiten pronósticos para fechas sin atención al público ni las catalogan como afluencia baja; la biblioteca se reporta directamente como cerrada.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Error -->
+                <div id="resultado-error" class="hidden min-h-[380px] flex-col justify-center items-center text-center p-8">
+                    <div class="w-16 h-16 bg-rose-100 rounded-full flex items-center justify-center mb-3">
+                        <i class="ph ph-warning text-3xl text-rose-500"></i>
+                    </div>
+                    <h4 class="font-bold text-rose-700 text-sm">No se pudo generar la predicción</h4>
+                    <p id="mensaje-error" class="text-xs text-rose-500 mt-1 max-w-sm"></p>
+                </div>
+            </section>
+        </div>
+
+        <!-- Comportamiento histórico por hora de molinetes -->
+        <section class="bg-white border border-slate-200 rounded-xl shadow-sm">
+            <div class="p-5 border-b border-slate-100 flex flex-wrap justify-between items-center gap-4">
+                <div>
+                    <h3 class="font-bold text-slate-700 flex items-center gap-2">
+                        <i class="ph ph-chart-bar text-indigo-500 text-xl"></i>
+                        Comportamiento histórico de molinetes por hora
+                    </h3>
+                    <p class="text-xs text-slate-500 mt-0.5">
+                        Entradas físicas acumuladas por hora registradas en los molinetes de acceso de la biblioteca.
+                    </p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <label for="selector-dias-historial" class="text-xs font-bold text-slate-500 uppercase">
+                        Periodo:
+                    </label>
+                    <select id="selector-dias-historial" class="border border-slate-300 rounded-lg px-3 py-1.5 text-xs bg-white focus:ring-2 focus:ring-indigo-500 outline-none">
+                        <option value="30" selected>Últimos 30 días con datos</option>
+                        <option value="7">Últimos 7 días con datos</option>
+                    </select>
                 </div>
             </div>
 
-            <!-- Error -->
-            <div id="resultado-error" class="hidden min-h-[390px] flex-col justify-center items-center text-center p-8">
-                <div class="w-20 h-20 bg-rose-100 rounded-full flex items-center justify-center mb-4">
-                    <i class="ph ph-warning text-4xl text-rose-500"></i>
+            <div class="p-5 space-y-4">
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div class="bg-slate-50 border border-slate-100 p-3 rounded-lg">
+                        <p class="text-[10px] font-bold uppercase text-slate-400">Periodo analizado</p>
+                        <p id="historial-dato-periodo" class="text-xs font-bold text-slate-700 mt-1">—</p>
+                    </div>
+                    <div class="bg-slate-50 border border-slate-100 p-3 rounded-lg">
+                        <p class="text-[10px] font-bold uppercase text-slate-400">Fechas con datos</p>
+                        <p id="historial-dato-fechas" class="text-xs font-bold text-slate-700 mt-1">—</p>
+                    </div>
+                    <div class="bg-slate-50 border border-slate-100 p-3 rounded-lg">
+                        <p class="text-[10px] font-bold uppercase text-slate-400">Total entradas molinetes</p>
+                        <p id="historial-dato-total" class="text-xs font-bold text-slate-700 mt-1">—</p>
+                    </div>
+                    <div class="bg-slate-50 border border-slate-100 p-3 rounded-lg">
+                        <p class="text-[10px] font-bold uppercase text-slate-400">Sede</p>
+                        <p id="historial-dato-sede" class="text-xs font-bold text-slate-700 mt-1">—</p>
+                    </div>
                 </div>
 
-                <h4 class="font-bold text-rose-700">
-                    No se pudo generar la predicción
-                </h4>
+                <div class="bg-slate-50/80 border border-slate-200 rounded-lg p-3 text-xs text-slate-600 flex flex-wrap items-center justify-between gap-2">
+                    <span><strong>Unidad métrica:</strong> Entradas acumuladas en molinetes (pasos físicos registrados por torniquete).</span>
+                    <span class="text-[11px] text-indigo-700 font-semibold bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">Excluye franjas fuera de horario (21:00-07:00) y feriados</span>
+                </div>
 
-                <p id="mensaje-error" class="text-sm text-rose-500 mt-2"></p>
+                <div id="contenedor-grafico-historial" class="relative min-h-[280px] w-full">
+                    <canvas id="grafico-historial-afluencia"></canvas>
+                </div>
+
+                <div id="historial-vacio" class="hidden min-h-[220px] flex flex-col justify-center items-center text-center p-6 bg-slate-50 border border-slate-200 rounded-xl">
+                    <i class="ph ph-folder-open text-3xl text-slate-400 mb-2"></i>
+                    <h4 class="font-bold text-slate-600 text-sm">Sin registros suficientes para esta sede</h4>
+                    <p class="text-xs text-slate-400 mt-1">Sedes distintas a Central devuelven estado explícito de historial insuficiente.</p>
+                </div>
+
+                <div id="historial-aviso-fuera-horario" class="hidden bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs text-slate-700 flex items-start gap-2">
+                    <i class="ph ph-clock text-slate-500 text-base shrink-0 mt-0.5"></i>
+                    <div id="historial-texto-fuera-horario"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Información Técnica del Modelo de Afluencia -->
+        <section class="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
+            <h3 class="font-bold text-slate-700 flex items-center gap-2 text-sm">
+                <i class="ph ph-info text-indigo-500 text-lg"></i>
+                Información técnica del modelo de afluencia
+            </h3>
+            <div id="informacion-modelo" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
+                <div class="bg-slate-50 p-3.5 rounded-lg border border-slate-100">
+                    <p class="text-[10px] uppercase font-bold text-slate-400">Modelo</p>
+                    <p class="text-xs font-bold text-slate-700 mt-1">{{ info_afluencia.nombre or 'Modelo de afluencia UNDAC' }}</p>
+                </div>
+                <div class="bg-slate-50 p-3.5 rounded-lg border border-slate-100">
+                    <p class="text-[10px] uppercase font-bold text-slate-400">Algoritmo</p>
+                    <p class="text-xs font-bold text-slate-700 mt-1">{{ info_afluencia.algoritmo or 'RandomForestClassifier' }}</p>
+                </div>
+                <div class="bg-slate-50 p-3.5 rounded-lg border border-slate-100">
+                    <p class="text-[10px] uppercase font-bold text-slate-400">Versión</p>
+                    <p class="text-xs font-bold text-slate-700 mt-1">{{ info_afluencia.version or '1.0.0' }}</p>
+                </div>
+                <div class="bg-slate-50 p-3.5 rounded-lg border border-slate-100">
+                    <p class="text-[10px] uppercase font-bold text-slate-400">Umbrales de clasificación</p>
+                    <p class="text-xs font-bold text-slate-700 mt-1">Bajo: 0-7 | Medio: 8-35 | Alto: 36+</p>
+                </div>
             </div>
         </section>
     </div>
 
-    <!-- Comportamiento histórico por hora -->
-    <section class="bg-white border border-slate-200 rounded-xl shadow-sm">
-        <div class="p-5 border-b border-slate-100 flex flex-wrap justify-between items-center gap-4">
-            <h3 class="font-bold text-slate-700 flex items-center gap-2">
-                <i class="ph ph-chart-bar text-indigo-500 text-xl"></i>
-                Comportamiento histórico por hora
+    <!-- ================================================================= -->
+    <!-- SECCIÓN 2: ANÁLISIS INDIVIDUAL DE VISITAS                         -->
+    <!-- ================================================================= -->
+    <div id="seccion-individual" class="seccion-contenido hidden space-y-6">
+
+        <!-- Banner descriptivo -->
+        <section class="bg-emerald-50 border border-emerald-200 rounded-xl p-5">
+            <div class="flex items-start gap-4">
+                <div class="bg-emerald-600 text-white p-3 rounded-xl shrink-0">
+                    <i class="ph ph-identification-card text-2xl"></i>
+                </div>
+                <div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <h3 class="font-bold text-emerald-950 text-base">
+                            Análisis Descriptivo Individual de Ingresos
+                        </h3>
+                        <span class="text-[10px] font-bold uppercase tracking-wider bg-emerald-200 text-emerald-800 px-2 py-0.5 rounded">
+                            Visitas Presenciales Validadas
+                        </span>
+                    </div>
+                    <p class="text-xs text-emerald-800 mt-1 leading-relaxed">
+                        Desglose multidimensional de las visitas reales registradas en las salas de la Biblioteca Central. Se cruza con el padrón de alumnos y la distribución de salas sin exponer documentos de identidad ni identificadores sensibles.
+                        <strong>Filtro aplicado:</strong> Exclusión estricta de registros manuales de prueba.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- 4 Tarjetas Métricas Principales -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="bg-white border border-slate-200 p-5 rounded-xl shadow-xs">
+                <p class="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Visitas Válidas</p>
+                <p class="text-2xl font-black text-slate-800 mt-1">18,168</p>
+                <p class="text-[11px] text-slate-500 mt-1">100% registros reales comprobados</p>
+            </div>
+
+            <div class="bg-white border border-slate-200 p-5 rounded-xl shadow-xs">
+                <p class="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Alumnos Únicos</p>
+                <p class="text-2xl font-black text-indigo-600 mt-1">3,013</p>
+                <p class="text-[11px] text-slate-500 mt-1">Vinculados con el padrón académico</p>
+            </div>
+
+            <div class="bg-white border border-slate-200 p-5 rounded-xl shadow-xs">
+                <p class="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Promedio de Visitas</p>
+                <p class="text-2xl font-black text-slate-800 mt-1">6.03</p>
+                <p class="text-[11px] text-slate-500 mt-1">Mediana: 3.0 | Rango: 1 a 61 visitas</p>
+            </div>
+
+            <div class="bg-white border border-slate-200 p-5 rounded-xl shadow-xs">
+                <p class="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Días Activos Promedio</p>
+                <p class="text-2xl font-black text-slate-800 mt-1">4.77</p>
+                <p class="text-[11px] text-slate-500 mt-1">Fechas distintas asistidas por alumno</p>
+            </div>
+        </div>
+
+        <!-- Fila: Visitas por Mes y Perfil de Recurrencia -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+            <!-- Visitas por Mes -->
+            <section class="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
+                <h3 class="font-bold text-slate-700 text-sm flex items-center justify-between">
+                    <span class="flex items-center gap-2">
+                        <i class="ph ph-calendar text-indigo-500 text-lg"></i>
+                        Distribución por Mes (Junio – Julio 2026)
+                    </span>
+                    <span class="text-[11px] font-semibold text-slate-400">Total: 18,168</span>
+                </h3>
+
+                <div class="mt-4 space-y-4">
+                    <!-- Junio -->
+                    <div class="bg-slate-50 border border-slate-100 p-4 rounded-xl">
+                        <div class="flex items-center justify-between text-xs font-bold text-slate-700 mb-1.5">
+                            <span class="flex items-center gap-2">
+                                <span class="w-3 h-3 rounded-full bg-indigo-500"></span>
+                                Junio 2026 (2026-06)
+                            </span>
+                            <span>7,559 visitas (41.61%)</span>
+                        </div>
+                        <div class="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden">
+                            <div class="bg-indigo-500 h-2.5 rounded-full" style="width: 41.61%"></div>
+                        </div>
+                        <p class="text-[11px] text-slate-500 mt-2">
+                            Alumnos únicos en el mes: <strong>2,156 alumnos</strong>
+                        </p>
+                    </div>
+
+                    <!-- Julio -->
+                    <div class="bg-slate-50 border border-slate-100 p-4 rounded-xl">
+                        <div class="flex items-center justify-between text-xs font-bold text-slate-700 mb-1.5">
+                            <span class="flex items-center gap-2">
+                                <span class="w-3 h-3 rounded-full bg-emerald-500"></span>
+                                Julio 2026 (2026-07)
+                            </span>
+                            <span>10,609 visitas (58.39%)</span>
+                        </div>
+                        <div class="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden">
+                            <div class="bg-emerald-500 h-2.5 rounded-full" style="width: 58.39%"></div>
+                        </div>
+                        <p class="text-[11px] text-slate-500 mt-2">
+                            Alumnos únicos en el mes: <strong>2,462 alumnos</strong>
+                        </p>
+                    </div>
+
+                    <div class="bg-indigo-50/60 border border-indigo-100 p-3 rounded-lg text-[11px] text-indigo-900 leading-relaxed">
+                        <strong>Reconciliación:</strong> 1,605 alumnos asistieron en ambos meses. 551 alumnos asistieron únicamente en junio y 857 únicamente en julio ($1,605 + 551 + 857 = 3,013$ alumnos únicos consolidado).
+                    </div>
+                </div>
+            </section>
+
+            <!-- Perfil de Recurrencia de Alumnos -->
+            <section class="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
+                <h3 class="font-bold text-slate-700 text-sm flex items-center justify-between">
+                    <span class="flex items-center gap-2">
+                        <i class="ph ph-user-switch text-indigo-500 text-lg"></i>
+                        Frecuencia y Recurrencia por Alumno
+                    </span>
+                    <span class="text-[11px] font-semibold text-slate-400">3,013 Alumnos</span>
+                </h3>
+
+                <div class="mt-4 space-y-3">
+                    <div class="flex items-center justify-between p-2.5 bg-slate-50 rounded-lg text-xs">
+                        <div>
+                            <span class="font-bold text-slate-700">1 día (Visita única)</span>
+                            <p class="text-[10px] text-slate-400">Historial insuficiente</p>
+                        </div>
+                        <span class="font-extrabold text-slate-700">853 alumnos (28.31%)</span>
+                    </div>
+
+                    <div class="flex items-center justify-between p-2.5 bg-slate-50 rounded-lg text-xs">
+                        <div>
+                            <span class="font-bold text-slate-700">2 días (Esporádicos)</span>
+                            <p class="text-[10px] text-slate-400">Historial insuficiente</p>
+                        </div>
+                        <span class="font-extrabold text-slate-700">521 alumnos (17.29%)</span>
+                    </div>
+
+                    <div class="flex items-center justify-between p-2.5 bg-indigo-50/70 border border-indigo-100 rounded-lg text-xs">
+                        <div>
+                            <span class="font-bold text-indigo-900">3 a 5 días (Moderados)</span>
+                            <p class="text-[10px] text-indigo-600">Aptos para modelo predictivo</p>
+                        </div>
+                        <span class="font-extrabold text-indigo-900">839 alumnos (27.85%)</span>
+                    </div>
+
+                    <div class="flex items-center justify-between p-2.5 bg-indigo-50/70 border border-indigo-100 rounded-lg text-xs">
+                        <div>
+                            <span class="font-bold text-indigo-900">6 a 10 días (Recurrentes)</span>
+                            <p class="text-[10px] text-indigo-600">Aptos para modelo predictivo</p>
+                        </div>
+                        <span class="font-extrabold text-indigo-900">469 alumnos (15.57%)</span>
+                    </div>
+
+                    <div class="flex items-center justify-between p-2.5 bg-indigo-50/70 border border-indigo-100 rounded-lg text-xs">
+                        <div>
+                            <span class="font-bold text-indigo-900">Más de 10 días (Asiduos)</span>
+                            <p class="text-[10px] text-indigo-600">Aptos para modelo predictivo</p>
+                        </div>
+                        <span class="font-extrabold text-indigo-900">331 alumnos (10.99%)</span>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Fila: Visitas por Escuela y Visitas por Sala -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+            <!-- Top Escuelas / Carreras -->
+            <section class="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
+                <div class="flex items-start justify-between gap-2 mb-2">
+                    <div>
+                        <h3 class="font-bold text-slate-700 text-sm flex items-center gap-2">
+                            <i class="ph ph-graduation-cap text-indigo-500 text-lg"></i>
+                            Ranking por Escuela Profesional (Top Carreras)
+                        </h3>
+                        <p class="text-[11px] text-slate-500 mt-0.5">
+                            <strong>Criterio de ordenación:</strong> Tabla ordenada por <strong>Volumen de Visitas</strong>.
+                        </p>
+                    </div>
+                    <span class="text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 px-2 py-0.5 rounded shrink-0">
+                        Orden: Visitas
+                    </span>
+                </div>
+
+                <div class="bg-indigo-50/60 border border-indigo-100 rounded-lg p-2.5 mb-3 text-[11px] text-indigo-900 leading-relaxed">
+                    <strong>Contraste metodológico:</strong> Por volumen de visitas lideran <strong>Ingeniería Civil (2,173)</strong> e <strong>Ingeniería Metalúrgica (1,817)</strong> por mayor intensidad de concurrencia. Por <em>alumnos únicos</em> lideran <strong>Contabilidad (228)</strong> y <strong>Administración (221)</strong>, reflejando mayor amplitud de adopción en su población estudiantil.
+                </div>
+
+                <div class="overflow-y-auto max-h-[380px] border border-slate-100 rounded-lg">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-slate-50 text-slate-500 uppercase text-[10px] font-bold sticky top-0 border-b border-slate-100">
+                            <tr>
+                                <th class="p-2.5">Escuela / Carrera</th>
+                                <th class="p-2.5 text-right">Visitas (Ranking)</th>
+                                <th class="p-2.5 text-right">Alumnos Únicos</th>
+                                <th class="p-2.5 text-right">% Visitas</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100 text-slate-700 font-medium">
+                            {% for esc in analisis_descriptivo.get('visitas_por_escuela', []) %}
+                            <tr class="hover:bg-slate-50/60 transition-colors">
+                                <td class="p-2.5 font-semibold text-slate-800">{{ esc.escuela }}</td>
+                                <td class="p-2.5 text-right font-bold text-indigo-600">{{ esc.total_visitas }}</td>
+                                <td class="p-2.5 text-right text-slate-600">{{ esc.alumnos_unicos }}</td>
+                                <td class="p-2.5 text-right font-mono text-slate-500">{{ esc.porcentaje }}%</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Visitas por Sala y Piso -->
+            <section class="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
+                <div class="flex items-start justify-between gap-2 mb-2">
+                    <div>
+                        <h3 class="font-bold text-slate-700 text-sm flex items-center gap-2">
+                            <i class="ph ph-door text-indigo-500 text-lg"></i>
+                            Ranking por Sala y Cobertura de Pisos
+                        </h3>
+                        <p class="text-[11px] text-slate-500 mt-0.5">
+                            <strong>Criterio de ordenación:</strong> Salas ordenadas por <strong>Volumen de Visitas</strong>.
+                        </p>
+                    </div>
+                    <span class="text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 px-2 py-0.5 rounded shrink-0">
+                        Orden: Visitas
+                    </span>
+                </div>
+
+                <!-- Comparativa de Pisos Configurados vs Pisos con Visitas -->
+                <div class="bg-slate-50 border border-slate-200 rounded-lg p-3.5 mb-3 text-[11px] text-slate-700 space-y-2">
+                    <div class="flex items-center justify-between border-b border-slate-200/80 pb-1.5">
+                        <span class="font-bold text-slate-800 flex items-center gap-1.5">
+                            <i class="ph ph-buildings text-indigo-600"></i> Distribución de Salas por Piso (Sede Central):
+                        </span>
+                        <span class="font-mono font-bold text-slate-800">8 salas configuradas · 6 con ingresos</span>
+                    </div>
+                    <p class="text-slate-600 leading-relaxed">
+                        <strong>Cobertura real de salas en Sede Central:</strong> Los ingresos presenciales del periodo (18,168 visitas) se concentraron exclusivamente en los <strong>Pisos 2 y 3</strong>. En el <strong>Piso 1</strong> se encuentra configurada 1 sala (Auditorio), la cual registró 0 visitas en este periodo, al igual que la Hemeroteca en el Piso 2. En la base de datos no existe ningún Piso 4.
+                    </p>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 font-mono text-[10px] text-center">
+                        <div class="bg-white p-2 rounded-lg border border-slate-200">
+                            <span class="text-slate-500 block uppercase font-bold">Piso 1 (1 sala configurada)</span>
+                            <span class="text-slate-700 font-bold text-xs">0 visitas (0.0%)</span>
+                            <span class="text-[9px] text-slate-400 block mt-0.5">Auditorio (Sin ingresos registrados)</span>
+                        </div>
+                        <div class="bg-emerald-50 p-2 rounded-lg border border-emerald-200">
+                            <span class="text-emerald-700 block uppercase font-bold">Piso 2 (3 salas configuradas)</span>
+                            <span class="font-bold text-emerald-800 text-xs">11,091 visitas (61.05%)</span>
+                            <span class="text-[9px] text-emerald-600 block mt-0.5">2 activas con visitas · 1 sin ingresos</span>
+                        </div>
+                        <div class="bg-indigo-50 p-2 rounded-lg border border-indigo-200">
+                            <span class="text-indigo-700 block uppercase font-bold">Piso 3 (4 salas configuradas)</span>
+                            <span class="font-bold text-indigo-800 text-xs">7,077 visitas (38.95%)</span>
+                            <span class="text-[9px] text-indigo-600 block mt-0.5">4 activas con visitas</span>
+                        </div>
+                    </div>
+                    <p class="text-[10px] text-slate-500 italic pt-1 border-t border-slate-200/60">
+                        * Nota de auditoría: El conteo inicial de "6 salas en Piso 1" agrupaba todas las salas con Piso = 1 registradas a nivel universitario (1 en Central y 5 en filiales provinciales: Tarma, La Merced, Oxapampa, Paucartambo y Yanahuanca). Las filiales corresponden a sedes externas y no forman parte del edificio central.
+                    </p>
+                </div>
+
+                <div class="space-y-2.5">
+                    {% for sala in analisis_descriptivo.get('visitas_por_sala', []) %}
+                    <div class="bg-slate-50 border border-slate-100 p-3 rounded-xl">
+                        <div class="flex items-center justify-between text-xs font-bold text-slate-700 mb-1">
+                            <div>
+                                <span class="font-bold text-slate-800">{{ sala.nombre_sala }}</span>
+                                <span class="text-[11px] font-normal text-slate-500 ml-1.5">(Piso {{ sala.piso }})</span>
+                            </div>
+                            <div class="text-right">
+                                <span class="text-sm font-extrabold text-indigo-600">{{ sala.total_visitas }} <span class="text-xs font-normal text-slate-400">({{ sala.porcentaje }}%)</span></span>
+                                <span class="text-[10px] text-slate-500 block font-normal">{{ sala.get('alumnos_unicos', 0) }} alumnos únicos</span>
+                            </div>
+                        </div>
+                        <div class="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                            <div class="bg-indigo-600 h-1.5 rounded-full" style="width: {{ sala.porcentaje }}%"></div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </section>
+        </div>
+
+        <!-- Alumnos Más Frecuentes: Rankings Separados por Volumen vs Constancia -->
+        <section class="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 gap-2">
+                <div>
+                    <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+                        <i class="ph ph-trophy text-indigo-500 text-lg"></i>
+                        Alumnos Más Frecuentes (Rankings Separados: Volumen vs Constancia)
+                    </h3>
+                    <p class="text-xs text-slate-500 mt-0.5">
+                        Diferenciación conceptual entre intensidad de uso (visitas totales) y regularidad en el tiempo (días activos).
+                    </p>
+                </div>
+                <span class="text-[11px] font-mono bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-md border border-indigo-200 shrink-0">
+                    Privacidad: Códigos Enmascarados · Sin DNI
+                </span>
+            </div>
+
+            <!-- Explicación de Diferencia Metodológica -->
+            <div class="bg-indigo-50/70 border border-indigo-100 rounded-xl p-3.5 mt-4 text-xs text-indigo-950 leading-relaxed space-y-1.5">
+                <div class="flex items-center gap-2 font-bold text-indigo-900">
+                    <i class="ph ph-info text-indigo-600 text-base"></i>
+                    <span>¿Por qué son medidas diferentes?</span>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1 text-[11px]">
+                    <div class="bg-white/80 p-2.5 rounded-lg border border-indigo-200">
+                        <span class="font-bold text-indigo-950 block">1. Volumen de Visitas (Intensidad de Concurrencia):</span>
+                        <p class="text-slate-600 mt-0.5">
+                            Cuenta el número total de ingresos registrados en salas. Un alumno puede registrar 3 o 4 visitas en un mismo día (ej. reingresos tras recesos o cambios de sala). Mide demanda física acumulada.
+                        </p>
+                    </div>
+                    <div class="bg-white/80 p-2.5 rounded-lg border border-indigo-200">
+                        <span class="font-bold text-indigo-950 block">2. Días Distintos de Asistencia (Hábito y Constancia):</span>
+                        <p class="text-slate-600 mt-0.5">
+                            Cuenta las fechas calendario únicas en las que el alumno asistió, sin importar cuántas veces ingresó ese día. Mide regularidad, hábito académico y persistencia continua en el periodo.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            {% if analisis_descriptivo.get('acceso_ranking_alumnos') %}
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
+                <!-- Tabla 1: Top Alumnos por Volumen -->
+                <div class="border border-slate-200 rounded-xl overflow-hidden">
+                    <div class="bg-slate-50 px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+                        <span class="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                            <i class="ph ph-fire text-amber-500 text-base"></i> Top 10 por Volumen de Visitas
+                        </span>
+                        <span class="text-[10px] font-bold uppercase bg-amber-100 text-amber-800 px-2 py-0.5 rounded">
+                            Mayor Intensidad
+                        </span>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs min-w-[380px]">
+                            <thead class="bg-slate-50 text-slate-500 uppercase text-[10px] font-bold border-b border-slate-100">
+                                <tr>
+                                    <th class="p-2.5 text-center w-8">#</th>
+                                    <th class="p-2.5 whitespace-nowrap">Código Enmascarado</th>
+                                    <th class="p-2.5 min-w-[130px]">Escuela Profesional</th>
+                                    <th class="p-2.5 text-right font-bold text-indigo-600 whitespace-nowrap">Visitas</th>
+                                    <th class="p-2.5 text-right text-slate-500 whitespace-nowrap">Días</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100 text-slate-700">
+                                {% for al in analisis_descriptivo.get('ranking_alumnos_por_visitas', []) %}
+                                <tr class="hover:bg-slate-50/60 transition-colors">
+                                    <td class="p-2.5 text-center font-bold text-slate-400">{{ al.ranking or loop.index }}</td>
+                                    <td class="p-2.5 font-mono font-bold text-indigo-700 whitespace-nowrap">{{ al.codigo_mascarado }}</td>
+                                    <td class="p-2.5 text-slate-700 min-w-[130px] whitespace-normal sm:max-w-[180px] sm:truncate" title="{{ al.escuela }}">{{ al.escuela }}</td>
+                                    <td class="p-2.5 text-right font-black text-indigo-600 whitespace-nowrap">{{ al.total_visitas or 0 }}</td>
+                                    <td class="p-2.5 text-right text-slate-700 font-semibold whitespace-nowrap">{{ al.dias_distintos or al.dias_activos or 0 }}</td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="5" class="p-4 text-center text-slate-400">Sin registros disponibles</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Tabla 2: Top Alumnos por Días Distintos -->
+                <div class="border border-slate-200 rounded-xl overflow-hidden">
+                    <div class="bg-slate-50 px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+                        <span class="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                            <i class="ph ph-calendar-check text-emerald-500 text-base"></i> Top 10 por Días Distintos (Constancia)
+                        </span>
+                        <span class="text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded">
+                            Mayor Regularidad
+                        </span>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs min-w-[380px]">
+                            <thead class="bg-slate-50 text-slate-500 uppercase text-[10px] font-bold border-b border-slate-100">
+                                <tr>
+                                    <th class="p-2.5 text-center w-8">#</th>
+                                    <th class="p-2.5 whitespace-nowrap">Código Enmascarado</th>
+                                    <th class="p-2.5 min-w-[130px]">Escuela Profesional</th>
+                                    <th class="p-2.5 text-right font-bold text-emerald-600 whitespace-nowrap">Días</th>
+                                    <th class="p-2.5 text-right text-slate-500 whitespace-nowrap">Visitas</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100 text-slate-700">
+                                {% for al in analisis_descriptivo.get('ranking_alumnos_por_dias', []) %}
+                                <tr class="hover:bg-slate-50/60 transition-colors">
+                                    <td class="p-2.5 text-center font-bold text-slate-400">{{ al.ranking or loop.index }}</td>
+                                    <td class="p-2.5 font-mono font-bold text-emerald-700 whitespace-nowrap">{{ al.codigo_mascarado }}</td>
+                                    <td class="p-2.5 text-slate-700 min-w-[130px] whitespace-normal sm:max-w-[180px] sm:truncate" title="{{ al.escuela }}">{{ al.escuela }}</td>
+                                    <td class="p-2.5 text-right font-black text-emerald-600 whitespace-nowrap">{{ al.dias_distintos or al.dias_activos or 0 }}</td>
+                                    <td class="p-2.5 text-right text-slate-700 font-semibold whitespace-nowrap">{{ al.total_visitas or 0 }}</td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="5" class="p-4 text-center text-slate-400">Sin registros disponibles</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <!-- Bloque de Permiso Restringido para Consultores -->
+            <div class="mt-4 bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+                <i class="ph ph-lock-key text-amber-600 text-xl shrink-0 mt-0.5"></i>
+                <div class="text-xs text-amber-900 leading-relaxed">
+                    <h4 class="font-bold text-amber-950">Visualización de Rankings Individuales Restringida</h4>
+                    <p class="mt-0.5">
+                        El rol actual <strong>({{ session.get('admin_rol', 'Consultor') }})</strong> no cuenta con autorización para visualizar códigos de matrícula enmascarados ni clasificaciones individuales de alumnos. Esta información requiere rol <strong>Supervisor</strong>, <strong>Administrador</strong> o <strong>SuperAdmin</strong> para preservar la privacidad de los estudiantes.
+                    </p>
+                </div>
+            </div>
+            {% endif %}
+        </section>
+
+        <!-- Distribución Horaria de Atención -->
+        <section class="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
+            <h3 class="font-bold text-slate-700 text-sm flex items-center justify-between mb-3">
+                <span class="flex items-center gap-2">
+                    <i class="ph ph-clock text-indigo-500 text-lg"></i>
+                    Distribución Horaria de Ingresos (08:00 a 20:00)
+                </span>
+                <span class="text-[11px] font-normal text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full">
+                    Franja 20:00 parcial (45 min)
+                </span>
             </h3>
 
-            <div class="flex items-center gap-3">
-                <label for="selector-dias-historial" class="text-xs font-bold text-slate-500 uppercase">
-                    Periodo:
-                </label>
-                <select id="selector-dias-historial" class="border border-slate-300 rounded-lg px-3 py-1.5 text-xs bg-white focus:ring-2 focus:ring-indigo-500 outline-none">
-                    <option value="30" selected>Últimos 30 días</option>
-                    <option value="7">Últimos 7 días</option>
-                </select>
-            </div>
-        </div>
-
-        <div class="p-5 space-y-5">
-            <div id="metricas-historial" class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div class="bg-slate-50 border border-slate-100 p-3.5 rounded-lg">
-                    <p class="text-[10px] font-bold uppercase text-slate-400">Periodo analizado</p>
-                    <p id="historial-dato-periodo" class="text-xs font-bold text-slate-700 mt-1">—</p>
+            <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2.5 mt-3">
+                {% for h in analisis_descriptivo.get('visitas_por_hora', []) %}
+                <div class="p-3 rounded-lg border text-center {% if h.es_parcial %}bg-amber-50/70 border-amber-200{% elif h.total_visitas > 2000 %}bg-indigo-50/80 border-indigo-200{% else %}bg-slate-50 border-slate-100{% endif %}">
+                    <p class="text-[10px] font-bold uppercase text-slate-400">{{ h.hora_formato }}</p>
+                    <p class="text-base font-black {% if h.total_visitas > 2000 %}text-indigo-700{% else %}text-slate-700{% endif %} mt-1">
+                        {{ h.total_visitas }}
+                    </p>
+                    <p class="text-[10px] text-slate-500">{{ h.porcentaje }}%</p>
                 </div>
-                <div class="bg-slate-50 border border-slate-100 p-3.5 rounded-lg">
-                    <p class="text-[10px] font-bold uppercase text-slate-400">Fechas con datos</p>
-                    <p id="historial-dato-fechas" class="text-xs font-bold text-slate-700 mt-1">—</p>
+                {% endfor %}
+            </div>
+        </section>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- SECCIÓN 3: PREDICCIÓN DE RETORNO DE ALUMNOS (EXPERIMENTAL)        -->
+    <!-- ================================================================= -->
+    <div id="seccion-retorno" class="seccion-contenido hidden space-y-6">
+
+        <!-- Banner Experimental y Definición Operativa en Lenguaje Sencillo -->
+        <section class="bg-amber-50 border border-amber-200 rounded-xl p-5">
+            <div class="flex items-start gap-4">
+                <div class="bg-amber-500 text-white p-3 rounded-xl shrink-0">
+                    <i class="ph ph-test-tube text-2xl"></i>
                 </div>
-                <div class="bg-slate-50 border border-slate-100 p-3.5 rounded-lg">
-                    <p class="text-[10px] font-bold uppercase text-slate-400">Total ingresos</p>
-                    <p id="historial-dato-total" class="text-xs font-bold text-slate-700 mt-1">—</p>
+                <div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <h3 class="font-bold text-amber-950 text-base">
+                            Modelo Experimental de Retorno de Alumnos
+                        </h3>
+                        <span class="text-[10px] font-bold uppercase tracking-wider bg-amber-200 text-amber-800 px-2 py-0.5 rounded">
+                            Experimental · Cobertura Piloto Junio–Julio 2026
+                        </span>
+                    </div>
+
+                    <p class="text-xs text-amber-900 mt-1.5 leading-relaxed">
+                        <strong>¿Qué predice este modelo?</strong> Estima la probabilidad referencial de que un alumno frecuente vuelva a estudiar en la biblioteca en su <strong>siguiente día hábil de atención</strong>. Su propósito es orientar la estimación de concurrencia y no sustituir el criterio del personal bibliotecario.
+                    </p>
+
+                    <div class="mt-2.5 pt-2 border-t border-amber-200/80 text-[11px] text-amber-800 space-y-1">
+                        <p><strong>¿Qué significa "Siguiente día hábil de atención"?</strong></p>
+                        <ul class="list-disc list-inside space-y-0.5 text-amber-900 ml-1">
+                            <li>De lunes a jueves, evalúa el día calendario siguiente.</li>
+                            <li>Si se consulta en viernes, evalúa automáticamente el <strong>lunes siguiente</strong> (la biblioteca atiende de lunes a viernes).</li>
+                            <li>Si el día siguiente es feriado o periodo vacacional (ej. Fiestas Patrias o vacaciones de agosto), el modelo salta hasta el <strong>primer día en que la biblioteca reabre sus puertas</strong>.</li>
+                        </ul>
+                    </div>
                 </div>
-                <div class="bg-slate-50 border border-slate-100 p-3.5 rounded-lg">
-                    <p class="text-[10px] font-bold uppercase text-slate-400">Sede</p>
-                    <p id="historial-dato-sede" class="text-xs font-bold text-slate-700 mt-1">—</p>
+            </div>
+        </section>
+
+        <!-- Resumen Ejecutivo para la Gestión de Biblioteca -->
+        <section class="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
+            <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2 mb-3">
+                <i class="ph ph-chalkboard-teacher text-indigo-500 text-lg"></i>
+                Resumen de Aplicación para la Gestión de Biblioteca
+            </h3>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="bg-slate-50 border border-slate-200 p-4 rounded-xl">
+                    <div class="flex items-center gap-2 text-indigo-700 font-bold text-xs uppercase">
+                        <i class="ph ph-users-three text-lg"></i> Población Evaluada
+                    </div>
+                    <p class="text-xl font-black text-slate-800 mt-2">3,013 Alumnos</p>
+                    <p class="text-xs text-slate-600 mt-1 leading-relaxed">
+                        Estudiantes que registraron al menos un ingreso en el periodo junio–julio 2026.
+                    </p>
+                </div>
+
+                <div class="bg-emerald-50/70 border border-emerald-200 p-4 rounded-xl">
+                    <div class="flex items-center gap-2 text-emerald-800 font-bold text-xs uppercase">
+                        <i class="ph ph-check-circle text-lg"></i> Alumnos con Historial Suficiente
+                    </div>
+                    <p class="text-xl font-black text-emerald-900 mt-2">1,639 Alumnos (54.4%)</p>
+                    <p class="text-xs text-emerald-800 mt-1 leading-relaxed">
+                        Asistieron 3 o más días. Cuentan con regularidad suficiente para calcular una propensión de retorno.
+                    </p>
+                </div>
+
+                <div class="bg-amber-50/70 border border-amber-200 p-4 rounded-xl">
+                    <div class="flex items-center gap-2 text-amber-800 font-bold text-xs uppercase">
+                        <i class="ph ph-shield-warning text-lg"></i> Historial Insuficiente (Prudencia)
+                    </div>
+                    <p class="text-xl font-black text-amber-900 mt-2">1,374 Alumnos (45.6%)</p>
+                    <p class="text-xs text-amber-800 mt-1 leading-relaxed">
+                        Visitaron solo 1 o 2 días. El sistema <strong>no emite un porcentaje numérico</strong> para evitar inferencias dudosas.
+                    </p>
                 </div>
             </div>
+        </section>
 
-            <div id="contenedor-grafico-historial" class="relative min-h-[300px] w-full">
-                <canvas id="grafico-historial-afluencia"></canvas>
+        <!-- SECCIÓN DESPLEGABLE 1: Métricas Técnicas y Metodología (AUC-ROC y Brier Score) -->
+        <details class="group bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+            <summary class="flex items-center justify-between p-5 cursor-pointer font-bold text-slate-800 text-sm hover:bg-slate-50 transition-colors select-none">
+                <span class="flex items-center gap-2.5">
+                    <i class="ph ph-gauge text-indigo-600 text-xl"></i>
+                    <span>Métricas Técnicas de Evaluación y Calidad Predictiva (AUC-ROC, Brier Score)</span>
+                </span>
+                <span class="text-xs text-indigo-600 font-semibold flex items-center gap-1.5">
+                    <span>Ver detalles técnicos</span>
+                    <i class="ph ph-caret-down text-slate-400 group-open:rotate-180 transition-transform"></i>
+                </span>
+            </summary>
+
+            <div class="p-5 pt-1 border-t border-slate-100 space-y-5">
+                <p class="text-xs text-slate-500 leading-relaxed">
+                    Evaluación cronológica estricta: el modelo fue entrenado con las 6,630 observaciones de junio 2026 y probado con las 21,386 observaciones de julio 2026 (sin mezcla ni fuga de información futura).
+                </p>
+
+                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                    <div class="bg-slate-50 border border-slate-200/80 p-3 rounded-lg text-center">
+                        <p class="text-[10px] font-bold uppercase text-slate-400">AUC-ROC</p>
+                        <p class="text-xl font-black text-indigo-600 mt-1">0.6843</p>
+                        <p class="text-[10px] text-slate-500 mt-0.5">Capacidad discriminativa</p>
+                    </div>
+
+                    <div class="bg-slate-50 border border-slate-200/80 p-3 rounded-lg text-center">
+                        <p class="text-[10px] font-bold uppercase text-slate-400">Brier Score</p>
+                        <p class="text-xl font-black text-emerald-600 mt-1">0.1684</p>
+                        <p class="text-[10px] text-slate-500 mt-0.5">Pérdida probabilística</p>
+                    </div>
+
+                    <div class="bg-slate-50 border border-slate-200/80 p-3 rounded-lg text-center">
+                        <p class="text-[10px] font-bold uppercase text-slate-400">Exactitud (Accuracy)</p>
+                        <p class="text-xl font-black text-slate-800 mt-1">71.23%</p>
+                        <p class="text-[10px] text-slate-500 mt-0.5">Umbral operativo 0.35</p>
+                    </div>
+
+                    <div class="bg-slate-50 border border-slate-200/80 p-3 rounded-lg text-center">
+                        <p class="text-[10px] font-bold uppercase text-slate-400">Precisión</p>
+                        <p class="text-xl font-black text-slate-800 mt-1">0.4218</p>
+                        <p class="text-[10px] text-slate-500 mt-0.5">Aciertos en retornos</p>
+                    </div>
+
+                    <div class="bg-slate-50 border border-slate-200/80 p-3 rounded-lg text-center">
+                        <p class="text-[10px] font-bold uppercase text-slate-400">Sensibilidad (Recall)</p>
+                        <p class="text-xl font-black text-slate-800 mt-1">0.4970</p>
+                        <p class="text-[10px] text-slate-500 mt-0.5">Cobertura de retornos</p>
+                    </div>
+
+                    <div class="bg-slate-50 border border-slate-200/80 p-3 rounded-lg text-center">
+                        <p class="text-[10px] font-bold uppercase text-slate-400">F1-Score</p>
+                        <p class="text-xl font-black text-indigo-600 mt-1">0.4563</p>
+                        <p class="text-[10px] text-slate-500 mt-0.5">Balance armónico</p>
+                    </div>
+                </div>
+
+                <!-- Explicación de AUC-ROC y Brier Score en lenguaje sencillo -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-slate-700">
+                    <div class="bg-indigo-50/60 border border-indigo-100 rounded-xl p-4 space-y-1.5">
+                        <h4 class="font-bold text-indigo-950 flex items-center gap-1.5 text-xs">
+                            <i class="ph ph-chart-line text-indigo-600 text-base"></i>
+                            ¿Qué significa AUC-ROC (0.6843) en lenguaje sencillo?
+                        </h4>
+                        <p class="text-slate-600 leading-relaxed text-[11px]">
+                            Mide qué tan bueno es el modelo para <strong>ordenar a los alumnos según su probabilidad real de retorno</strong>. Si tomamos al azar a un alumno que sí volvió mañana y a otro que no volvió, el modelo le asignará mayor probabilidad al que sí volvió en el <strong>68.4% de los casos</strong>.
+                        </p>
+                        <p class="text-[11px] text-slate-500 pt-1">
+                            • <strong>0.50:</strong> Adivinar a ciegas (lanzar una moneda al aire).<br>
+                            • <strong>1.00:</strong> Acierto perfecto en todos los casos.<br>
+                            • <strong>0.6843:</strong> Ventaja predictiva sustancial sobre el azar.
+                        </p>
+                    </div>
+
+                    <div class="bg-emerald-50/60 border border-emerald-100 rounded-xl p-4 space-y-1.5">
+                        <h4 class="font-bold text-emerald-950 flex items-center gap-1.5 text-xs">
+                            <i class="ph ph-target text-emerald-600 text-base"></i>
+                            ¿Qué significa Brier Score (0.1684) en lenguaje sencillo?
+                        </h4>
+                        <p class="text-slate-600 leading-relaxed text-[11px]">
+                            Mide el <strong>error promedio de las probabilidades calculadas</strong> (a diferencia de otras notas, <em>mientras menor sea el puntaje, mejor es la estimación</em>). Para evaluarlo, se compara con dos escenarios estándar:
+                        </p>
+                        <div class="space-y-1 text-[11px] text-slate-600 pt-1">
+                            <div class="flex justify-between border-b border-emerald-100 pb-0.5">
+                                <span>Azar puro (50% fijo a todos):</span>
+                                <span class="font-mono font-bold">Brier = 0.2500</span>
+                            </div>
+                            <div class="flex justify-between border-b border-emerald-100 pb-0.5">
+                                <span>Pronóstico fijo con la tasa histórica (~25%):</span>
+                                <span class="font-mono font-bold">Brier ≈ 0.1875</span>
+                            </div>
+                            <div class="flex justify-between text-emerald-900 font-bold">
+                                <span>Modelo HistGradientBoosting:</span>
+                                <span class="font-mono text-emerald-700 font-black">Brier = 0.1684</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Advertencia Metodológica sobre Calibración -->
+                <div class="bg-amber-50/80 border border-amber-200 rounded-xl p-4 text-xs text-amber-950 space-y-2">
+                    <div class="flex items-center gap-2 font-bold text-amber-900">
+                        <i class="ph ph-warning-diamond text-amber-600 text-lg"></i>
+                        <span>Transparencia Metodológica: ¿Están calibradas las probabilidades?</span>
+                    </div>
+                    <p class="leading-relaxed">
+                        El modelo se mantiene bajo estricto rótulo <strong>experimental</strong> debido a la ventana temporal de dos meses (junio–julio 2026).
+                        <strong>No se afirma que las probabilidades devueltas estén rigurosamente calibradas de forma absoluta ni que el modelo garantice resultados infalibles</strong>.
+                    </p>
+                    <p class="leading-relaxed text-[11px] text-amber-900">
+                        <strong>Criterio de interpretación:</strong> Las probabilidades deben entenderse como un <strong>puntaje relativo de propensión de asistencia</strong> (un estudiante con 65% tiene mayor inclinación a volver que uno con 15%). Sirven para priorizar y dimensionar la atención de usuarios asiduos, pero nunca deben utilizarse para tomar decisiones críticas que afecten los derechos académicos de los alumnos sin supervisión humana.
+                    </p>
+                </div>
             </div>
+        </details>
 
-            <div id="historial-vacio" class="hidden min-h-[250px] flex flex-col justify-center items-center text-center p-6 bg-slate-50 border border-slate-200 rounded-xl">
-                <i class="ph ph-folder-open text-4xl text-slate-400 mb-2"></i>
-                <h4 class="font-bold text-slate-600">No existen registros históricos para esta sede en el periodo seleccionado</h4>
-                <p class="text-xs text-slate-400 mt-1">Seleccione otra sede o intente consultar nuevamente más adelante.</p>
+        <!-- SECCIÓN DESPLEGABLE 2: Detalle de Muestras del Modelo vs Visitas en Base de Datos -->
+        <details class="group bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+            <summary class="flex items-center justify-between p-5 cursor-pointer font-bold text-slate-800 text-sm hover:bg-slate-50 transition-colors select-none">
+                <span class="flex items-center gap-2.5">
+                    <i class="ph ph-database text-indigo-600 text-xl"></i>
+                    <span>Detalle de Muestras del Modelo vs Visitas Físicas en Base de Datos</span>
+                </span>
+                <span class="text-xs text-indigo-600 font-semibold flex items-center gap-1.5">
+                    <span>Ver conciliación de fuentes</span>
+                    <i class="ph ph-caret-down text-slate-400 group-open:rotate-180 transition-transform"></i>
+                </span>
+            </summary>
+
+            <div class="p-5 pt-1 border-t border-slate-100">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+                    <!-- Columna 1: Muestras del Algoritmo -->
+                    <div class="bg-indigo-50/50 border border-indigo-100 rounded-xl p-4">
+                        <span class="text-[11px] font-bold text-indigo-900 uppercase tracking-wider flex items-center gap-1.5">
+                            <i class="ph ph-cpu text-indigo-600 text-base"></i> Muestras del Algoritmo (Pares Alumno–Día)
+                        </span>
+                        <p class="text-xs text-indigo-700 mt-1">
+                            Observaciones alumno–día tabuladas para aprendizaje supervisado:
+                        </p>
+                        <div class="grid grid-cols-2 gap-3 mt-3">
+                            <div class="bg-white p-3 rounded-lg border border-indigo-200/80">
+                                <span class="text-[10px] font-bold uppercase text-slate-400">Entrenamiento (Junio)</span>
+                                <p class="text-xl font-black text-indigo-700 mt-1">6,630</p>
+                                <span class="text-[10px] text-slate-500">Observaciones alumno–día</span>
+                            </div>
+                            <div class="bg-white p-3 rounded-lg border border-indigo-200/80">
+                                <span class="text-[10px] font-bold uppercase text-slate-400">Evaluación Test (Julio)</span>
+                                <p class="text-xl font-black text-indigo-700 mt-1">21,386</p>
+                                <span class="text-[10px] text-slate-500">Observaciones alumno–día</span>
+                            </div>
+                        </div>
+                        <p class="text-[10px] text-indigo-800/80 mt-2.5 leading-relaxed">
+                            Total de observaciones tabuladas: <strong>28,016 instancias alumno–día</strong>.
+                        </p>
+                    </div>
+
+                    <!-- Columna 2: Visitas Fuente en BD -->
+                    <div class="bg-emerald-50/50 border border-emerald-100 rounded-xl p-4">
+                        <span class="text-[11px] font-bold text-emerald-900 uppercase tracking-wider flex items-center gap-1.5">
+                            <i class="ph ph-receipt text-emerald-600 text-base"></i> Visitas Presenciales Validadas en Biblioteca
+                        </span>
+                        <p class="text-xs text-emerald-700 mt-1">
+                            Registros individuales de ingreso presencial a salas de estudio:
+                        </p>
+                        <div class="grid grid-cols-2 gap-3 mt-3">
+                            <div class="bg-white p-3 rounded-lg border border-emerald-200/80">
+                                <span class="text-[10px] font-bold uppercase text-slate-400">Visitas Junio 2026</span>
+                                <p class="text-xl font-black text-emerald-700 mt-1">7,559</p>
+                                <span class="text-[10px] text-slate-500">2,156 alumnos únicos</span>
+                            </div>
+                            <div class="bg-white p-3 rounded-lg border border-emerald-200/80">
+                                <span class="text-[10px] font-bold uppercase text-slate-400">Visitas Julio 2026</span>
+                                <p class="text-xl font-black text-emerald-700 mt-1">10,609</p>
+                                <span class="text-[10px] text-slate-500">2,462 alumnos únicos</span>
+                            </div>
+                        </div>
+                        <p class="text-[10px] text-emerald-800/80 mt-2.5 leading-relaxed">
+                            Total de ingresos físicos comprobados: <strong>18,168 visitas reales</strong> (excluye 38 pruebas).
+                        </p>
+                    </div>
+                </div>
             </div>
+        </details>
 
-            <div id="historial-aviso-fuera-horario" class="hidden bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs text-slate-700 flex items-start gap-2.5">
-                <i class="ph ph-clock text-slate-500 text-base shrink-0 mt-0.5"></i>
-                <div id="historial-texto-fuera-horario"></div>
+        <!-- Suficiencia Estadística Poblacional: Aptos vs Historial Insuficiente -->
+        <section class="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
+            <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2 mb-3">
+                <i class="ph ph-scales text-indigo-500 text-lg"></i>
+                Elegibilidad y Suficiencia Estadística de la Población Estudiantil
+            </h3>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Alumnos Aptos -->
+                <div class="bg-emerald-50/60 border border-emerald-200 p-4 rounded-xl flex items-start gap-3.5">
+                    <div class="w-10 h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                        <i class="ph ph-check text-xl"></i>
+                    </div>
+                    <div>
+                        <span class="text-xs font-bold text-emerald-900 uppercase">Historial Suficiente (≥ 3 Días Activos)</span>
+                        <p class="text-2xl font-black text-emerald-950 mt-1">1,639 alumnos <span class="text-sm font-semibold text-emerald-700">(54.40%)</span></p>
+                        <p class="text-xs text-emerald-800 mt-1 leading-relaxed">
+                            Cuentan con suficiente regularidad de visitas para calcular una estimación probabilística razonable de retorno.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Alumnos Insuficientes -->
+                <div class="bg-slate-50 border border-slate-200 p-4 rounded-xl flex items-start gap-3.5">
+                    <div class="w-10 h-10 rounded-full bg-slate-300 text-slate-700 flex items-center justify-center shrink-0">
+                        <i class="ph ph-prohibit text-xl"></i>
+                    </div>
+                    <div>
+                        <span class="text-xs font-bold text-slate-700 uppercase">Historial Insuficiente (&lt; 3 Días Activos)</span>
+                        <p class="text-2xl font-black text-slate-800 mt-1">1,374 alumnos <span class="text-sm font-semibold text-slate-500">(45.60%)</span></p>
+                        <p class="text-xs text-slate-600 mt-1 leading-relaxed">
+                            Alumnos con 1 o 2 visitas en el bimestre. El sistema se rehúsa a estimar probabilidades numéricas espurias y reporta estado explícito de historial insuficiente.
+                        </p>
+                    </div>
+                </div>
             </div>
+        </section>
 
-            <p class="text-[11px] text-slate-400 italic">
-                La gráfica consolida el horario habitual de atención (08:00 a 20:00) para mantener coherencia con el modelo predictivo.
+        <!-- Herramienta Interactiva de Consulta de Retorno de Alumno -->
+        <section class="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
+            <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2 mb-2">
+                <i class="ph ph-magnifying-glass text-indigo-500 text-lg"></i>
+                Consulta Interactiva de Retorno por Alumno
+            </h3>
+            <p class="text-xs text-slate-500 mb-4">
+                Ingrese el código de matrícula para evaluar la probabilidad inferencial de retorno. La consulta aplica validación cronológica y jamás expone ni utiliza el DNI.
             </p>
-        </div>
-    </section>
 
-    <!-- Información del modelo -->
-    <section class="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
-        <h3 class="font-bold text-slate-700 flex items-center gap-2">
-            <i class="ph ph-info text-indigo-500 text-xl"></i>
-            Información técnica
-        </h3>
+            <form id="form-predecir-retorno" class="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+                <div>
+                    <label for="retorno-codigo" class="block text-xs font-bold text-slate-500 uppercase mb-2">
+                        Código de Matrícula
+                    </label>
+                    <input type="text" id="retorno-codigo" placeholder="Ej: 2341304357" required
+                        class="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                </div>
 
-        <div id="informacion-modelo" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-5">
+                <div>
+                    <label for="retorno-fecha-ref" class="block text-xs font-bold text-slate-500 uppercase mb-2">
+                        Fecha de Referencia (Opcional)
+                    </label>
+                    <input type="date" id="retorno-fecha-ref" value="2026-07-31"
+                        class="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                </div>
 
-            <div class="bg-slate-50 p-4 rounded-lg animate-pulse">
-                <p class="text-xs text-slate-400">Cargando información…</p>
+                <div>
+                    <button type="submit" id="btn-evaluar-retorno"
+                        class="w-full flex justify-center items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded-lg transition-colors">
+                        <i class="ph ph-sparkle text-lg"></i>
+                        <span>Evaluar Retorno</span>
+                    </button>
+                </div>
+            </form>
+
+            <!-- Resultado de la consulta interactiva de retorno -->
+            <div id="resultado-retorno-box" class="hidden mt-5 p-4 rounded-xl border transition-all">
+                <div id="retorno-contenido"></div>
+            </div>
+        </section>
+
+        <!-- Limitaciones del Periodo Disponible -->
+        <section class="bg-slate-50 border border-slate-200 rounded-xl p-5">
+            <h3 class="font-bold text-slate-700 text-sm flex items-center gap-2 mb-2">
+                <i class="ph ph-warning text-amber-500 text-lg"></i>
+                Limitaciones del Periodo Disponible (Junio–Julio 2026)
+            </h3>
+            <ul class="list-disc list-inside space-y-1.5 text-xs text-slate-600">
+                <li><strong>Ventana Temporal de 2 Meses:</strong> El dataset cubre 39 días operativos de junio y julio de 2026. No cuenta con semestres previos para modelar estacionalidad anual ni semanas de exámenes parciales anteriores.</li>
+                <li><strong>Cierres Institucionales:</strong> Las fechas no laborables (27 de julio y vacaciones de agosto del 01 al 23) interrumpen las cadenas continuas de asistencia, desplazando la predicción hacia el siguiente día hábil real.</li>
+                <li><strong>Población Esporádica:</strong> Un 45.60% de los alumnos cuenta con menos de 3 visitas registradas; para ellos el modelo no emite probabilidad numérica y previene inferencias sin base empírica suficiente.</li>
+            </ul>
+        </section>
+    </div>
+
+    <!-- SECCIÓN DESPLEGABLE: CONTROL DE INTEGRIDAD Y TRAZABILIDAD TÉCNICA (SOLO ROLES AUTORIZADOS) -->
+    {% if session.get('admin_rol') in ['SuperAdmin', 'Administrador'] %}
+    <details class="group bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+        <summary class="flex items-center justify-between p-4 cursor-pointer font-bold text-slate-700 text-xs uppercase tracking-wider hover:bg-slate-50 transition-colors select-none">
+            <span class="flex items-center gap-2">
+                <i class="ph ph-shield-check text-indigo-600 text-lg"></i>
+                <span>Detalles técnicos y trazabilidad de datos (Auditoría institucional)</span>
+            </span>
+            <span class="text-[11px] text-indigo-600 font-semibold flex items-center gap-1.5 lowercase">
+                <span>mostrar detalles</span>
+                <i class="ph ph-caret-down text-slate-400 group-open:rotate-180 transition-transform"></i>
+            </span>
+        </summary>
+        <div class="p-5 pt-2 border-t border-slate-100 bg-slate-50/50 space-y-4">
+            <p class="text-xs text-slate-600 leading-relaxed">
+                Esta sección resume el control de procedencia y calidad aplicado a los datos del periodo junio–julio 2026 para garantizar que los modelos analíticos y predictivos no se contaminen con registros de prueba ni con datos no validados en el padrón estudiantil.
+            </p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <!-- 1. Visitas Reales Verificadas -->
+                <div class="bg-white border border-emerald-300 rounded-xl p-4 shadow-xs">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-emerald-700 uppercase tracking-wider flex items-center gap-1.5">
+                            <i class="ph ph-check-circle text-base"></i> Visitas Válidas en BD
+                        </span>
+                        <span class="text-[10px] font-semibold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded border border-emerald-200">Verificadas</span>
+                    </div>
+                    <p class="text-2xl font-black text-slate-800 mt-2">18,168</p>
+                    <p class="text-xs text-slate-600 mt-1">
+                        Ingresos reales de <strong>3,013 alumnos</strong> validados contra el padrón oficial.
+                    </p>
+                    <div class="mt-3 pt-2 border-t border-slate-100 text-[11px] text-emerald-700 font-medium">
+                        Periodo: 01/06/2026 al 31/07/2026 (39 fechas operativas)
+                    </div>
+                </div>
+
+                <!-- 2. Pruebas Técnicas Excluidas -->
+                <div class="bg-white border border-amber-300 rounded-xl p-4 shadow-xs">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-amber-700 uppercase tracking-wider flex items-center gap-1.5">
+                            <i class="ph ph-prohibit text-base"></i> Pruebas Técnicas Excluidas
+                        </span>
+                        <span class="text-[10px] font-semibold bg-amber-50 text-amber-700 px-2 py-0.5 rounded border border-amber-200">Aisladas</span>
+                    </div>
+                    <p class="text-2xl font-black text-slate-800 mt-2">38</p>
+                    <p class="text-xs text-slate-600 mt-1">
+                        Registros de pruebas del sistema (docentes, egresados, personal o pruebas de molinete).
+                    </p>
+                    <div class="mt-3 pt-2 border-t border-slate-100 text-[11px] text-amber-700 font-medium">
+                        Excluidas al 100% de la analítica y del entrenamiento
+                    </div>
+                </div>
+
+                <!-- 3. Registros en Auditoría -->
+                <div class="bg-white border border-indigo-300 rounded-xl p-4 shadow-xs">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-indigo-700 uppercase tracking-wider flex items-center gap-1.5">
+                            <i class="ph ph-hourglass text-base"></i> Registros en Auditoría
+                        </span>
+                        <span class="text-[10px] font-semibold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded border border-indigo-200">En revisión</span>
+                    </div>
+                    <p class="text-2xl font-black text-slate-800 mt-2">26</p>
+                    <p class="text-xs text-slate-600 mt-1">
+                        Visitas asociadas a códigos con inconsistencias en el padrón. No se insertan ni se inventan datos.
+                    </p>
+                    <div class="mt-3 pt-2 border-t border-slate-100 text-[11px] text-indigo-700 font-medium">
+                        En archivo de auditoría fuera de la base operativa
+                    </div>
+                </div>
             </div>
         </div>
-    </section>
+    </details>
+    {% endif %}
+
 </div>
 
 {% endblock %}
@@ -330,21 +1246,39 @@
         cargarInformacionModelo();
         cargarHistorialAfluencia();
 
-        document
-            .getElementById("form-prediccion")
-            .addEventListener("submit", ejecutarPrediccion);
+        const formPred = document.getElementById("form-prediccion");
+        if (formPred) formPred.addEventListener("submit", ejecutarPrediccion);
 
-        document
-            .getElementById("selector-dias-historial")
-            .addEventListener("change", cargarHistorialAfluencia);
+        const selDias = document.getElementById("selector-dias-historial");
+        if (selDias) selDias.addEventListener("change", cargarHistorialAfluencia);
 
-        document
-            .getElementById("sede")
-            .addEventListener("change", cargarHistorialAfluencia);
+        const selSede = document.getElementById("sede");
+        if (selSede) selSede.addEventListener("change", cargarHistorialAfluencia);
+
+        const formRetorno = document.getElementById("form-predecir-retorno");
+        if (formRetorno) formRetorno.addEventListener("submit", ejecutarPrediccionRetorno);
     });
+
+    function cambiarSeccion(seccion) {
+        document.querySelectorAll(".tab-btn").forEach(btn => {
+            btn.classList.remove("border-indigo-600", "text-indigo-600");
+            btn.classList.add("border-transparent", "text-slate-500");
+        });
+        document.querySelectorAll(".seccion-contenido").forEach(sec => sec.classList.add("hidden"));
+
+        const tabBtn = document.getElementById(`tab-btn-${seccion}`);
+        const secCont = document.getElementById(`seccion-${seccion}`);
+
+        if (tabBtn && secCont) {
+            tabBtn.classList.remove("border-transparent", "text-slate-500");
+            tabBtn.classList.add("border-indigo-600", "text-indigo-600");
+            secCont.classList.remove("hidden");
+        }
+    }
 
     async function cargarInformacionModelo() {
         const contenedor = document.getElementById("informacion-modelo");
+        if (!contenedor) return;
 
         try {
             const respuesta = await fetch("/admin/api/ml/informacion");
@@ -355,7 +1289,6 @@
             }
 
             const modelo = datos.modelo;
-            const metricas = modelo.metricas || {};
             const umbrales = modelo.umbrales || {
                 bajo_maximo: 7,
                 medio_minimo: 8,
@@ -364,93 +1297,82 @@
             };
 
             contenedor.innerHTML = `
-                ${crearDatoTecnico("Modelo", modelo.nombre || "No disponible")}
-                ${crearDatoTecnico("Algoritmo", modelo.algoritmo || "No disponible")}
-                ${crearDatoTecnico("Versión", modelo.version || "No disponible")}
-                ${crearDatoTecnico(
-                    "Umbrales de Clasificación",
-                    `Bajo: 0-${umbrales.bajo_maximo} | Medio: ${umbrales.medio_minimo}-${umbrales.medio_maximo} | Alto: ${umbrales.alto_minimo}+`
-                )}
-            `;
-        } catch (error) {
-            contenedor.innerHTML = `
-                <div class="col-span-full bg-rose-50 border border-rose-200
-                            text-rose-700 p-4 rounded-lg text-sm">
-                    ${escaparHTML(error.message)}
+                <div class="bg-slate-50 border border-slate-100 p-3.5 rounded-lg">
+                    <p class="text-[10px] uppercase font-bold text-slate-400">Modelo</p>
+                    <p class="text-xs font-bold text-slate-700 mt-1">${escaparHTML(modelo.nombre || "Modelo de Afluencia UNDAC")}</p>
+                </div>
+                <div class="bg-slate-50 border border-slate-100 p-3.5 rounded-lg">
+                    <p class="text-[10px] uppercase font-bold text-slate-400">Algoritmo</p>
+                    <p class="text-xs font-bold text-slate-700 mt-1">${escaparHTML(modelo.algoritmo || "RandomForestClassifier")}</p>
+                </div>
+                <div class="bg-slate-50 border border-slate-100 p-3.5 rounded-lg">
+                    <p class="text-[10px] uppercase font-bold text-slate-400">Versión</p>
+                    <p class="text-xs font-bold text-slate-700 mt-1">${escaparHTML(modelo.version || "1.0.0")}</p>
+                </div>
+                <div class="bg-slate-50 border border-slate-100 p-3.5 rounded-lg">
+                    <p class="text-[10px] uppercase font-bold text-slate-400">Umbrales de Clasificación</p>
+                    <p class="text-xs font-bold text-slate-700 mt-1">Bajo: 0-${umbrales.bajo_maximo} | Medio: ${umbrales.medio_minimo}-${umbrales.medio_maximo} | Alto: ${umbrales.alto_minimo}+</p>
                 </div>
             `;
+        } catch (error) {
+            console.error("Error al cargar información de afluencia:", error);
         }
-    }
-
-    function crearDatoTecnico(titulo, valor) {
-        return `
-            <div class="bg-slate-50 border border-slate-100 p-4 rounded-lg">
-                <p class="text-[10px] uppercase font-bold text-slate-400">
-                    ${escaparHTML(titulo)}
-                </p>
-                <p class="text-sm font-bold text-slate-700 mt-1">
-                    ${escaparHTML(String(valor))}
-                </p>
-            </div>
-        `;
     }
 
     async function ejecutarPrediccion(evento) {
         evento.preventDefault();
-
         const boton = document.getElementById("btn-predecir");
         const sede = document.getElementById("sede");
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || "";
 
         boton.disabled = true;
-        boton.innerHTML = `
-            <i class="ph ph-spinner animate-spin text-xl"></i>
-            <span>Analizando historial...</span>
-        `;
-
+        boton.innerHTML = `<i class="ph ph-spinner animate-spin text-xl"></i><span>Analizando afluencia...</span>`;
         document.getElementById("estado-modelo").textContent = "Procesando";
 
         try {
-            const respuesta = await fetch(
-                "/admin/api/ml/predecir-afluencia",
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({
-                        fecha: document.getElementById("fecha").value,
-                        hora: Number(document.getElementById("hora").value),
-                        sede: sede.value
-                    })
-                }
-            );
+            const respuesta = await fetch("/admin/api/ml/predecir-afluencia", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": csrfToken
+                },
+                body: JSON.stringify({
+                    fecha: document.getElementById("fecha").value,
+                    hora: Number(document.getElementById("hora").value),
+                    sede: sede.value
+                })
+            });
 
             const datos = await respuesta.json();
-
-            if (!respuesta.ok || datos.status !== "success") {
-                throw new Error(
-                    datos.mensaje ||
-                    "La predicción no pudo completarse."
-                );
+            if (!respuesta.ok) {
+                mostrarError(datos.mensaje || "No se pudo generar la predicción para los parámetros indicados.");
+                return;
             }
-
+            if (datos.status === "biblioteca_cerrada") {
+                mostrarBibliotecaCerrada(datos);
+                return;
+            }
+            if (datos.status !== "success") {
+                mostrarError(datos.mensaje || "No se pudo generar la predicción.");
+                return;
+            }
             mostrarResultado(datos);
         } catch (error) {
-            mostrarError(error.message);
+            console.error("Error al procesar el pronóstico de afluencia:", error);
+            mostrarError("No fue posible generar el pronóstico para los parámetros seleccionados.");
         } finally {
             boton.disabled = false;
-            boton.innerHTML = `
-                <i class="ph ph-sparkle text-xl"></i>
-                <span>Generar predicción</span>
-            `;
+            boton.innerHTML = `<i class="ph ph-sparkle text-xl"></i><span>Generar pronóstico de afluencia</span>`;
         }
     }
 
     function mostrarResultado(datos) {
-        document.getElementById("resultado-vacio").classList.add("hidden");
-        document.getElementById("resultado-error").classList.add("hidden");
-        document.getElementById("resultado-error").classList.remove("flex");
-        document.getElementById("resultado-contenido").classList.remove("hidden");
+        document.getElementById("resultado-vacio")?.classList.add("hidden");
+        document.getElementById("resultado-cerrado")?.classList.add("hidden");
+        document.getElementById("resultado-cerrado")?.classList.remove("flex");
+        document.getElementById("resultado-error")?.classList.add("hidden");
+        document.getElementById("resultado-error")?.classList.remove("flex");
+        document.getElementById("resultado-contenido")?.classList.remove("hidden");
 
         const nivel = datos.prediccion.nivel;
         const probabilidades = datos.prediccion.probabilidades;
@@ -468,43 +1390,32 @@
             elEstado.className = "text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200";
         }
 
-        document.getElementById("dato-fecha").textContent =
-            `${consulta.fecha} - ${String(consulta.hora).padStart(2, "0")}:00`;
-        document.getElementById("dato-historial").textContent =
-            consulta.es_desactualizado
-                ? `${consulta.fechas_historicas} fechas (desactualizado)`
-                : `${consulta.fechas_historicas} fechas`;
-        document.getElementById("dato-ultima-fecha").textContent =
-            (consulta.dias_antiguedad_ultimo_registro !== undefined && consulta.dias_antiguedad_ultimo_registro > 0)
-                ? `${consulta.ultima_fecha_disponible} (${consulta.dias_antiguedad_ultimo_registro} días antes de la fecha objetivo)`
-                : (consulta.ultima_fecha_disponible || "No disponible");
+        document.getElementById("dato-fecha").textContent = `${consulta.fecha} - ${String(consulta.hora).padStart(2, "0")}:00`;
+        document.getElementById("dato-historial").textContent = `${consulta.fechas_historicas} fechas`;
+        document.getElementById("dato-ultima-fecha").textContent = consulta.ultima_fecha_disponible || "No disponible";
 
-        // Advertencia por historial limitado o desactualizado
         const advHistorial = document.getElementById("contenedor-advertencia-historial");
         if (advHistorial) {
             if (consulta.modo_demostracion || consulta.fechas_historicas < 15 || consulta.es_desactualizado) {
                 advHistorial.classList.remove("hidden");
                 const pAdv = advHistorial.querySelector("p");
                 if (pAdv) {
-                    if (consulta.motivos_advertencia && consulta.motivos_advertencia.length > 0) {
-                        pAdv.innerHTML = `<strong>Aviso de calidad del historial (Demostración técnica):</strong><br>` +
-                            consulta.motivos_advertencia.join("<br>") +
-                            `<span class="text-[11px] text-amber-700 mt-1 block font-normal">Nota: Los umbrales de 14 días y 15 fechas son criterios operativos mínimos de entrada, no una prueba de certeza del modelo.</span>`;
-                    } else {
-                        pAdv.textContent = "La predicción utiliza un historial limitado o desactualizado y debe interpretarse únicamente como demostración técnica referencial.";
-                    }
+                    pAdv.textContent = datos.advertencia || "La predicción utiliza un historial limitado o desactualizado.";
                 }
             } else {
                 advHistorial.classList.add("hidden");
             }
         }
 
-        // Advertencia general del modelo
         document.getElementById("advertencia-modelo").textContent =
-            datos.advertencia || "Modelo de apoyo. La predicción no representa una garantía exacta de afluencia.";
+            datos.advertencia || "Modelo de apoyo referencial. La predicción no representa certeza absoluta.";
 
         aplicarEstiloNivel(nivel);
-        actualizarGrafico(probabilidades);
+        try {
+            actualizarGrafico(probabilidades);
+        } catch (eGrafico) {
+            console.error("Error al renderizar el gráfico de probabilidades:", eGrafico);
+        }
         renderizarBarrasProbabilidad(probabilidades, nivel, consulta);
         renderizarFactoresConsiderados(variables);
     }
@@ -514,72 +1425,36 @@
         if (!contenedor) return;
 
         const nivelesConfig = [
-            {
-                clave: "Bajo",
-                etiqueta: "Bajo",
-                rango: "0 a 7 ingresos por hora",
-                colorBarra: "bg-emerald-500",
-                colorBadge: "bg-emerald-100 text-emerald-800 border-emerald-300",
-                borderHighlight: "border-emerald-500 bg-emerald-50/50 shadow-xs"
-            },
-            {
-                clave: "Medio",
-                etiqueta: "Medio",
-                rango: "8 a 35 ingresos por hora",
-                colorBarra: "bg-amber-500",
-                colorBadge: "bg-amber-100 text-amber-800 border-amber-300",
-                borderHighlight: "border-amber-500 bg-amber-50/50 shadow-xs"
-            },
-            {
-                clave: "Alto",
-                etiqueta: "Alto",
-                rango: "36 o más ingresos por hora",
-                colorBarra: "bg-rose-500",
-                colorBadge: "bg-rose-100 text-rose-800 border-rose-300",
-                borderHighlight: "border-rose-500 bg-rose-50/50 shadow-xs"
-            }
+            { clave: "Bajo", etiqueta: "Bajo", rango: "0 a 7 ingresos/hora", colorBarra: "bg-emerald-500", colorBadge: "bg-emerald-100 text-emerald-800" },
+            { clave: "Medio", etiqueta: "Medio", rango: "8 a 35 ingresos/hora", colorBarra: "bg-amber-500", colorBadge: "bg-amber-100 text-amber-800" },
+            { clave: "Alto", etiqueta: "Alto", rango: "36+ ingresos/hora", colorBarra: "bg-rose-500", colorBadge: "bg-rose-100 text-rose-800" }
         ];
-
-        let mayorClave = nivelEstimado;
-        let maxProb = -1;
-        nivelesConfig.forEach(item => {
-            const prob = probabilidades[item.clave] || 0;
-            if (prob > maxProb) {
-                maxProb = prob;
-                if (!nivelEstimado) mayorClave = item.clave;
-            }
-        });
-
-        const textoBadge = (consulta && consulta.modo_demostracion)
-            ? "Nivel estimado (Demostración)"
-            : "Nivel estimado (Referencial)";
 
         contenedor.innerHTML = nivelesConfig.map(item => {
             const prob = probabilidades[item.clave] || 0;
             const porcentaje = (prob * 100).toFixed(2);
-            const esSeleccionado = (item.clave === mayorClave);
+            const esSeleccionado = (item.clave === nivelEstimado);
 
             return `
-                <div class="p-3.5 rounded-xl border transition-all ${
-                    esSeleccionado
-                        ? item.borderHighlight + " ring-1 ring-offset-1 ring-indigo-200"
-                        : "border-slate-200 bg-white"
-                }">
-                    <div class="flex items-center justify-between text-xs font-bold mb-1.5">
+                <div class="p-3 rounded-lg border ${esSeleccionado ? "border-indigo-400 bg-indigo-50/50" : "border-slate-200 bg-white"}">
+                    <div class="flex items-center justify-between text-xs font-bold mb-1">
                         <div class="flex items-center gap-2">
-                            <span class="text-slate-800 font-bold text-sm">${item.etiqueta}</span>
-                            <span class="text-[11px] font-normal text-slate-500">(${item.rango})</span>
-                            ${esSeleccionado ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${item.colorBadge}">${textoBadge}</span>` : ""}
+                            <span>${item.etiqueta}</span>
+                            <span class="text-[10px] text-slate-400 font-normal">(${item.rango})</span>
+                            ${esSeleccionado ? `<span class="text-[9px] font-bold px-1.5 py-0.5 rounded ${item.colorBadge}">Estimado (Mayor Probabilidad)</span>` : ""}
                         </div>
-                        <span class="text-sm font-extrabold text-slate-700">${porcentaje}%</span>
+                        <span class="font-bold text-slate-700">${porcentaje}%</span>
                     </div>
-
-                    <div class="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
-                        <div class="${item.colorBarra} h-3 rounded-full transition-all duration-500" style="width: ${porcentaje}%"></div>
+                    <div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                        <div class="${item.colorBarra} h-2 rounded-full" style="width: ${porcentaje}%"></div>
                     </div>
                 </div>
             `;
-        }).join("");
+        }).join("") + `
+            <p class="mt-2 text-[10px] text-slate-500 italic">
+                * Nota: El modelo clasifica asignando la categoría con mayor probabilidad estimada entre los rangos fijos (Bajo: 0–7, Medio: 8–35, Alto: 36+). La estimación no constituye una certeza matemática ni un conteo garantizado de aforo.
+            </p>
+        `;
     }
 
     function renderizarFactoresConsiderados(variables) {
@@ -587,45 +1462,19 @@
         if (!contenedor) return;
 
         const factores = [
-            {
-                clave: "IngresosDiaAnterior",
-                titulo: "Ingresos del día anterior",
-                formato: (val) => Math.round(val) + " ingresos"
-            },
-            {
-                clave: "IngresosCincoDiasAntes",
-                titulo: "Ingresos de cinco días antes",
-                formato: (val) => Math.round(val) + " ingresos"
-            },
-            {
-                clave: "PromedioMovil5",
-                titulo: "Promedio de los últimos cinco días",
-                formato: (val) => val.toFixed(1) + " / día"
-            },
-            {
-                clave: "PromedioHistoricoHora",
-                titulo: "Promedio histórico de esa hora",
-                formato: (val) => val.toFixed(1) + " / hora"
-            },
-            {
-                clave: "TendenciaReciente",
-                titulo: "Tendencia reciente",
-                formato: (val) => (val >= 0 ? "+" : "") + val.toFixed(1)
-            }
+            { clave: "IngresosDiaAnterior", titulo: "Día anterior", formato: (v) => Math.round(v) + " ing." },
+            { clave: "IngresosCincoDiasAntes", titulo: "5 días antes", formato: (v) => Math.round(v) + " ing." },
+            { clave: "PromedioMovil5", titulo: "Promedio 5d", formato: (v) => v.toFixed(1) + "/día" },
+            { clave: "PromedioHistoricoHora", titulo: "Promedio hora", formato: (v) => v.toFixed(1) + "/h" },
+            { clave: "TendenciaReciente", titulo: "Tendencia", formato: (v) => (v >= 0 ? "+" : "") + v.toFixed(1) }
         ];
 
         contenedor.innerHTML = factores.map(f => {
             const val = variables[f.clave] !== undefined ? Number(variables[f.clave]) : 0;
-            const valorFormateado = f.formato(val);
-
             return `
-                <div class="bg-white border border-slate-200 rounded-lg p-3.5">
-                    <p class="text-[11px] font-bold uppercase text-slate-400 tracking-tight line-clamp-1" title="${escaparHTML(f.titulo)}">
-                        ${escaparHTML(f.titulo)}
-                    </p>
-                    <p class="text-base font-extrabold text-slate-800 mt-1">
-                        ${escaparHTML(valorFormateado)}
-                    </p>
+                <div class="bg-white border border-slate-200 rounded-lg p-2.5 text-center">
+                    <p class="text-[10px] font-bold uppercase text-slate-400 truncate">${escaparHTML(f.titulo)}</p>
+                    <p class="text-sm font-extrabold text-slate-800 mt-0.5">${escaparHTML(f.formato(val))}</p>
                 </div>
             `;
         }).join("");
@@ -635,46 +1484,38 @@
         const circulo = document.getElementById("circulo-nivel");
         const descripcion = document.getElementById("descripcion-nivel");
 
-        circulo.className =
-            "w-36 h-36 rounded-full flex flex-col items-center " +
-            "justify-center mt-4 border-8";
+        circulo.className = "w-32 h-32 rounded-full flex flex-col items-center justify-center mt-3 border-8";
 
         if (nivel === "Alto") {
-            circulo.classList.add(
-                "bg-rose-50",
-                "border-rose-200",
-                "text-rose-600"
-            );
-            descripcion.textContent =
-                "Se estima una concentración elevada de ingresos. " +
-                "Conviene preparar la atención y los espacios.";
+            circulo.classList.add("bg-rose-50", "border-rose-200", "text-rose-600");
+            descripcion.innerHTML = "<strong>Alto:</strong> Clase estimada con <strong>mayor probabilidad relativa</strong>. Proyecta concentración elevada de ingresos (apoyo referencial, no una certeza ni conteo garantizado).";
         } else if (nivel === "Medio") {
-            circulo.classList.add(
-                "bg-amber-50",
-                "border-amber-200",
-                "text-amber-600"
-            );
-            descripcion.textContent =
-                "Se espera una afluencia intermedia dentro del horario consultado.";
+            circulo.classList.add("bg-amber-50", "border-amber-200", "text-amber-600");
+            descripcion.innerHTML = "<strong>Medio:</strong> Clase estimada con mayor probabilidad relativa. Afluencia intermedia prevista dentro del horario habitual.";
         } else {
-            circulo.classList.add(
-                "bg-emerald-50",
-                "border-emerald-200",
-                "text-emerald-600"
-            );
-            descripcion.textContent =
-                "Se estima una afluencia reducida para el horario consultado.";
+            circulo.classList.add("bg-emerald-50", "border-emerald-200", "text-emerald-600");
+            descripcion.innerHTML = "<strong>Bajo:</strong> Clase estimada con mayor probabilidad relativa. Afluencia reducida estimada.";
         }
     }
 
     function actualizarGrafico(probabilidades) {
-        const contexto = document
-            .getElementById("grafico-probabilidades")
-            .getContext("2d");
+        const elCanvas = document.getElementById("grafico-probabilidades");
+        if (!elCanvas) return;
+        const contexto = elCanvas.getContext("2d");
 
         if (graficoProbabilidades) {
             graficoProbabilidades.destroy();
+            graficoProbabilidades = null;
         }
+
+        if (typeof Chart === "undefined") {
+            console.warn("Chart.js no está disponible en la página.");
+            return;
+        }
+
+        const probBajo = probabilidades && probabilidades.Bajo !== undefined ? Number(probabilidades.Bajo) : 0;
+        const probMedio = probabilidades && probabilidades.Medio !== undefined ? Number(probabilidades.Medio) : 0;
+        const probAlto = probabilidades && probabilidades.Alto !== undefined ? Number(probabilidades.Alto) : 0;
 
         graficoProbabilidades = new Chart(contexto, {
             type: "doughnut",
@@ -682,9 +1523,9 @@
                 labels: ["Bajo", "Medio", "Alto"],
                 datasets: [{
                     data: [
-                        (probabilidades.Bajo || 0) * 100,
-                        (probabilidades.Medio || 0) * 100,
-                        (probabilidades.Alto || 0) * 100
+                        Math.round(probBajo * 10000) / 100,
+                        Math.round(probMedio * 10000) / 100,
+                        Math.round(probAlto * 10000) / 100
                     ],
                     backgroundColor: [
                         "#10b981",
@@ -704,8 +1545,8 @@
                     },
                     tooltip: {
                         callbacks: {
-                            label: function (contexto) {
-                                return `${contexto.label}: ${contexto.raw.toFixed(2)}%`;
+                            label: function (contextoItem) {
+                                return ` ${contextoItem.label}: ${contextoItem.raw.toFixed(2)}%`;
                             }
                         }
                     }
@@ -714,22 +1555,43 @@
         });
     }
 
-    function mostrarError(mensaje) {
-        document.getElementById("resultado-vacio").classList.add("hidden");
-        document.getElementById("resultado-contenido").classList.add("hidden");
+    function mostrarBibliotecaCerrada(datos) {
+        document.getElementById("resultado-vacio")?.classList.add("hidden");
+        document.getElementById("resultado-contenido")?.classList.add("hidden");
+        document.getElementById("resultado-error")?.classList.add("hidden");
+        document.getElementById("resultado-error")?.classList.remove("flex");
 
-        const error = document.getElementById("resultado-error");
-        error.classList.remove("hidden");
-        error.classList.add("flex");
+        const cerrado = document.getElementById("resultado-cerrado");
+        if (cerrado) {
+            cerrado.classList.remove("hidden");
+            cerrado.classList.add("flex");
+        }
 
-        document.getElementById("mensaje-error").textContent = mensaje;
-        document.getElementById("estado-modelo").textContent = "Error";
+        const elEstado = document.getElementById("estado-modelo");
+        if (elEstado) {
+            elEstado.textContent = "Biblioteca Cerrada (Sin atención)";
+            elEstado.className = "text-xs font-semibold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-full border border-slate-300";
+        }
+
+        const elMotivo = document.getElementById("motivo-cierre-texto");
+        if (elMotivo) {
+            elMotivo.textContent = datos.motivo_cierre || "La biblioteca se encuentra cerrada en esta fecha conforme al calendario institucional.";
+        }
     }
 
-    function escaparHTML(valor) {
-        const elemento = document.createElement("div");
-        elemento.textContent = valor;
-        return elemento.innerHTML;
+    function mostrarError(mensaje) {
+        document.getElementById("resultado-vacio")?.classList.add("hidden");
+        document.getElementById("resultado-contenido")?.classList.add("hidden");
+        document.getElementById("resultado-cerrado")?.classList.add("hidden");
+        document.getElementById("resultado-cerrado")?.classList.remove("flex");
+
+        const error = document.getElementById("resultado-error");
+        if (error) {
+            error.classList.remove("hidden");
+            error.classList.add("flex");
+        }
+        document.getElementById("mensaje-error").textContent = mensaje;
+        document.getElementById("estado-modelo").textContent = "Error";
     }
 
     async function cargarHistorialAfluencia() {
@@ -740,11 +1602,9 @@
         try {
             const respuesta = await fetch(`/admin/api/ml/historial-afluencia?sede=${encodeURIComponent(sede)}&dias=${dias}`);
             const datos = await respuesta.json();
-
             if (!respuesta.ok || datos.status !== "success") {
                 throw new Error(datos.mensaje || "No se pudo cargar el historial.");
             }
-
             renderizarHistorial(datos);
         } catch (error) {
             console.error("Error cargando historial de afluencia:", error);
@@ -755,41 +1615,18 @@
         const fechasConDatos = datos.fechas_con_datos || 0;
         const contenedorGrafico = document.getElementById("contenedor-grafico-historial");
         const contenedorVacio = document.getElementById("historial-vacio");
-        const advLimitado = document.getElementById("historial-advertencia-limitado");
 
         const elPeriodo = document.getElementById("historial-dato-periodo");
-        if (elPeriodo) {
-            elPeriodo.textContent = (datos.fecha_inicio && datos.fecha_fin)
-                ? `${datos.fecha_inicio} a ${datos.fecha_fin}`
-                : "Sin datos";
-        }
+        if (elPeriodo) elPeriodo.textContent = (datos.fecha_inicio && datos.fecha_fin) ? `${datos.fecha_inicio} a ${datos.fecha_fin}` : "Sin datos";
 
         const elFechas = document.getElementById("historial-dato-fechas");
         if (elFechas) elFechas.textContent = `${fechasConDatos} fechas`;
 
         const elTotal = document.getElementById("historial-dato-total");
-        if (elTotal) {
-            if (datos.registros_fuera_horario && datos.registros_fuera_horario.total > 0) {
-                elTotal.textContent = `${datos.total_ingresos_periodo || 0} ingresos (+${datos.registros_fuera_horario.total} fuera de horario excluidos)`;
-            } else {
-                elTotal.textContent = `${datos.total_ingresos_periodo || 0} ingresos`;
-            }
-        }
+        if (elTotal) elTotal.textContent = `${datos.total_ingresos_periodo || 0} entradas`;
 
         const elSede = document.getElementById("historial-dato-sede");
         if (elSede) elSede.textContent = datos.sede || "—";
-
-        const avisoFueraHorario = document.getElementById("historial-aviso-fuera-horario");
-        const textoFueraHorario = document.getElementById("historial-texto-fuera-horario");
-        if (avisoFueraHorario && textoFueraHorario) {
-            if (datos.registros_fuera_horario && datos.registros_fuera_horario.total > 0) {
-                const det = datos.registros_fuera_horario.detalle.map(d => `${d.cantidad} a las ${d.etiqueta}`).join(", ");
-                textoFueraHorario.innerHTML = `<strong>Criterio de horario aplicado:</strong> La gráfica consolida exclusivamente el horario habitual de atención (08:00 a 20:00). Se detectaron <strong>${datos.registros_fuera_horario.total} registros fuera de horario</strong> (${det}), catalogados como registros atípicos de prueba y excluidos de la distribución operativa.`;
-                avisoFueraHorario.classList.remove("hidden");
-            } else {
-                avisoFueraHorario.classList.add("hidden");
-            }
-        }
 
         if (!datos.horas || datos.horas.length === 0 || fechasConDatos === 0) {
             if (contenedorGrafico) contenedorGrafico.classList.add("hidden");
@@ -808,21 +1645,16 @@
         if (!elCanvas) return;
         const contexto = elCanvas.getContext("2d");
 
-        if (graficoHistorial) {
-            graficoHistorial.destroy();
-        }
-
-        const etiquetasHoras = datos.horas.map(h => `${String(h).padStart(2, "0")}:00`);
+        if (graficoHistorial) graficoHistorial.destroy();
 
         graficoHistorial = new Chart(contexto, {
             type: "bar",
             data: {
-                labels: etiquetasHoras,
+                labels: datos.horas.map(h => `${String(h).padStart(2, "0")}:00`),
                 datasets: [{
-                    label: "Total de ingresos",
+                    label: "Entradas acumuladas en molinetes",
                     data: datos.totales,
                     backgroundColor: "#6366f1",
-                    hoverBackgroundColor: "#4f46e5",
                     borderRadius: 6
                 }]
             },
@@ -830,35 +1662,253 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: {
-                        display: false
-                    },
+                    legend: { display: false },
                     tooltip: {
                         callbacks: {
                             label: function (contextoItem) {
-                                const indice = contextoItem.dataIndex;
-                                const total = datos.totales[indice];
-                                const promedio = datos.promedios[indice];
+                                const total = datos.totales[contextoItem.dataIndex];
+                                const promedio = datos.promedios[contextoItem.dataIndex];
                                 return [
-                                    ` Total ingresos: ${total}`,
-                                    ` Promedio por fecha con datos: ${promedio} / día`
+                                    ` Entradas en molinetes: ${total}`,
+                                    ` Promedio diario: ${promedio} / día`
                                 ];
                             }
                         }
                     }
                 },
                 scales: {
-                    x: {
-                        grid: { display: false },
-                        ticks: { font: { size: 11 } }
-                    },
-                    y: {
-                        beginAtZero: true,
-                        ticks: { precision: 0 }
-                    }
+                    x: { grid: { display: false } },
+                    y: { beginAtZero: true }
                 }
             }
         });
+    }
+
+    // Predicción interactiva de retorno
+    async function ejecutarPrediccionRetorno(evento) {
+        evento.preventDefault();
+        const boton = document.getElementById("btn-evaluar-retorno");
+        const codigo = document.getElementById("retorno-codigo").value.trim();
+        const inputFecha = document.getElementById("retorno-fecha-ref");
+        const fechaRaw = inputFecha ? inputFecha.value.trim() : "";
+        let fechaRef = fechaRaw || null;
+
+        if (fechaRef) {
+            const matchDdmmyyyy = fechaRef.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+            if (matchDdmmyyyy) {
+                const dia = matchDdmmyyyy[1].padStart(2, "0");
+                const mes = matchDdmmyyyy[2].padStart(2, "0");
+                const anio = matchDdmmyyyy[3];
+                fechaRef = `${anio}-${mes}-${dia}`;
+            }
+        }
+
+        const box = document.getElementById("resultado-retorno-box");
+        const cont = document.getElementById("retorno-contenido");
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || "";
+
+        if (!codigo) return;
+
+        boton.disabled = true;
+        boton.innerHTML = `<i class="ph ph-spinner animate-spin text-lg"></i><span>Evaluando...</span>`;
+
+        try {
+            const respuesta = await fetch("/admin/api/ml/predecir-retorno", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": csrfToken
+                },
+                body: JSON.stringify({
+                    codigo_matricula: codigo,
+                    fecha_referencia: fechaRef
+                })
+            });
+
+            const datos = await respuesta.json();
+
+            box.classList.remove("hidden");
+
+            if (!respuesta.ok || datos.status === "error") {
+                box.className = "mt-5 p-4 rounded-xl border border-rose-200 bg-rose-50 text-rose-800 text-xs";
+                cont.innerHTML = `<strong>Error:</strong> ${escaparHTML(datos.mensaje || "No fue posible evaluar al alumno.")}`;
+                return;
+            }
+
+            if (datos.status === "historial_insuficiente") {
+                box.className = "mt-5 p-4 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 text-xs";
+                cont.innerHTML = `
+                    <div class="flex items-start gap-3">
+                        <i class="ph ph-warning-circle text-amber-600 text-xl shrink-0 mt-0.5"></i>
+                        <div>
+                            <h4 class="font-bold text-amber-950 text-sm">Historial Insuficiente para Estimación</h4>
+                            <p class="mt-1">${escaparHTML(datos.explicacion)}</p>
+                            <div class="mt-2 text-[11px] text-amber-800 flex gap-4">
+                                <span>Código: <strong>${escaparHTML(datos.codigo_mascarado || "N/D")}</strong></span>
+                                <span>Días activos previos: <strong>${datos.dias_activos_historicos || 0} día(s)</strong></span>
+                                <span>Visitas totales: <strong>${datos.total_visitas_historicas || 0}</strong></span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } else if (datos.status === "success") {
+                const m = datos.metricas_historial || {};
+                const desfase = datos.desfase_temporal || {};
+                const esDesfaseSevero = desfase.desfase_severo || (desfase.dias_desfase_corte > 60) || (!datos.vigente);
+
+                if (esDesfaseSevero) {
+                    box.className = "mt-5 p-4 rounded-xl border border-amber-300 bg-amber-50 text-amber-950 text-xs";
+                    cont.innerHTML = `
+                        <div class="flex items-start gap-3">
+                            <i class="ph ph-warning-diamond text-amber-600 text-2xl shrink-0 mt-0.5"></i>
+                            <div class="flex-1 space-y-2">
+                                <div class="flex flex-wrap items-center justify-between gap-2">
+                                    <h4 class="font-bold text-amber-950 text-sm flex items-center gap-2">
+                                        <span>Predicción No Representativa para la Fecha Consultada</span>
+                                    </h4>
+                                    <span class="text-[10px] font-bold uppercase bg-amber-200 text-amber-900 px-2.5 py-0.5 rounded border border-amber-300">
+                                        No Vigente (&gt;60 días de desfase)
+                                    </span>
+                                </div>
+                                <p class="text-slate-700 leading-relaxed">
+                                    La base de datos contiene registros únicamente hasta el <strong>${escaparHTML(desfase.fecha_corte_bd || "31/07/2026")}</strong>.
+                                    Para la fecha consultada (<strong>${escaparHTML(desfase.fecha_consultada || "")}</strong>) existe un desfase temporal de <strong>${desfase.dias_desfase_corte} días</strong> sin nuevos ingresos registrados en el sistema.
+                                </p>
+                                <p class="text-slate-600 leading-relaxed text-[11px]">
+                                    Por política de calidad y rigor metodológico, <strong>el sistema no emite una probabilidad activa para fechas desactualizadas</strong>, ya que la inactividad temporal artificiosa deprime la estimación a valores basales que no representan el hábito del estudiante.
+                                </p>
+                                <div class="pt-2 flex flex-wrap items-center gap-3">
+                                    <button type="button" onclick="evaluarConFecha('${escaparHTML(codigo)}', '2026-07-31')"
+                                        class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-xs shadow-xs transition-colors cursor-pointer">
+                                        <i class="ph ph-clock-counter-clockwise text-base"></i>
+                                        <span>Consultar resultado histórico al corte (31/07/2026)</span>
+                                    </button>
+                                    <span class="text-[11px] text-slate-500">Muestra la propensión calculada en su periodo activo con corte institucional.</span>
+                                </div>
+                                <div class="pt-2 border-t border-amber-200/60 text-[10px] text-slate-500 flex gap-4">
+                                    <span>Alumno: <strong>${escaparHTML(datos.codigo_mascarado || "")}</strong> (${escaparHTML(datos.escuela || "")})</span>
+                                    <span>Días activos: <strong>${m.dias_activos || 0}</strong></span>
+                                    <span>Visitas: <strong>${m.total_visitas || 0}</strong></span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    box.className = "mt-5 p-4 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-900 text-xs";
+
+                    const fechaConsultada = desfase.fecha_consultada || datos.fecha_referencia || "Fecha no especificada";
+                    const fechaCorteBD = desfase.fecha_corte_bd || datos.fecha_corte_bd || "31/07/2026";
+                    const proximoDia = datos.proximo_dia_operativo || "";
+                    const esMismaFechaCorte = (fechaConsultada === fechaCorteBD);
+
+                    const tituloResultado = esMismaFechaCorte
+                        ? `Probabilidad Histórica al Corte de Datos (${escaparHTML(fechaCorteBD)}):`
+                        : `Probabilidad Estimada (Fecha Consultada: ${escaparHTML(fechaConsultada)}):`;
+
+                    let htmlDesfase = "";
+                    if (desfase.es_desactualizado && !esMismaFechaCorte) {
+                        htmlDesfase = `
+                            <div class="mt-3.5 p-3 rounded-lg border border-amber-300 bg-amber-100/90 text-amber-950 text-xs space-y-2">
+                                <div class="flex items-center gap-1.5 font-bold text-amber-900">
+                                    <i class="ph ph-info text-amber-700 text-base shrink-0"></i>
+                                    <span>Distinción de Fechas y Cobertura de Datos:</span>
+                                </div>
+                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
+                                    <div class="bg-white/80 p-2 rounded border border-amber-200">
+                                        <span class="text-[10px] uppercase font-bold text-slate-500 block">1. Fecha Consultada</span>
+                                        <strong class="text-slate-800">${escaparHTML(fechaConsultada)}</strong>
+                                    </div>
+                                    <div class="bg-white/80 p-2 rounded border border-amber-200">
+                                        <span class="text-[10px] uppercase font-bold text-slate-500 block">2. Corte de Datos en BD</span>
+                                        <strong class="text-slate-800">${escaparHTML(fechaCorteBD)}</strong>
+                                        <span class="text-[10px] text-amber-800 block">(${desfase.dias_desfase_corte} días sin nuevos ingresos)</span>
+                                    </div>
+                                    <div class="bg-white/80 p-2 rounded border border-amber-200">
+                                        <span class="text-[10px] uppercase font-bold text-slate-500 block">3. Siguiente Día Hábil Evaluado</span>
+                                        <strong class="text-emerald-800">${escaparHTML(proximoDia)}</strong>
+                                    </div>
+                                </div>
+                                <p class="leading-relaxed text-[11px] text-amber-900">
+                                    Los registros de visitas en la base de datos concluyen el <strong>${escaparHTML(fechaCorteBD)}</strong>. Para la <strong>fecha consultada (${escaparHTML(fechaConsultada)})</strong>, la estimación evalúa la probabilidad de retorno hacia el <strong>${escaparHTML(proximoDia)}</strong> considerando los días transcurridos desde el corte institucional.
+                                </p>
+                            </div>
+                        `;
+                    } else if (esMismaFechaCorte) {
+                        htmlDesfase = `
+                            <div class="mt-3.5 p-3 rounded-lg border border-emerald-300 bg-emerald-100/80 text-emerald-950 text-xs space-y-1">
+                                <div class="flex items-center gap-1.5 font-bold text-emerald-900">
+                                    <i class="ph ph-check-circle text-emerald-700 text-base shrink-0"></i>
+                                    <span>Consulta al Corte Institucional de Datos:</span>
+                                </div>
+                                <p class="leading-relaxed text-[11px]">
+                                    Evaluación histórica efectuada exactamente a la fecha de corte de los datos (<strong>${escaparHTML(fechaCorteBD)}</strong>), proyectando el retorno hacia el siguiente día hábil (<strong>${escaparHTML(proximoDia)}</strong>).
+                                </p>
+                            </div>
+                        `;
+                    }
+
+                    cont.innerHTML = `
+                        <div class="flex items-start gap-3">
+                            <i class="ph ph-check-circle text-emerald-600 text-xl shrink-0 mt-0.5"></i>
+                            <div class="flex-1">
+                                <div class="flex flex-wrap items-center justify-between gap-2">
+                                    <h4 class="font-bold text-emerald-950 text-sm">
+                                        ${tituloResultado}
+                                        <span class="text-base font-black text-indigo-700">${escaparHTML(datos.probabilidad_porcentaje || "0%")}</span>
+                                        (${escaparHTML(datos.nivel_probabilidad || "Media")})
+                                        <span class="ml-1.5 text-[10px] bg-amber-100 text-amber-800 font-semibold px-2 py-0.5 rounded border border-amber-200">Experimental</span>
+                                    </h4>
+                                    <div class="flex flex-wrap items-center gap-1.5">
+                                        <span class="text-[10px] font-mono bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded border border-emerald-300" title="Siguiente día hábil operativo evaluado">
+                                            Siguiente día hábil: <strong>${escaparHTML(proximoDia)}</strong>
+                                        </span>
+                                        <span class="text-[10px] font-mono bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-300" title="Límite histórico de visitas en base de datos">
+                                            Corte de datos BD: <strong>${escaparHTML(fechaCorteBD)}</strong>
+                                        </span>
+                                    </div>
+                                </div>
+                                <p class="mt-1 text-slate-700">${escaparHTML(datos.mensaje || "")}</p>
+                                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3 pt-2 border-t border-emerald-200/80 text-[11px]">
+                                    <span>Días activos: <strong>${m.dias_activos || 0}</strong></span>
+                                    <span>Visitas totales: <strong>${m.total_visitas || 0}</strong></span>
+                                    <span>Última visita: <strong>hace ${m.recencia_dias !== undefined ? m.recencia_dias : "N/D"} d</strong></span>
+                                    <span>Tasa asistencia: <strong>${(m.tasa_asistencia_periodo * 100 || 0).toFixed(1)}%</strong></span>
+                                </div>
+                                <p class="mt-2 text-[10px] text-slate-500 italic">
+                                    * Recordatorio: Estimación referencial y experimental. Una probabilidad calculada representa una propensión de asistencia relativa, no una certeza matemática ni una garantía de concurrencia.
+                                </p>
+                                ${htmlDesfase}
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+        } catch (error) {
+            box.classList.remove("hidden");
+            box.className = "mt-5 p-4 rounded-xl border border-rose-200 bg-rose-50 text-rose-800 text-xs";
+            cont.innerHTML = `<strong>Error de conexión:</strong> No fue posible procesar la consulta para los datos ingresados.`;
+            console.error("Error en evaluación de retorno:", error);
+        } finally {
+            boton.disabled = false;
+            boton.innerHTML = `<i class="ph ph-sparkle text-lg"></i><span>Evaluar Retorno</span>`;
+        }
+    }
+
+    function evaluarConFecha(codigo, fecha) {
+        const inputCodigo = document.getElementById("retorno-codigo");
+        const inputFecha = document.getElementById("retorno-fecha-ref");
+        if (inputCodigo) inputCodigo.value = codigo;
+        if (inputFecha) inputFecha.value = fecha;
+        const formRetorno = document.getElementById("form-predecir-retorno");
+        if (formRetorno) {
+            formRetorno.dispatchEvent(new Event("submit", { cancelable: true }));
+        }
+    }
+
+    function escaparHTML(valor) {
+        const elemento = document.createElement("div");
+        elemento.textContent = valor;
+        return elemento.innerHTML;
     }
 </script>
 {% endblock %}
