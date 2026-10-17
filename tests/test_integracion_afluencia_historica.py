@@ -29,11 +29,23 @@ from ml.services.servicio_afluencia import predecir_afluencia_desde_bd
 class TestIntegracionAfluenciaHistorica(unittest.TestCase):
 
     def setUp(self):
-        self.ruta_csv = obtener_ruta_csv_fuente()
-        self.df_csv = leer_y_preparar_csv(self.ruta_csv)
+        try:
+            self.ruta_csv = obtener_ruta_csv_fuente()
+            self.df_csv = leer_y_preparar_csv(self.ruta_csv)
+        except FileNotFoundError:
+            self.ruta_csv = None
+            self.df_csv = None
+
+    def _requiere_csv_fuente(self):
+        if self.df_csv is None:
+            self.skipTest(
+                "Prueba de integración omitida: archivo CSV fuente '02_ingresos_reales_actual.csv' "
+                "no disponible en el entorno (requerido solo en pruebas locales con datos reales)."
+            )
 
     def test_01_csv_fuente_metricas_exactas(self):
         """El CSV fuente contiene exactamente 1,029 filas, 98 fechas únicas y 32,788 ingresos."""
+        self._requiere_csv_fuente()
         self.assertEqual(len(self.df_csv), 1029)
         self.assertEqual(self.df_csv["Fecha"].nunique(), 98)
         self.assertEqual(int(self.df_csv["CantidadIngresos"].sum()), 32788)
@@ -42,6 +54,7 @@ class TestIntegracionAfluenciaHistorica(unittest.TestCase):
 
     def test_02_marcado_horario_atipico(self):
         """Las 4 filas fuera del horario habitual (08:00 a 20:00 o fines de semana) quedan marcadas."""
+        self._requiere_csv_fuente()
         atipicos = self.df_csv[self.df_csv["EsHorarioAtipico"] == 1]
         self.assertEqual(len(atipicos), 4)
         self.assertEqual(int(atipicos["CantidadIngresos"].sum()), 8)
@@ -52,6 +65,7 @@ class TestIntegracionAfluenciaHistorica(unittest.TestCase):
 
     def test_03_marcado_cierre_agosto(self):
         """Las 65 filas durante el cierre de agosto (01/08/2026 al 23/08/2026) quedan marcadas."""
+        self._requiere_csv_fuente()
         cierre = self.df_csv[self.df_csv["EsCierreAgosto"] == 1]
         self.assertEqual(len(cierre), 65)
         self.assertEqual(int(cierre["CantidadIngresos"].sum()), 214)
@@ -63,6 +77,7 @@ class TestIntegracionAfluenciaHistorica(unittest.TestCase):
 
     def test_04_idempotencia_de_carga(self):
         """La carga no debe insertar duplicados si las filas ya existen en la base de datos."""
+        self._requiere_csv_fuente()
         mock_cursor = MagicMock()
         mock_conn = MagicMock()
 
@@ -87,6 +102,7 @@ class TestIntegracionAfluenciaHistorica(unittest.TestCase):
 
     def test_05_auditoria_cruce_registro_ingresos_y_prevencion_doble_conteo(self):
         """Cruce con RegistroIngresos documenta 18 grupos, 14 coincidentes y 4 no incluidos en CSV."""
+        self._requiere_csv_fuente()
         mock_cursor = MagicMock()
 
         # Simular los 18 grupos agrupados de las 38 filas de RegistroIngresos
@@ -164,6 +180,7 @@ class TestIntegracionAfluenciaHistorica(unittest.TestCase):
 
     def test_07_exclusion_cierre_agosto_y_atipicos_del_entrenamiento(self):
         """Las 65 filas del cierre de agosto y las 4 atípicas se conservan en histórico pero se excluyen del entrenamiento."""
+        self._requiere_csv_fuente()
         # 1. Verificar sobre el DataFrame completo del CSV (1,029 filas)
         self.assertEqual(len(self.df_csv), 1029)
         filas_agosto = self.df_csv[self.df_csv["EsCierreAgosto"] == 1]
@@ -200,6 +217,7 @@ class TestIntegracionAfluenciaHistorica(unittest.TestCase):
 
     def test_08_tratamiento_franja_parcial_20h(self):
         """La franja 20:00 se marca como parcial (45 min) en variables y servicio de predicción."""
+        self._requiere_csv_fuente()
         # 1. En el CSV/tabla histórica, las 41 filas de las 20:00 están marcadas como EsFranjaParcial = 1
         filas_20h = self.df_csv[self.df_csv["Hora"] == 20]
         self.assertEqual(len(filas_20h), 41)
@@ -345,6 +363,7 @@ class TestIntegracionAfluenciaHistorica(unittest.TestCase):
 
     def test_11_exclusion_feriados_y_cierre_27_julio_del_entrenamiento(self):
         """El calendario acordado de feriados y el cierre del 27/07/2026 están marcados y excluidos del entrenamiento."""
+        self._requiere_csv_fuente()
         from ml.scripts.cargar_afluencia_historica import (
             FERIADOS_CONFIRMADOS_2026,
             CIERRE_CONFIRMADO_27_JULIO
