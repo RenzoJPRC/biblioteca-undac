@@ -215,7 +215,13 @@ class TestAuditoriaProcedenciaDataset(unittest.TestCase):
         self.assertIn("PROCEDENCIA DE CEROS NO VERIFICADA", reporte_str)
 
         # Probar CLI con sys.argv
-        with patch("sys.argv", ["auditoria_procedencia_dataset.py", "-p", str(RUTA_PREPARADO_DEFECTO), "-f", str(ruta_inexistente)]):
+        with patch("sys.argv", [
+            "auditoria_procedencia_dataset.py",
+            "-p", str(RUTA_PREPARADO_DEFECTO),
+            "-f", str(ruta_inexistente),
+            "--reporte", str(self.dir_path / "reporte_cli.md"),
+            "--csv-auxiliar", str(self.dir_path / "auxiliar_cli.csv")
+        ]):
             with patch("sys.stdout", new_callable=io.StringIO) as mock_out:
                 exit_code = main()
                 self.assertEqual(exit_code, 0)

@@ -16,11 +16,159 @@ from llm.services.consultas_biblioteca import (
 )
 
 
+# Fixture de datos controlados para aislar pruebas ML de SQL Server
+_FECHAS_OPERATIVAS_FIXTURE = []
+_curr = date(2026, 6, 1)
+while _curr <= date(2026, 7, 31):
+    if _curr.weekday() < 5 and _curr not in DIAS_FERIADOS_O_CIERRES:
+        _FECHAS_OPERATIVAS_FIXTURE.append(_curr)
+    _curr = date.fromordinal(_curr.toordinal() + 1)
+
+_VISITAS_ALUMNO_200 = [
+    datetime(2026, 6, 1, 10, 0),
+    datetime(2026, 6, 2, 11, 0),
+    datetime(2026, 6, 10, 12, 0),
+    datetime(2026, 6, 15, 14, 0),
+    datetime(2026, 7, 1, 10, 0),
+    datetime(2026, 7, 8, 11, 0),
+    datetime(2026, 7, 15, 12, 0),
+    datetime(2026, 7, 20, 14, 0),
+    datetime(2026, 7, 25, 15, 0),
+    datetime(2026, 7, 31, 16, 0),
+]
+
+
+def _generar_filas_fixture_descriptivo():
+    salas_spec = [
+        ('Sala de Humanidades', 2, 10659),
+        ('Sala de Usos Multiples', 3, 5154),
+        ('Sala de Ciencias Puras', 3, 1001),
+        ('Sala de Tesis', 3, 463),
+        ('Servicios Informáticos', 3, 459),
+        ('Sala de Ciencias Aplicadas', 2, 432)
+    ]
+    lista_salas = []
+    for s_nom, s_piso, cnt in salas_spec:
+        lista_salas.extend([(s_nom, s_piso)] * cnt)
+
+    june_dates = [datetime(2026, 6, d, 8, 0) for d in range(1, 21)]
+    july_dates = [datetime(2026, 7, d, 8, 0) for d in range(1, 21)]
+
+    visitas_june = []
+    visitas_july = []
+
+    for sid in range(1, 552):
+        visitas_june.append((sid, june_dates[0]))
+        visitas_june.append((sid, june_dates[1]))
+        visitas_june.append((sid, june_dates[2]))
+
+    for sid in range(552, 1640):
+        visitas_june.append((sid, june_dates[0]))
+        visitas_june.append((sid, june_dates[1]))
+        visitas_july.append((sid, july_dates[0]))
+        visitas_july.append((sid, july_dates[1]))
+
+    for sid in range(1640, 2157):
+        visitas_june.append((sid, june_dates[3]))
+        visitas_july.append((sid, july_dates[3]))
+
+    for sid in range(2157, 3014):
+        visitas_july.append((sid, july_dates[4]))
+
+    for _ in range(7559 - len(visitas_june)):
+        visitas_june.append((1, june_dates[0]))
+
+    for _ in range(10609 - len(visitas_july)):
+        visitas_july.append((3013, july_dates[4]))
+
+    all_visitas = visitas_june + visitas_july
+
+    filas = []
+    for idx, (sid, dt) in enumerate(all_visitas):
+        hora = 8 + (idx % 13)
+        dt_hora = dt.replace(hour=hora, minute=0)
+        sala_nom, piso = lista_salas[idx]
+        mes = dt.strftime('%Y-%m')
+        filas.append((
+            idx + 1,
+            sid,
+            'Ingeniería Metalúrgica' if sid % 2 == 0 else 'Educación',
+            sala_nom,
+            piso,
+            dt_hora,
+            hora,
+            mes,
+            f'234130{sid:04d}' if sid == 200 else (f'229440{sid:04d}' if sid == 100 else f'COD{sid:07d}')
+        ))
+    return filas
+
+
+_FILAS_FIXTURE_DESCRIPTIVO = _generar_filas_fixture_descriptivo()
+
+
+def _crear_mock_db_cursor(*args, **kwargs):
+    mock_conn = MagicMock()
+    mock_cursor = MagicMock()
+
+    def execute(sql, params=()):
+        mock_cursor._last_sql = sql
+        mock_cursor._last_params = params
+        sql_u = sql.upper()
+
+        if "INNER JOIN DBO.ALUMNOS A" in sql_u:
+            mock_cursor.fetchall.return_value = _FILAS_FIXTURE_DESCRIPTIVO
+        elif "FROM DBO.ALUMNOS" in sql_u:
+            cod = str(params[0]).strip()
+            if cod == "0000000000":
+                mock_cursor.fetchone.return_value = None
+            elif cod in ("2294403050", "100"):
+                mock_cursor.fetchone.return_value = (100, "2294403050", "Ingeniería")
+            elif cod in ("2341304357", "200"):
+                mock_cursor.fetchone.return_value = (200, "2341304357", "Ingeniería Metalúrgica")
+            else:
+                mock_cursor.fetchone.return_value = (300, cod, "General")
+        elif "WHERE R.ALUMNOID =" in sql_u:
+            al_id = params[0]
+            f_ref_str = str(params[1])
+            try:
+                f_ref = date.fromisoformat(f_ref_str)
+            except Exception:
+                f_ref = date(2026, 7, 31)
+
+            if al_id in (100, "100"):
+                mock_cursor.fetchall.return_value = [(datetime(2026, 6, 15, 10, 0),)]
+            elif al_id in (200, "200"):
+                mock_cursor.fetchall.return_value = [(v,) for v in _VISITAS_ALUMNO_200 if v.date() <= f_ref]
+            else:
+                mock_cursor.fetchall.return_value = []
+        elif "DISTINCT CAST(FECHAHORA AS DATE)" in sql_u:
+            f_ref_str = str(params[0])
+            try:
+                f_ref = date.fromisoformat(f_ref_str)
+            except Exception:
+                f_ref = date(2026, 7, 31)
+            mock_cursor.fetchall.return_value = [(d,) for d in _FECHAS_OPERATIVAS_FIXTURE if d <= f_ref]
+        else:
+            mock_cursor.fetchall.return_value = []
+            mock_cursor.fetchone.return_value = None
+
+    mock_cursor.execute.side_effect = execute
+    mock_ctx = MagicMock()
+    mock_ctx.__enter__.return_value = (mock_conn, mock_cursor)
+    mock_ctx.__exit__.return_value = None
+    return mock_ctx
+
+
 class TestAnalisisIndividualML(unittest.TestCase):
 
     def setUp(self):
         self.app = app
         self.client = self.app.test_client()
+        self.patcher_db = patch("ml.services.analisis_individual.get_db_cursor", side_effect=_crear_mock_db_cursor)
+        self.patcher_db.start()
+
+    def tearDown(self):
+        self.patcher_db.stop()
 
     # =========================================================================
     # 1. PRUEBAS DE DEFINICIÓN DE "VOLVER MAÑANA" Y CALENDARIO OPERATIVO
@@ -272,9 +420,44 @@ class TestAnalisisIndividualML(unittest.TestCase):
     # 7. PRUEBAS DE EXCLUSIÓN EN DASHBOARD Y RECONCILIACIÓN POR MES
     # =========================================================================
 
-    def test_21_dashboard_excluye_filas_de_prueba(self):
+    @patch("utils.queries_dashboard.get_db_connection")
+    def test_21_dashboard_excluye_filas_de_prueba(self, mock_conn_fn):
         """El dashboard general y de exportación deben excluir estrictamente EsPrueba = 1."""
         from utils.queries_dashboard import obtener_datos_dashboard, obtener_registros_csv
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_conn_fn.return_value = mock_conn
+        mock_conn.cursor.return_value = mock_cursor
+
+        def execute(sql, params=()):
+            sql_u = sql.upper().replace(" ", "").replace("\n", "").replace("\t", "")
+            self.assertTrue("ISNULL(ESPRUEBA,0)=0" in sql_u or "ISNULL(R.ESPRUEBA,0)=0" in sql_u)
+            if "REGISTROIDASID" in sql_u:
+                mock_cursor.fetchall.return_value = [("Alumno", "2341304357", "Central", 2, "Sala Humanidades", "Mañana", "01/06/2026", "08:00:00", "Ingeniería", "Metalúrgica")] * 18168
+            elif "TOP10" in sql_u:
+                mock_cursor.fetchall.return_value = [("Estudiante 1", 2, "10:00:00", "Ingeniería", "Alumno", "01/06/2026", "Central", "Sala Humanidades")]
+            elif "TIPOUSUARIO='ALUMNO'" in sql_u:
+                mock_cursor.fetchone.return_value = (18168,)
+            elif "TIPOUSUARIO" in sql_u:
+                mock_cursor.fetchone.return_value = (0,)
+            elif "SELECTCOUNT(*)" in sql_u:
+                mock_cursor.fetchone.return_value = (18168,)
+            elif "GROUPBYPISO" in sql_u:
+                mock_cursor.fetchall.return_value = [(2, 11091), (3, 7077)]
+            elif "GROUPBYS.PISO,S.NOMBRESALA" in sql_u:
+                mock_cursor.fetchall.return_value = [(2, "Sala Humanidades", 10659), (3, "Sala Usos Multiples", 5154)]
+            elif "GROUPBYSEDE" in sql_u:
+                mock_cursor.fetchall.return_value = []
+            elif "GROUPBYDATEPART(HOUR,FECHAHORA)" in sql_u:
+                mock_cursor.fetchall.return_value = [(h, 100) for h in range(8, 21)]
+            elif "TOP5ORIGEN" in sql_u:
+                mock_cursor.fetchall.return_value = [("Ingeniería", 5000)]
+            else:
+                mock_cursor.fetchone.return_value = (0,)
+                mock_cursor.fetchall.return_value = []
+
+        mock_cursor.execute.side_effect = execute
+
         dash_data = obtener_datos_dashboard('2026-06-01', '2026-07-31')
         self.assertEqual(dash_data['total_hoy'], 18168)
         self.assertEqual(dash_data['total_alumnos'], 18168)
