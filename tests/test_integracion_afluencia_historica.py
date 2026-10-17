@@ -276,7 +276,9 @@ class TestIntegracionAfluenciaHistorica(unittest.TestCase):
 
         # 2. En el coordinador asistente, se traduce a error con categoría datos_insuficientes y código 400
         from llm.services.coordinador_asistente import procesar_pregunta
-        with patch("llm.services.coordinador_asistente.predecir_afluencia_desde_bd") as mock_ml:
+        with patch("llm.services.coordinador_asistente.predecir_afluencia_desde_bd") as mock_ml, \
+             patch("llm.services.coordinador_asistente.obtener_configuracion") as mock_cfg:
+            mock_cfg.return_value.esta_disponible = False
             mock_ml.side_effect = ValueError(
                 "Historial insuficiente: La sede 'La Merced' no cuenta con datos históricos suficientes."
             )
