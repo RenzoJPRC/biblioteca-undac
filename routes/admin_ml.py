@@ -13,6 +13,10 @@ from ml.services.analisis_individual import (
     predecir_retorno_alumno,
     PredictorRetornoAlumno
 )
+from ml.services.vista_previa_historial import (
+    obtener_vista_previa_historial_afluencia,
+    validar_sede_activa
+)
 
 
 admin_ml_bp = Blueprint(
@@ -347,3 +351,89 @@ def api_informacion_modelo_retorno():
     except Exception as error:
         print(f"Error obteniendo metadatos del modelo de retorno: {error}")
         return respuesta_error("No se pudo obtener los metadatos del modelo de retorno.", 500)
+
+
+ROLES_AUTORIZADOS_VISTA_PREVIA = {"SuperAdmin", "Administrador", "Supervisor"}
+
+
+@admin_ml_bp.route("/api/ml/vista-previa-historial", methods=["GET"])
+def api_vista_previa_historial():
+    """
+    Endpoint de solo lectura que compara la agregación esperada desde dbo.RegistroIngresos
+    con dbo.AfluenciaHistoricaAgregada, excluyendo EsPrueba=1 e identificando filas nuevas post 28/09/2026.
+    Protegido con lista explícita de roles autorizados (rechaza Consultor y roles no permitidos).
+    Si el rol es Supervisor, rechaza si la sede está ausente, vacía o con solo espacios.
+    """
+    # 1. Validación de autenticación
+    if "admin_user" not in session:
+        return respuesta_error("Acceso denegado: se requiere sesión administrativa activa.", 401)
+
+    rol = session.get("admin_rol")
+
+    # 2. Validación explícita de roles autorizados para el módulo ML
+    if not rol or rol not in ROLES_AUTORIZADOS_VISTA_PREVIA or rol == "Consultor":
+        return respuesta_error(
+            "Acceso denegado: el rol del usuario no tiene permisos para consultar la vista previa del historial ML.",
+            403
+        )
+
+    # 3. Validación estricta de sede contra el catálogo real de sedes activas (dbo.Salas)
+    if rol == "Supervisor":
+        sede_supervisor = session.get("admin_sede")
+        try:
+            valida, sede_canon, motivo = validar_sede_activa(sede_supervisor)
+        except ConnectionError as err:
+            return respuesta_error("No se pudo conectar con la base de datos para validar la sede.", 503)
+
+        if not valida:
+            if motivo == "sede_ausente_o_vacia":
+                return respuesta_error(
+                    "Acceso denegado: el supervisor no tiene una sede asignada válida (sede ausente o vacía).",
+                    403
+                )
+            elif motivo == "sede_inexistente":
+                return respuesta_error(
+                    f"Acceso denegado: la sede '{sede_supervisor}' no existe en el catálogo de sedes del sistema.",
+                    403
+                )
+            elif motivo == "sede_inactiva":
+                return respuesta_error(
+                    f"Acceso denegado: la sede '{sede_supervisor}' se encuentra inactiva.",
+                    403
+                )
+            else:
+                return respuesta_error("Acceso denegado: sede no autorizada.", 403)
+
+        sede_filtro = sede_canon
+    else:
+        # Administrador o SuperAdmin pueden consultar todas las sedes o filtrar voluntariamente por una
+        sede_solicitada = request.args.get("sede")
+        if sede_solicitada and str(sede_solicitada).strip():
+            sede_limpia = str(sede_solicitada).strip()
+            try:
+                valida, sede_canon, motivo = validar_sede_activa(sede_limpia)
+            except ConnectionError as err:
+                return respuesta_error("No se pudo conectar con la base de datos para validar la sede.", 503)
+
+            if not valida:
+                if motivo == "sede_inexistente":
+                    return respuesta_error(f"La sede '{sede_limpia}' no existe en el catálogo de sedes.", 400)
+                elif motivo == "sede_inactiva":
+                    return respuesta_error(f"La sede '{sede_limpia}' se encuentra inactiva.", 400)
+                else:
+                    return respuesta_error("Sede inválida solicitada.", 400)
+            sede_filtro = sede_canon
+        else:
+            sede_filtro = None
+
+    try:
+        resultado = obtener_vista_previa_historial_afluencia(sede_filtro=sede_filtro)
+        return jsonify(resultado)
+    except ConnectionError as error:
+        print(f"Error de conexión en vista previa ML: {error}")
+        return respuesta_error("No se pudo conectar con la base de datos.", 503)
+    except Exception as error:
+        print(f"Error inesperado en vista previa ML: {error}")
+        return respuesta_error("No fue posible generar la vista previa del historial.", 500)
+
+
