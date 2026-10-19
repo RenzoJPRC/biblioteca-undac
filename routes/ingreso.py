@@ -14,7 +14,7 @@ ROLES_OPERADORES_PERMITIDOS = {'SuperAdmin', 'Supervisor', 'Operador', 'Administ
 
 def extraer_token_terminal_headers(req):
     """
-    Obtiene el token de terminal exclusivamente desde las cabeceras HTTP.
+    Obtiene el token de terminal exclusivamente desde las cabeceras HTTP o cookies de terminal.
     No acepta tokens desde parámetros de URL (query string).
     """
     token = req.headers.get('X-Terminal-Token')
@@ -22,6 +22,8 @@ def extraer_token_terminal_headers(req):
         auth = req.headers.get('Authorization')
         if auth and auth.startswith('Bearer '):
             token = auth[7:].strip()
+    if not token:
+        token = req.cookies.get('terminal_auth_token') or req.cookies.get('X-Terminal-Token')
     return token.strip() if token else None
 
 
@@ -56,10 +58,13 @@ def validar_autenticacion_terminal(req):
        - Si es 'Supervisor', debe tener obligatoriamente una sede asignada; si falta o está vacía, rechaza con HTTP 403.
        - Si presenta además un token de terminal, este debe ser auténtico; un token inválido es rechazado con HTTP 401.
        - En flujo estándar de navegador (sin token), la sala efectiva proviene de session['terminal_sala_id'].
-    3. Si es una terminal física sin sesión de usuario:
-       - Debe presentar cabecera HTTP con token válido coincidente con TERMINAL_AUTH_TOKEN.
+    3. Si es una terminal física autónoma con cabecera de token:
+       - Debe presentar cabecera HTTP o cookie de terminal con token válido coincidente con TERMINAL_AUTH_TOKEN.
        - Debe existir TERMINAL_SALA_ID válida en el entorno; si falta o es inválida, falla cerrada con HTTP 403.
-    4. Sin sesión válida ni token válido, rechaza con HTTP 401.
+    4. Si es una sesión de terminal de biblioteca (escáner/kiosk de navegador sin login administrativo):
+       - Debe contar con una sala previamente vinculada y autorizada en sesión ('terminal_sala_id' y 'escaneo_autorizado').
+       - Si falta o es inválida, rechaza con HTTP 403.
+    5. Sin sesión autorizada ni token de terminal válido, rechaza con HTTP 401 (no es ruta anónima).
     """
     # 1. Rechazo estricto de tokens en la URL (mantener fuera del historial y registros de acceso)
     if contiene_token_en_url(req):
@@ -115,7 +120,15 @@ def validar_autenticacion_terminal(req):
         sala_autorizada = int(str(env_sala).strip())
         return True, sala_autorizada, None, None, 200
 
-    # 4. Sin sesión válida ni token de terminal:
+    # 4. Terminal de navegador autorizada vinculada a sala (escáner sin login administrativo):
+    if session.get('escaneo_autorizado'):
+        sala_sesion = session.get('terminal_sala_id') or session.get('escaneo_sala_id')
+        if sala_sesion is not None and not isinstance(sala_sesion, bool) and isinstance(sala_sesion, int) and sala_sesion > 0:
+            sede_sesion = session.get('terminal_sede') or session.get('escaneo_sede')
+            return True, sala_sesion, sede_sesion, None, 200
+        return False, None, None, 'Sesión de terminal no vinculada a una sala válida. Abra primero la pantalla de sala autorizada.', 403
+
+    # 5. Sin sesión válida ni token de terminal:
     return False, None, None, 'Terminal u operador no autenticado. Requiere sesión autorizada o cabecera X-Terminal-Token válida.', 401
 
 
@@ -214,8 +227,6 @@ def ingreso_sala(sala_id):
         sala_autorizada_token = int(str(env_sala).strip())
         if sala_id != sala_autorizada_token:
             return f"ERROR: Acceso denegado. Este token de terminal solo está autorizado para la sala {sala_autorizada_token}.", 403
-    elif not admin_user:
-        return redirect(url_for('admin_auth.login', next=request.path))
 
     conn = None
     try:
@@ -243,9 +254,10 @@ def ingreso_sala(sala_id):
                 </div>
                 """, 403
 
-        # Si es sesión de operador sin token de terminal, asociar la sala a la sesión.
-        # Si se presenta un token de terminal, no guardar en sesión una sala elegida libremente.
+        # Si es sesión de terminal de biblioteca sin token de cabecera, asociar la sala a la sesión.
+        # Si se presenta un token de terminal en cabeceras, no guardar en sesión una sala elegida libremente.
         if not token_header:
+            session.permanent = True
             session['terminal_sala_id'] = sala_id
             session['terminal_sede'] = row.Sede
             session['terminal_operador'] = session.get('admin_user')
@@ -299,36 +311,34 @@ def filial(sede):
     admin_user = session.get('admin_user')
     admin_rol = session.get('admin_rol')
 
-    if not admin_user:
-        return redirect(url_for('admin_auth.login', next=request.path))
+    if admin_user:
+        if admin_rol == 'Consultor':
+            return """
+            <div style='font-family: sans-serif; padding: 40px; text-align: center;'>
+                <h1 style='color: #dc2626;'>Acceso Denegado</h1>
+                <p>El rol <b>Consultor</b> no tiene permisos para operar el escáner de ingresos.</p>
+                <a href='/admin/carnets' style='color: #2563eb;'>Ir a Gestión de Carnets</a>
+            </div>
+            """, 403
 
-    if admin_rol == 'Consultor':
-        return """
-        <div style='font-family: sans-serif; padding: 40px; text-align: center;'>
-            <h1 style='color: #dc2626;'>Acceso Denegado</h1>
-            <p>El rol <b>Consultor</b> no tiene permisos para operar el escáner de ingresos.</p>
-            <a href='/admin/carnets' style='color: #2563eb;'>Ir a Gestión de Carnets</a>
-        </div>
-        """, 403
-
-    if admin_rol not in ROLES_OPERADORES_PERMITIDOS:
-        return f"""
-        <div style='font-family: sans-serif; padding: 40px; text-align: center;'>
-            <h1 style='color: #dc2626;'>Acceso Denegado</h1>
-            <p>El rol <b>{admin_rol}</b> no está autorizado para operar el escáner.</p>
-        </div>
-        """, 403
-
-    if admin_rol == 'Supervisor':
-        sede_usuario = session.get('admin_sede')
-        if not sede_usuario or not str(sede_usuario).strip() or str(sede).strip().lower() != str(sede_usuario).strip().lower():
+        if admin_rol not in ROLES_OPERADORES_PERMITIDOS:
             return f"""
             <div style='font-family: sans-serif; padding: 40px; text-align: center;'>
                 <h1 style='color: #dc2626;'>Acceso Denegado</h1>
-                <p>No tiene permisos para operar la filial <b>{sede}</b>.</p>
-                <a href='/admin/dashboard' style='color: #2563eb;'>Volver al Panel</a>
+                <p>El rol <b>{admin_rol}</b> no está autorizado para operar el escáner.</p>
             </div>
             """, 403
+
+        if admin_rol == 'Supervisor':
+            sede_usuario = session.get('admin_sede')
+            if not sede_usuario or not str(sede_usuario).strip() or str(sede).strip().lower() != str(sede_usuario).strip().lower():
+                return f"""
+                <div style='font-family: sans-serif; padding: 40px; text-align: center;'>
+                    <h1 style='color: #dc2626;'>Acceso Denegado</h1>
+                    <p>No tiene permisos para operar la filial <b>{sede}</b>.</p>
+                    <a href='/admin/dashboard' style='color: #2563eb;'>Volver al Panel</a>
+                </div>
+                """, 403
 
     conn = None
     try:
@@ -355,6 +365,7 @@ def filial(sede):
         nombre_sala = row.NombreSala
         piso = row.Piso
 
+        session.permanent = True
         session['terminal_sala_id'] = sala_id
         session['terminal_sede'] = sede
         session['terminal_operador'] = admin_user

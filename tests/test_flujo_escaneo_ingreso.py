@@ -771,11 +771,114 @@ class TestFlujoEscaneoIngreso(unittest.TestCase):
         self.assertEqual(data['status'], 'error')
         self.assertIn('Terminal u operador no autenticado', data['msg'])
 
-    def test_pantalla_sala_requiere_login_o_token(self):
-        """Acceder a GET /sala/1 sin login redirige a /admin/login."""
-        resp = self.client.get('/sala/1')
-        self.assertEqual(resp.status_code, 302)
-        self.assertIn('/admin/login', resp.headers.get('Location', ''))
+    @patch('routes.ingreso.get_db_connection')
+    @patch('routes.ingreso.registrar_ingreso_general')
+    @patch('routes.ingreso.validar_sala_activa')
+    def test_pantalla_sala_abre_sin_login_administrativo_y_permite_flujo(self, mock_validar_sala, mock_reg, mock_db):
+        """
+        1. El escáner de biblioteca se abre directamente sin pedir credenciales del panel de administrador.
+        2. La sesión de terminal queda vinculada a la sala autorizada y permite el POST de ingreso.
+        3. El panel administrativo (/admin/dashboard) se mantiene estrictamente protegido.
+        """
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_db.return_value = mock_conn
+        mock_conn.cursor.return_value = mock_cursor
+        mock_cursor.fetchone.side_effect = [
+            MagicMock(NombreSala='Sala Lectura 1', Piso=1, Sede='Central', Activo=1),
+            (0,)  # contador inicial
+        ]
+
+        # 1. Acceso a GET /sala/1 sin sesión previa de administrador
+        resp_get = self.client.get('/sala/1')
+        self.assertEqual(resp_get.status_code, 200)
+        self.assertIn('Sala Lectura 1', resp_get.get_data(as_text=True))
+        self.assertIn('Acerque su carnet al lector para ingresar', resp_get.get_data(as_text=True))
+
+        # Verifica que la sesión de terminal quedó vinculada a la sala pero sin credenciales admin
+        with self.client.session_transaction() as sess:
+            self.assertEqual(sess.get('terminal_sala_id'), 1)
+            self.assertEqual(sess.get('terminal_sede'), 'Central')
+            self.assertTrue(sess.get('escaneo_autorizado'))
+            self.assertIsNone(sess.get('admin_user'))
+            self.assertIsNone(sess.get('admin_rol'))
+
+        # 2. El flujo de escaneo POST funciona normalmente con la sesión de terminal vinculada
+        mock_validar_sala.return_value = (True, None, {'sala_id': 1, 'sede': 'Central'})
+        mock_reg.return_value = {
+            'status': 'success',
+            'msg': 'ACCESO CONCEDIDO (MAÑANA)',
+            'alumno': 'ALUMNO TERMINAL AUTORIZADA'
+        }
+
+        resp_post = self.client.post('/procesar_ingreso', json={'codigo': '2412345678', 'sala_id': 1})
+        self.assertEqual(resp_post.status_code, 200)
+        data = resp_post.get_json()
+        self.assertEqual(data['status'], 'success')
+
+        # 3. La protección del panel administrativo se mantiene sin cambios: no permite acceso anónimo
+        resp_admin = self.client.get('/admin/dashboard')
+        self.assertEqual(resp_admin.status_code, 302)
+        self.assertIn('/admin/login', resp_admin.headers.get('Location', ''))
+
+    @patch('routes.ingreso.get_db_connection')
+    def test_pantalla_filial_abre_sin_login_administrativo(self, mock_db):
+        """El escáner de una filial se abre directamente sin pedir credenciales del panel de administrador."""
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_db.return_value = mock_conn
+        mock_conn.cursor.return_value = mock_cursor
+        mock_cursor.fetchone.side_effect = [
+            MagicMock(SalaID=3, NombreSala='Sala Filial Oxapampa', Piso=1, Sede='Oxapampa', Activo=1),
+            (0,)  # contador inicial
+        ]
+
+        resp_filial = self.client.get('/filial/Oxapampa')
+        self.assertEqual(resp_filial.status_code, 200)
+        self.assertIn('Sala Filial Oxapampa', resp_filial.get_data(as_text=True))
+
+        with self.client.session_transaction() as sess:
+            self.assertEqual(sess.get('terminal_sala_id'), 3)
+            self.assertEqual(sess.get('terminal_sede'), 'Oxapampa')
+            self.assertTrue(sess.get('escaneo_autorizado'))
+            self.assertIsNone(sess.get('admin_user'))
+
+    def test_ausencia_de_voz_y_saludo_en_plantilla(self):
+        """
+        Verifica que en templates/ingreso.html se haya eliminado la síntesis de voz:
+        no se pronuncian nombres ni códigos de alumnos. Se conservan los elementos visuales.
+        """
+        template_path = os.path.join(os.path.dirname(__file__), '..', 'templates', 'ingreso.html')
+        with open(template_path, 'r', encoding='utf-8') as f:
+            contenido = f.read()
+
+        # Ausencia de voz y pronunciación
+        self.assertNotIn('reproducirSaludoVoz', contenido)
+        self.assertNotIn('SpeechSynthesisUtterance', contenido)
+        self.assertNotIn('speechSynthesis.speak', contenido)
+        self.assertNotIn('speechSynthesis', contenido)
+
+        # Conservación del resultado visual
+        self.assertIn('id="pantalla-resultado"', contenido)
+        self.assertIn('id="texto-estado"', contenido)
+        self.assertIn('id="datos-alumno"', contenido)
+        self.assertIn('id="nombre-alumno"', contenido)
+
+    def test_duracion_mensajes_resultado_un_segundo(self):
+        """
+        Verifica que en templates/ingreso.html el temporizador de reseteo de pantalla
+        esté configurado en exactamente 1000 ms (1 segundo), conservando el debounce contra doble lectura.
+        """
+        template_path = os.path.join(os.path.dirname(__file__), '..', 'templates', 'ingreso.html')
+        with open(template_path, 'r', encoding='utf-8') as f:
+            contenido = f.read()
+
+        # Tiempo de pantalla fijado en 1 segundo (1000ms)
+        self.assertIn('const tiempoEspera = 1000;', contenido)
+        self.assertNotIn('tiempoEspera = esApiSync ? 4500 : 3500;', contenido)
+
+        # Conservación del bloqueo de doble lectura (debounce)
+        self.assertIn('lastScannedTime) < 3000', contenido)
 
     # =========================================================================
     # =========================================================================

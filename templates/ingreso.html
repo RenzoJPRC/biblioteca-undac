@@ -368,7 +368,6 @@
 
             if (data.status === 'success') {
                 playSuccessBeep();
-                reproducirSaludoVoz(data.alumno);
 
                 // --- Aumentar el contador ---
                 const contadorEl = document.getElementById('contador-sala');
@@ -484,8 +483,8 @@
 
             clearTimeout(timer);
 
-            // Extender tiempo de pantalla a 4.5 segundos si fue registrado por API UNDAC para dar tiempo de lectura
-            const tiempoEspera = esApiSync ? 4500 : 3500;
+            // Muestra los mensajes de resultado durante 1 segundo (1000ms)
+            const tiempoEspera = 1000;
 
             timer = setTimeout(() => {
                 resultado.classList.add('hidden');
@@ -579,51 +578,6 @@
             }
         }
 
-        // Precargar la API de síntesis de voz del navegador
-        let vocesDisponibles = [];
-        function cargarVoces() {
-            if ('speechSynthesis' in window) {
-                vocesDisponibles = window.speechSynthesis.getVoices();
-            }
-        }
-        if ('speechSynthesis' in window) {
-            window.speechSynthesis.onvoiceschanged = cargarVoces;
-            cargarVoces();
-        }
-
-        function reproducirSaludoVoz(nombre) {
-            if (!('speechSynthesis' in window)) return;
-            try {
-                window.speechSynthesis.cancel();
-                let primerNombre = "Usuario";
-                if (nombre && nombre.trim() !== '') {
-                    if (nombre.includes(',')) {
-                        let partes = nombre.split(',');
-                        primerNombre = partes[1].trim().split(' ')[0];
-                    } else {
-                        primerNombre = nombre.trim().split(' ')[0];
-                    }
-                }
-
-                // Filtrar títulos comunes
-                primerNombre = primerNombre.replace(/^(DR|DRA|ING|LIC|DOC|PROF)\.?$/i, '').trim();
-
-                const texto = `Bienvenido, ${primerNombre}`;
-                const msg = new SpeechSynthesisUtterance(texto);
-                msg.lang = 'es-ES';
-                msg.rate = 1.0;
-                msg.pitch = 1.0;
-
-                // Seleccionar voz en español disponible si existe
-                if (vocesDisponibles.length === 0) cargarVoces();
-                const vozEspanol = vocesDisponibles.find(v => v.lang.startsWith('es'));
-                if (vozEspanol) msg.voice = vozEspanol;
-
-                window.speechSynthesis.speak(msg);
-            } catch (e) {
-                console.error("Error en voz:", e);
-            }
-        }
 
         function cargarClimaEntrada() {
             fetch('/api/clima_pasco')
