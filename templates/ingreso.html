@@ -136,6 +136,7 @@
 
         const salaIdStr = "{{ sala_id }}";
         const salaId = (salaIdStr && salaIdStr !== "None") ? Number(salaIdStr) : 1;
+        const sedeActual = "{{ sede | default('') }}";
 
         let timer;
 
@@ -273,15 +274,24 @@
         }
 
         let isScanningBusy = false;
+        let lastScannedCode = null;
+        let lastScannedTime = 0;
 
         function procesar(codigo) {
+            const now = Date.now();
+            if (codigo === lastScannedCode && (now - lastScannedTime) < 3000) {
+                return;
+            }
             if (isScanningBusy) return;
             isScanningBusy = true;
+            lastScannedCode = codigo;
+            lastScannedTime = now;
 
             let url = '/procesar_ingreso';
             let bodyData = {
                 codigo: codigo,
-                sala_id: salaId
+                sala_id: salaId,
+                sede: typeof sedeActual !== 'undefined' ? sedeActual : ''
             };
 
             if (eventoId) {
@@ -303,23 +313,31 @@
                 body: JSON.stringify(bodyData),
                 signal: controller.signal
             })
-                .then(res => {
+                .then(async res => {
                     clearTimeout(timeoutId);
-                    if (!res.ok) throw new Error("HTTP " + res.status);
-                    return res.json();
+                    let data = null;
+                    try {
+                        data = await res.json();
+                    } catch (e) { }
+                    if (!res.ok) {
+                        if (data && data.msg) return data;
+                        throw new Error("HTTP " + res.status);
+                    }
+                    return data;
                 })
                 .then(data => {
                     isScanningBusy = false;
-                    mostrar(data);
+                    if (data) {
+                        mostrar(data);
+                    }
                 })
                 .catch(err => {
                     isScanningBusy = false;
                     clearTimeout(timeoutId);
-                    console.error("Fallo de red o timeout en escáner:", err);
 
                     mostrar({
                         status: 'error',
-                        msg: '⚠️ ERROR DE CONEXIÓN DE RED LOCAL - ESCANEE OTRA VEZ'
+                        msg: '⚠️ TIEMPO DE RESPUESTA AGOTADO: Verifique si el ingreso fue registrado antes de volver a escanear'
                     });
                 });
         }

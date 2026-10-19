@@ -97,7 +97,7 @@ def get_db_connection():
             conn_str = f"DRIVER={driver};SERVER={server};DATABASE={database};Trusted_Connection={trusted};"
         return pyodbc.connect(conn_str, timeout=15)
     except Exception as e_pyodbc:
-        print(f"--- AVISO PYODBC --- ({e_pyodbc}). Intentando respaldo con pymssql...")
+        print(f"--- AVISO PYODBC --- ({type(e_pyodbc).__name__}). Intentando respaldo con pymssql...")
 
     # 2. Respaldo secundario con pymssql + CursorWrapper
     if username and password:
@@ -106,7 +106,7 @@ def get_db_connection():
             raw_conn = pymssql.connect(server=server, user=username, password=password, database=database, timeout=15)
             return PyMSSQLConnectionWrapper(raw_conn)
         except Exception as e_pymssql:
-            print(f"--- ERROR DE CONEXIÓN BD (PYMSSQL) --- : {e_pymssql}")
+            print(f"--- ERROR DE CONEXIÓN BD (PYMSSQL) --- : {type(e_pymssql).__name__}")
             return None
     else:
         print("--- ERROR DE CONEXIÓN BD --- : No se pudo conectar vía pyodbc ni pymssql.")
@@ -117,29 +117,32 @@ def get_db_connection():
 def get_db_cursor(autocommit=False):
     """
     Gestor de contexto (Context Manager) seguro para pyodbc y pymssql.
+    Garantiza el cierre de conexión y cursor bajo cualquier circunstancia.
     """
     conn = get_db_connection()
     if not conn:
         yield None, None
         return
 
-    cursor = conn.cursor()
     try:
-        yield conn, cursor
-        if not autocommit:
-            conn.commit()
-    except Exception as e:
-        print(f"--- ERROR EN TRANSACCIÓN BD (ROLLBACK) --- : {e}")
+        cursor = conn.cursor()
         try:
-            conn.rollback()
-        except Exception:
-            pass
-        raise e
+            yield conn, cursor
+            if not autocommit:
+                conn.commit()
+        except Exception as e:
+            print(f"--- ERROR EN TRANSACCIÓN BD (ROLLBACK) --- : {type(e).__name__}")
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            raise e
+        finally:
+            try:
+                cursor.close()
+            except Exception:
+                pass
     finally:
-        try:
-            cursor.close()
-        except Exception:
-            pass
         try:
             conn.close()
         except Exception:
