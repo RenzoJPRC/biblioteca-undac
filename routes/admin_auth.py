@@ -68,7 +68,20 @@ def login():
                     
                     session['admin_user'] = row.Usuario
                     session['admin_rol'] = row.Rol
-                    session['admin_sede'] = row.SedeAsignada or 'Central'
+                    
+                    sede_asignada = str(row.SedeAsignada).strip() if (row.SedeAsignada and str(row.SedeAsignada).strip()) else None
+                    if row.Rol == 'Supervisor':
+                        # Para Supervisor: obtener sede real; no asignar 'Central' por defecto si falta o está vacía
+                        session['admin_sede'] = sede_asignada
+                        if not sede_asignada:
+                            session['escaneo_autorizado'] = False
+                            session.pop('terminal_sala_id', None)
+                            session.pop('terminal_sede', None)
+                            session.pop('escaneo_sala_id', None)
+                            session.pop('escaneo_sede', None)
+                    else:
+                        session['admin_sede'] = sede_asignada or 'Central'
+
                     conn.close()
                     if row.Rol == 'Consultor':
                         return redirect(url_for('admin_carnets.gestion_carnets'))
