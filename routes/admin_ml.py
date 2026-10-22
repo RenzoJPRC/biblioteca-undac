@@ -72,7 +72,8 @@ def vista_machine_learning():
 
     try:
         predictor_retorno = PredictorRetornoAlumno.obtener_instancia()
-        metadatos_retorno = predictor_retorno.metadatos
+        metadatos_retorno = dict(predictor_retorno.metadatos)
+        metadatos_retorno["fecha_creacion_artefacto"] = predictor_retorno.fecha_creacion_artefacto if isinstance(predictor_retorno.fecha_creacion_artefacto, str) else None
     except Exception as error:
         print(f"Error cargando metadatos de retorno en vista ML: {error}")
         metadatos_retorno = {}

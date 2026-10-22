@@ -225,6 +225,8 @@ class TestDashboardRetornoExperimental(unittest.TestCase):
         self.assertIn('<option value="actual" selected>',html)
         self.assertIn('HistGradientBoostingClassifier · Próximo día', html)
         self.assertIn('HistGradientBoostingClassifier · Próximos', html)
+        self.assertIn('id="retorno-base-metadatos"', html)
+        self.assertIn('Ambos selectores estiman un solo día operativo.', html)
         self.assertIn('Experimental · pendiente de validación prospectiva',html)
         self.assertIn('mostrarRetornoExperimental(datos, box, cont)',html)
         self.assertNotIn('id="retorno-historico"',html)

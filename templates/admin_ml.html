@@ -881,6 +881,7 @@
                 Ingrese el código de matrícula para evaluar la probabilidad inferencial de retorno. La consulta aplica validación cronológica y jamás expone ni utiliza el DNI.
             </p>
 
+            <p id="retorno-base-metadatos" class="mb-4 text-xs text-slate-500">Modelo base · HistGradientBoostingClassifier · Creado: {{ metadatos_retorno.get('fecha_creacion_artefacto') or 'No documentado' }} · Periodo de datos: {{ metadatos_retorno.get('periodo_disponible', {}).get('fecha_inicio', 'No documentado') }} a {{ metadatos_retorno.get('periodo_disponible', {}).get('fecha_fin', 'No documentado') }}. Ambos selectores estiman un solo día operativo.</p>
             {% set candidato_info = candidato_retorno_info|default({}) %}
             <form id="form-predecir-retorno" class="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
                 <div>

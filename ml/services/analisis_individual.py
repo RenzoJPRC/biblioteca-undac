@@ -580,6 +580,7 @@ class PredictorRetornoAlumno:
 
         paquete = joblib.load(self.ruta_modelo)
         self.modelo = paquete["modelo"]
+        self.fecha_creacion_artefacto = paquete.get("fecha_entrenamiento")
         self.variables = paquete.get("variables", [
             'dias_activos', 'total_visitas', 'recencia_dias',
             'visitas_ultimos_7d', 'visitas_ultimos_14d',

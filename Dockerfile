@@ -1,5 +1,5 @@
-# Usar imagen oficial de Python 3.10 en Linux Debian
-FROM python:3.10-slim
+# Usar imagen oficial de Python 3.11 en Debian Bookworm (compatible con el candidato H1)
+FROM python:3.11-slim-bookworm
 
 # Desactivar prompts interactivos de apt
 ENV DEBIAN_FRONTEND=noninteractive
