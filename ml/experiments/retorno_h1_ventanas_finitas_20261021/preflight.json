@@ -1,0 +1,137 @@
+{
+  "alumnos_compartidos": {
+    "train_octubre_retrospectivo": 611,
+    "train_val": 541,
+    "val_octubre_retrospectivo": 414
+  },
+  "alumnos_fuente": 3754,
+  "alumnos_totales": 1847,
+  "archivos": {
+    "calendario_aplicado.csv": "3550b2e827ffab523803c87315ba6076d7ca20e141ad762915c75423b8e78421",
+    "consulta.sql": "b6542f5f02be275c319f5e4e58941346e5f7c07b16f6e6ed482cf0878e8ed281",
+    "dataset_sin_identificadores.csv": "6f8b8f69a1727a1264cc1ba2ed12c61abeb72f311fb72a5c4addbd84ec2744dd",
+    "evidencia_diaria.csv": "e6aff3b8e27ca481f122bfb5fec9c91b6ec4d2a63f6028e0f6dff5aecd06dabf",
+    "preflight_por_fecha.csv": "e0703c4d32ec8f2c8544d973c155ab4bd62e8e1e7fe87d77adcb933b394d9158",
+    "receta.py": "f2a9c9d0833099ca511ca5011ac8762ab6015bd02a24b2a386f1a4c9b75fdbc6"
+  },
+  "bloques_insuficientes": [],
+  "cerrados": "Fines de semana, feriados y receso 01/08–23/08 no son días de ausencia: no entran en conteos, tasas ni objetivos. Las ventanas son calendario, no se extienden para recuperar días cerrados.",
+  "cobertura": "Fechas abiertas del resumen histórico, más 29/09–21/10 por confirmación operativa del responsable; no verificación técnica independiente",
+  "conteos": "días activos únicos y número de escaneos válidos; sumas solo en días abiertos con captura confirmada",
+  "corte_captura": "2026-10-21",
+  "definicion_ventana": "[FechaRef-W, FechaRef), W=7,14,30 días calendario; excluye FechaRef y objetivo",
+  "desconocidos": "Se excluye el ejemplo si cualquier ventana contiene un desconocido o su siguiente día objetivo no es confirmable. No se salta el 24/07 como si fuera un cierre.",
+  "estado": "listo_para_evaluar",
+  "filas_agregadas_solo_en_memoria": 31802,
+  "fuentes_sha256": {
+    "ml\\data\\resumen_cobertura_por_fecha.csv": "f76831ea9f51b0d490b2275a66078f27f136ae10f86ca98305bb91f341faaa1a",
+    "ml\\scripts\\experimento_comparativo_retorno.py": "9b04c2f44691986c8bf2758bf6f5229d8859693ee5d3d03d44b00bbb0ce5dc02",
+    "ml\\scripts\\retorno_h1_ventanas_finitas.py": "f2a9c9d0833099ca511ca5011ac8762ab6015bd02a24b2a386f1a4c9b75fdbc6"
+  },
+  "inicio": "2026-10-21T22:00:44.436997-05:00",
+  "modelos_antes": {
+    "ml\\models\\metadatos_modelo_afluencia.json": "638f117b9399ed64632014527c115790bedf539b2f1c503bae7045357d8ce08e",
+    "ml\\models\\metadatos_modelo_afluencia_candidato_gb.json": "6e8352e2f55368ef184862df0ef3ee9dd203f097a58c9166fed31d08773aaf52",
+    "ml\\models\\metadatos_retorno_alumno.json": "eb4bbe73ba285845f048b4fa0129e8bfe6c49c3dc6c87326c9494bb9f4ef31c2",
+    "ml\\models\\metadatos_retorno_alumno_candidato.json": "5b48551b00fecdfda2d0b94bf89b9f5446c4efc531081493e42a5bbcd8a23009",
+    "ml\\models\\metadatos_retorno_alumno_candidato_hgb_h1.json": "7a5de89cc483219c405bc8e3b6641e785906b865c8da9eee53a80d8044c2c4f3",
+    "ml\\models\\metadatos_retorno_alumno_candidato_logreg_h1.json": "f42c70ddaeeeafd28520c1a26dcfe3a8d8f1af9d060ec9ce63dce655fe8810da",
+    "ml\\models\\modelo_afluencia_candidato_gb.joblib": "4f045df9d18697469f8a8e4a9afe10d3e8039b5f2333d9a56796bc487abe158b",
+    "ml\\models\\modelo_afluencia_undac.joblib": "40a7de445ef426bf9289829919002e2bac502402277cd6fba21644c9663d7eb8",
+    "ml\\models\\modelo_retorno_alumno.joblib": "328f1d036777e36052cbd821acc28fc528960db6e4a0237e1bf9f5b818b7eefe",
+    "ml\\models\\modelo_retorno_alumno_candidato_hgb.joblib": "a82a9dea7dc9d7c86b517bc0273a0af06024d0dce2650b5a3af9f03780be939a",
+    "ml\\models\\modelo_retorno_alumno_candidato_hgb_h1.joblib": "7c8d207582b562d96cbfae5e91fb3fd69ea12f401cf89c3d940026374c398900",
+    "ml\\models\\modelo_retorno_alumno_candidato_logreg_h1.joblib": "2af32a14fcbc37cbcecdb158d6a9e15f0ba2b36cc464b6a71a5d9e4e5a3a3252"
+  },
+  "modelos_despues": {
+    "ml\\models\\metadatos_modelo_afluencia.json": "638f117b9399ed64632014527c115790bedf539b2f1c503bae7045357d8ce08e",
+    "ml\\models\\metadatos_modelo_afluencia_candidato_gb.json": "6e8352e2f55368ef184862df0ef3ee9dd203f097a58c9166fed31d08773aaf52",
+    "ml\\models\\metadatos_retorno_alumno.json": "eb4bbe73ba285845f048b4fa0129e8bfe6c49c3dc6c87326c9494bb9f4ef31c2",
+    "ml\\models\\metadatos_retorno_alumno_candidato.json": "5b48551b00fecdfda2d0b94bf89b9f5446c4efc531081493e42a5bbcd8a23009",
+    "ml\\models\\metadatos_retorno_alumno_candidato_hgb_h1.json": "7a5de89cc483219c405bc8e3b6641e785906b865c8da9eee53a80d8044c2c4f3",
+    "ml\\models\\metadatos_retorno_alumno_candidato_logreg_h1.json": "f42c70ddaeeeafd28520c1a26dcfe3a8d8f1af9d060ec9ce63dce655fe8810da",
+    "ml\\models\\modelo_afluencia_candidato_gb.joblib": "4f045df9d18697469f8a8e4a9afe10d3e8039b5f2333d9a56796bc487abe158b",
+    "ml\\models\\modelo_afluencia_undac.joblib": "40a7de445ef426bf9289829919002e2bac502402277cd6fba21644c9663d7eb8",
+    "ml\\models\\modelo_retorno_alumno.joblib": "328f1d036777e36052cbd821acc28fc528960db6e4a0237e1bf9f5b818b7eefe",
+    "ml\\models\\modelo_retorno_alumno_candidato_hgb.joblib": "a82a9dea7dc9d7c86b517bc0273a0af06024d0dce2650b5a3af9f03780be939a",
+    "ml\\models\\modelo_retorno_alumno_candidato_hgb_h1.joblib": "7c8d207582b562d96cbfae5e91fb3fd69ea12f401cf89c3d940026374c398900",
+    "ml\\models\\modelo_retorno_alumno_candidato_logreg_h1.joblib": "2af32a14fcbc37cbcecdb158d6a9e15f0ba2b36cc464b6a71a5d9e4e5a3a3252"
+  },
+  "modelos_intactos": true,
+  "octubre": "retrospectivo ya examinado; no prueba independiente ni criterio de selección",
+  "particiones": {
+    "octubre_retrospectivo": {
+      "alumnos": 776,
+      "clases": {
+        "0": 938,
+        "1": 564
+      },
+      "fechas": 2,
+      "fin": "2026-10-20",
+      "inicio": "2026-10-19",
+      "observaciones": 1502
+    },
+    "solo_ajuste_final": {
+      "alumnos": 129,
+      "clases": {
+        "0": 171,
+        "1": 160
+      },
+      "fechas": 5,
+      "fin": "2026-08-31",
+      "inicio": "2026-08-25",
+      "observaciones": 331
+    },
+    "train": {
+      "alumnos": 1594,
+      "clases": {
+        "0": 18447,
+        "1": 7290
+      },
+      "fechas": 28,
+      "fin": "2026-07-21",
+      "inicio": "2026-06-11",
+      "observaciones": 25737
+    },
+    "val": {
+      "alumnos": 665,
+      "clases": {
+        "0": 2992,
+        "1": 1539
+      },
+      "fechas": 12,
+      "fin": "2026-09-16",
+      "inicio": "2026-09-01",
+      "observaciones": 4531
+    }
+  },
+  "protocolo_alumno": "longitudinal temporal, no alumnos disjuntos; grupos usados solo en memoria para conteos/solapamientos",
+  "seleccion": "menor Brier septiembre, desempate log-loss, mayor PR-AUC(AP), nombre; solo modelos sin ConvergenceWarning",
+  "suficiencia_alumno": ">=3 días activos en la ventana previa de 30 días, sin acumulación de por vida",
+  "tasas": "días activos / días abiertos confirmados de cada ventana; si una ventana no tiene apertura, se excluye el ejemplo en vez de inventar una tasa",
+  "umbral": "Macro F1 máximo en septiembre en rejilla 0.15..0.80 paso0.05; empate umbral menor; no usa octubre",
+  "unknown_days": [
+    "2026-05-04",
+    "2026-05-05",
+    "2026-05-06",
+    "2026-05-07",
+    "2026-05-08",
+    "2026-05-11",
+    "2026-07-24",
+    "2026-09-18"
+  ],
+  "variables": [
+    "dias_activos_7d",
+    "visitas_7d",
+    "tasa_asistencia_7d",
+    "dias_activos_14d",
+    "visitas_14d",
+    "tasa_asistencia_14d",
+    "dias_activos_30d",
+    "visitas_30d",
+    "tasa_asistencia_30d",
+    "recencia_30d",
+    "afinidad_dia_objetivo_30d",
+    "dias_apertura_30d"
+  ]
+}

@@ -177,27 +177,30 @@ def calcular_banderas_analiticas(
     cantidad_hora20_post_cierre: int = 0
 ) -> Dict[str, Any]:
     """
-    Calcula las banderas analíticas conforme a las reglas demostradas.
-    Distingue la franja 20:00–20:45:00 de registros posteriores al cierre (> 20:45:00).
-    Identifica el 24/07 como regla configurada pendiente de confirmación documental.
+    Calcula las banderas analíticas conforme a la metodología demostrada en el dataset
+    y en cargar_afluencia_historica.py.
+
+    Metodología de banderas ortogonales:
+    - EsHorarioAtipico: Evalúa estrictamente la franja horaria y fin de semana.
+      (Hora < 8 | Hora > 20 | DiaSemana >= 5 | Ingresos hora 20 posteriores a las 20:45:00).
+      Los cierres por vacaciones (agosto), feriados y puentes se registran exclusivamente
+      en sus propias banderas y NO se mezclan en EsHorarioAtipico.
+    - EsCierreAgosto: 1 durante el periodo de vacaciones (01/08/2026 al 23/08/2026).
+    - EsFranjaParcial: 1 para la hora 20 (atención de 45 min).
+    - EsFeriado: 1 en feriados nacionales confirmados 2026.
+    - EsCierre27Julio: 1 el 27/07/2026.
+    - EsCierre24Julio: 1 el 24/07/2026 (regla configurada en sistema).
     """
     dt = datetime.strptime(fecha_str, "%Y-%m-%d").date()
     dia_semana = dt.weekday()
+    es_fin_de_semana = bool(dia_semana >= 5)
 
     es_feriado = 1 if fecha_str in FERIADOS_CONFIRMADOS_2026 else 0
     es_cierre_24_julio = 1 if fecha_str == CIERRE_CONFIGURADO_24_JULIO else 0
     es_cierre_27_julio = 1 if fecha_str == CIERRE_CONFIRMADO_27_JULIO else 0
     es_cierre_agosto = 1 if (INICIO_VACACIONES_AGOSTO <= dt <= FIN_VACACIONES_AGOSTO) else 0
 
-    es_dia_cerrado = bool(
-        es_feriado == 1
-        or es_cierre_24_julio == 1
-        or es_cierre_27_julio == 1
-        or es_cierre_agosto == 1
-        or dia_semana >= 5
-    )
-
-    # Evaluación horaria con límite exacto a las 20:45:00
+    # Evaluación de horario atípico: estrictamente horario y fin de semana
     if hora_int == 20:
         if cantidad_hora20_post_cierre > 0 and cantidad_hora20_valida == 0:
             # Todos los ingresos fueron estrictamente posteriores a las 20:45:00
@@ -212,12 +215,12 @@ def calcular_banderas_analiticas(
         else:
             # Franja parcial válida (20:00:00 a 20:45:00)
             es_franja_parcial = 1
-            es_atipico = 1 if es_dia_cerrado else 0
+            es_atipico = 1 if es_fin_de_semana else 0
             estado_franja_20h = "franja_parcial_valida_45m"
     else:
         es_franja_parcial = 0
         estado_franja_20h = "no_aplica"
-        es_atipico = 1 if (hora_int < 8 or hora_int > 20 or es_dia_cerrado) else 0
+        es_atipico = 1 if (hora_int < 8 or hora_int > 20 or es_fin_de_semana) else 0
 
     return {
         "EsHorarioAtipico": es_atipico,
@@ -572,16 +575,27 @@ def _ejecutar_vista_previa(
     min_fecha_post = min((f["Fecha"] for f in filas_nuevas_post_corte), default=None)
     max_fecha_post = max((f["Fecha"] for f in filas_nuevas_post_corte), default=None)
 
+    # Separación analítica de discrepancias: cantidad vs banderas
+    disc_cantidad = [d for d in filas_historicas_discrepantes if d["TieneDiscrepanciaCantidad"]]
+    disc_banderas = [d for d in filas_historicas_discrepantes if d["TieneDiscrepanciaBanderas"]]
+    disc_solo_cantidad = [d for d in filas_historicas_discrepantes if d["TieneDiscrepanciaCantidad"] and not d["TieneDiscrepanciaBanderas"]]
+    disc_solo_banderas = [d for d in filas_historicas_discrepantes if d["TieneDiscrepanciaBanderas"] and not d["TieneDiscrepanciaCantidad"]]
+    disc_mixtas = [d for d in filas_historicas_discrepantes if d["TieneDiscrepanciaCantidad"] and d["TieneDiscrepanciaBanderas"]]
+
     # Diagnósticos dinámicos calculados desde la consulta
     if not filas_historicas_discrepantes and not filas_solo_en_aha_historicas and not filas_solo_en_ri_historicas:
         diag_historico = f"Todas las {len(filas_historicas_coincidentes)} franjas evaluadas en el periodo histórico coinciden exactamente en cantidad y banderas."
     else:
-        diag_historico = (
-            f"El periodo histórico presenta {len(filas_historicas_coincidentes)} coincidencias exactas, "
-            f"{len(filas_historicas_discrepantes)} discrepancias en cantidad o banderas, "
-            f"{len(filas_solo_en_aha_historicas)} filas presentes únicamente en AfluenciaHistoricaAgregada y "
-            f"{len(filas_solo_en_ri_historicas)} filas presentes únicamente en RegistroIngresos."
-        )
+        partes = [f"El periodo histórico presenta {len(filas_historicas_coincidentes)} coincidencias exactas"]
+        if filas_historicas_discrepantes:
+            partes.append(
+                f"{len(filas_historicas_discrepantes)} discrepancias ({len(disc_cantidad)} de cantidad, {len(disc_banderas)} de banderas)"
+            )
+        if filas_solo_en_aha_historicas:
+            partes.append(f"{len(filas_solo_en_aha_historicas)} filas presentes únicamente en AfluenciaHistoricaAgregada")
+        if filas_solo_en_ri_historicas:
+            partes.append(f"{len(filas_solo_en_ri_historicas)} filas presentes únicamente en RegistroIngresos")
+        diag_historico = ", ".join(partes) + "."
 
     if not colisiones_duplicados_post_corte and not filas_solo_en_aha_post_corte:
         diag_post = (
@@ -615,7 +629,7 @@ def _ejecutar_vista_previa(
             "horario_regular": "08:00:00 a 20:45:00 (lunes a viernes)",
             "cierre_operativo_limite": "20:45:00 exacto. Ingresos con marcas temporales > 20:45:00 (incluidos 20:45:00.001 y 20:45:59.999) son atípicos (EsHorarioAtipico = 1).",
             "franja_parcial": "Hora 20 (20:00:00 a 20:45:00) con EsFranjaParcial = 1. Si coexisten con ingresos > 20:45:00 se conservan ambos conteos por separado.",
-            "horario_atipico": "Horas < 8 o > 20, fines de semana o ingresos pasadas las 20:45:00",
+            "horario_atipico": "Horas < 8 o > 20, fines de semana (sábado/domingo) o ingresos pasadas las 20:45:00. Las vacaciones (agosto), feriados y puentes se evalúan de forma ortogonal en sus propias banderas.",
             "feriados_confirmados": list(sorted(FERIADOS_CONFIRMADOS_2026)),
             "cierre_24_julio": {
                 "fecha": CIERRE_CONFIGURADO_24_JULIO,
@@ -647,7 +661,17 @@ def _ejecutar_vista_previa(
             "periodo": f"Inicio hasta {fecha_corte}",
             "coincidencias_exactas_filas": len(filas_historicas_coincidentes),
             "discrepancias_filas": len(filas_historicas_discrepantes),
+            "resumen_discrepancias": {
+                "total_discrepancias": len(filas_historicas_discrepantes),
+                "discrepancias_cantidad": len(disc_cantidad),
+                "discrepancias_solo_cantidad": len(disc_solo_cantidad),
+                "discrepancias_banderas": len(disc_banderas),
+                "discrepancias_solo_banderas": len(disc_solo_banderas),
+                "discrepancias_mixtas_cantidad_y_banderas": len(disc_mixtas)
+            },
             "detalle_discrepancias": filas_historicas_discrepantes,
+            "detalle_discrepancias_cantidad": disc_cantidad,
+            "detalle_discrepancias_banderas": disc_banderas,
             "filas_solo_en_AfluenciaHistoricaAgregada": len(filas_solo_en_aha_historicas),
             "detalle_solo_en_AHA": filas_solo_en_aha_historicas,
             "filas_solo_en_RegistroIngresos": len(filas_solo_en_ri_historicas),

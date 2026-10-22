@@ -123,7 +123,7 @@ def requerir_login_admin():
 
     debe_validar_csrf = (
         (request.method in METODOS_PROTEGIDOS and not request.path.startswith("/admin/api"))
-        or (request.method == "POST" and request.path in ["/admin/api/ml/predecir-afluencia", "/admin/api/ml/predecir-retorno", "/admin/api/asistente/consultar"])
+        or (request.method == "POST" and request.path in ["/admin/api/ml/predecir-afluencia", "/admin/api/ml/predecir-retorno", "/admin/api/asistente/consultar", "/admin/api/ml/retorno-7-operativos"])
     )
 
     if debe_validar_csrf:
@@ -177,6 +177,8 @@ def requerir_login_admin():
 
     # Restricción para rol Consultor
     if session.get("admin_rol") == "Consultor":
+        if request.path == "/admin/api/ml/retorno-7-operativos":
+            return jsonify({'status':'error','mensaje':'No tiene autorización para consultas individuales.'}), 403
         # La consulta predictiva de ML y del asistente son de solo lectura / consulta en el coordinador
         es_consulta_permitida = (
             request.method == "POST" and request.path in ["/admin/api/ml/predecir-afluencia", "/admin/api/ml/predecir-retorno", "/admin/api/asistente/consultar"]
@@ -247,6 +249,9 @@ def log_admin_actions(response):
         "/admin/login",
         "/admin/logout"
     ]
+
+    # Consulta experimental estrictamente de lectura: no genera INSERT de auditoría.
+    rutas_excluidas.append("/admin/api/ml/retorno-7-operativos")
 
     debe_auditar = (
         request.path.startswith("/admin")

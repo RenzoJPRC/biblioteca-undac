@@ -1,4 +1,5 @@
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, time
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 
@@ -26,6 +27,307 @@ FERIADOS_CONFIRMADOS_2026 = {
     "2026-12-25",  # Navidad
 }
 CIERRE_CONFIRMADO_27_JULIO = "2026-07-27"
+CIERRE_CONFIRMADO_24_JULIO = "2026-07-24"
+
+# Almacenamiento en memoria para el refresco del análisis y pronóstico
+_HISTORIAL_REFRESCADO_MEMORIA = {}
+
+
+def limpiar_cache_refresco_memoria(sede=None):
+    """Limpia el almacenamiento en memoria del historial refrescado."""
+    global _HISTORIAL_REFRESCADO_MEMORIA
+    if sede:
+        _HISTORIAL_REFRESCADO_MEMORIA.pop(str(sede).strip(), None)
+    else:
+        _HISTORIAL_REFRESCADO_MEMORIA.clear()
+
+
+def obtener_estado_refresco_memoria(sede="Central"):
+    """Retorna los metadatos de la última actualización en memoria para una sede."""
+    sede_str = str(sede).strip() if sede else "Central"
+    datos = _HISTORIAL_REFRESCADO_MEMORIA.get(sede_str)
+    if not datos:
+        return None
+    return {
+        "sede": sede_str,
+        "hora_actualizacion": datos.get("hora_actualizacion"),
+        "ultimo_registro_incluido": datos.get("ultimo_registro_incluido"),
+        "ultimo_dia_completo": datos.get("ultimo_dia_completo"),
+        "fecha_corte_datos": datos.get("fecha_corte_datos"),
+        "estado_dia": datos.get("estado_dia"),
+        "es_dia_en_curso": datos.get("es_dia_en_curso", False),
+        "total_ingresos": datos.get("total_ingresos", 0),
+        "franjas_horarias": datos.get("franjas_horarias", 0),
+        "fechas_operativas": datos.get("fechas_operativas", 0),
+        "fecha_entrenamiento_modelo": datos.get("fecha_entrenamiento_modelo"),
+        "periodo_entrenamiento_modelo": datos.get("periodo_entrenamiento_modelo"),
+        "modelo_vigente": datos.get("modelo_vigente"),
+    }
+
+
+def refrescar_analisis_afluencia_memoria(sede="Central", cursor_externo=None, ahora_referencia=None):
+    """
+    Refresca en memoria el análisis y pronóstico de afluencia leyendo los ingresos reales
+    disponibles desde '2026-06-01' hasta la última fecha/hora registrada.
+
+    Reglas metodológicas y operativas:
+    1. Operación de solo lectura (SELECT). Cero escrituras (no INSERT, UPDATE, DELETE ni MERGE).
+    2. Exclusión estricta de registros de prueba (ISNULL(EsPrueba, 0) = 0).
+    3. Aislamiento estricto por sede: Sede = ? (registros con Sede NULL o de otras sedes nunca se mezclan).
+    4. Tarma y La Merced se mantienen estrictamente aislados de Central (no se combinan ni se emiten predicciones con el modelo Central).
+    5. Agrupación por (CAST(FechaHora AS DATE), DATEPART(HOUR, FechaHora)) que suma coherentemente
+       ingresos nuevos dentro de una misma franja horaria sin duplicar el total.
+    6. Identifica hora_actualizacion, ultimo_registro_incluido y estado_dia ('día en curso' si no está completo vs 'cerrado').
+    """
+    sede_str = str(sede).strip() if sede else ""
+    if not sede_str:
+        raise ValueError("Debe especificar una sede válida para actualizar el análisis.")
+
+    SEDES_VALIDAS = {
+        "Central", "Tarma", "La Merced", "Oxapampa", "Paucartambo", "Yanahuanca"
+    }
+    if sede_str not in SEDES_VALIDAS:
+        raise ValueError(f"La sede '{sede_str}' no es una sede válida.")
+
+    consulta_ri = """
+        SELECT
+            CAST(FechaHora AS DATE) AS Fecha,
+            DATEPART(HOUR, FechaHora) AS Hora,
+            COUNT(*) AS CantidadIngresos,
+            MAX(FechaHora) AS MaxFechaHora
+        FROM dbo.RegistroIngresos
+        WHERE FechaHora >= '2026-06-01 00:00:00'
+          AND ISNULL(EsPrueba, 0) = 0
+          AND Sede = ?
+          AND DATEPART(HOUR, FechaHora) BETWEEN 8 AND 20
+          AND NOT (DATEPART(HOUR, FechaHora) = 20 AND CAST(FechaHora AS TIME) > '20:45:00')
+        GROUP BY
+            CAST(FechaHora AS DATE),
+            DATEPART(HOUR, FechaHora)
+        ORDER BY
+            Fecha ASC,
+            Hora ASC
+    """
+
+    consulta_meta = """
+        SELECT
+            MAX(FechaHora) AS UltimoRegistro,
+            COUNT(*) AS TotalIngresos
+        FROM dbo.RegistroIngresos
+        WHERE FechaHora >= '2026-06-01 00:00:00'
+          AND ISNULL(EsPrueba, 0) = 0
+          AND Sede = ?
+    """
+
+    consulta_base_central = """
+        SELECT
+            Fecha,
+            Hora,
+            CantidadIngresos
+        FROM dbo.AfluenciaHistoricaAgregada
+        WHERE Fecha < '2026-06-01'
+          AND Sede = 'Central'
+          AND EsHorarioAtipico = 0
+          AND EsCierreAgosto = 0
+          AND EsCierre27Julio = 0
+          AND EsFeriado = 0
+        ORDER BY
+            Fecha ASC,
+            Hora ASC
+    """
+
+    def _ejecutar(cur):
+        cur.execute(consulta_ri, (sede_str,))
+        filas_ri = cur.fetchall()
+
+        cur.execute(consulta_meta, (sede_str,))
+        fila_meta = cur.fetchone()
+        ult_reg = fila_meta[0] if fila_meta and fila_meta[0] else None
+        tot_ing = fila_meta[1] if fila_meta and fila_meta[1] else 0
+
+        filas_base = []
+        if sede_str == "Central":
+            cur.execute(consulta_base_central)
+            filas_base = cur.fetchall()
+
+        return filas_ri, ult_reg, tot_ing, filas_base
+
+    if cursor_externo is not None:
+        filas_ri, ult_reg_global, total_ingresos_global, filas_base = _ejecutar(cursor_externo)
+    else:
+        with get_db_cursor(autocommit=True) as (_, cursor):
+            if cursor is None:
+                raise ConnectionError("No fue posible conectarse a SQL Server.")
+            filas_ri, ult_reg_global, total_ingresos_global, filas_base = _ejecutar(cursor)
+
+    registros = []
+    for f in filas_ri:
+        fecha_val = f[0]
+        if isinstance(fecha_val, str):
+            f_date = datetime.strptime(fecha_val, "%Y-%m-%d").date()
+        elif isinstance(fecha_val, datetime):
+            f_date = fecha_val.date()
+        else:
+            f_date = fecha_val
+
+        hora_val = int(f[1])
+        cant_val = int(f[2])
+
+        f_str = f_date.isoformat()
+        if f_str in FERIADOS_CONFIRMADOS_2026:
+            continue
+        if f_str == CIERRE_CONFIRMADO_27_JULIO or f_str == CIERRE_CONFIRMADO_24_JULIO:
+            continue
+        if date(2026, 8, 1) <= f_date <= date(2026, 8, 23):
+            continue
+        if f_date.weekday() >= 5:
+            continue
+
+        registros.append({
+            "Fecha": f_date,
+            "Hora": hora_val,
+            "CantidadIngresos": cant_val
+        })
+
+    df_ri = pd.DataFrame(registros, columns=["Fecha", "Hora", "CantidadIngresos"])
+
+    if sede_str == "Central" and filas_base:
+        registros_base = []
+        for f in filas_base:
+            fecha_b = f[0]
+            if isinstance(fecha_b, str):
+                f_date = datetime.strptime(fecha_b, "%Y-%m-%d").date()
+            elif isinstance(fecha_b, datetime):
+                f_date = fecha_b.date()
+            else:
+                f_date = fecha_b
+            registros_base.append({
+                "Fecha": f_date,
+                "Hora": int(f[1]),
+                "CantidadIngresos": int(f[2])
+            })
+        df_base = pd.DataFrame(registros_base, columns=["Fecha", "Hora", "CantidadIngresos"])
+        df_final = pd.concat([df_base, df_ri], ignore_index=True)
+    else:
+        df_final = df_ri
+
+    if not df_final.empty:
+        df_final = df_final.groupby(["Fecha", "Hora"], as_index=False)["CantidadIngresos"].sum()
+        df_final = df_final.sort_values(["Fecha", "Hora"]).reset_index(drop=True)
+
+    if ahora_referencia is not None:
+        ahora_local = ahora_referencia
+    else:
+        ahora_local = datetime.now(ZoneInfo("America/Lima"))
+    hoy_local = ahora_local.date()
+    hora_act_str = ahora_local.strftime("%Y-%m-%d %H:%M:%S")
+
+    if ult_reg_global:
+        if isinstance(ult_reg_global, datetime):
+            dt_ult = ult_reg_global
+        elif isinstance(ult_reg_global, str):
+            try:
+                dt_ult = datetime.fromisoformat(ult_reg_global.replace("Z", ""))
+            except Exception:
+                dt_ult = datetime.strptime(ult_reg_global[:19], "%Y-%m-%d %H:%M:%S")
+        else:
+            dt_ult = None
+    else:
+        dt_ult = None
+
+    if dt_ult:
+        ult_reg_str = dt_ult.strftime("%Y-%m-%d %H:%M:%S")
+        fecha_ult = dt_ult.date()
+        hora_ult = dt_ult.time()
+
+        if fecha_ult == hoy_local:
+            if ahora_local.time() < time(20, 45, 0):
+                estado_dia = "día en curso"
+                es_dia_en_curso = True
+            else:
+                estado_dia = "cerrado"
+                es_dia_en_curso = False
+        elif fecha_ult < hoy_local:
+            estado_dia = "cerrado"
+            es_dia_en_curso = False
+        else:
+            estado_dia = "día en curso"
+            es_dia_en_curso = True
+    else:
+        ult_reg_str = None
+        estado_dia = "sin registros"
+        es_dia_en_curso = False
+
+    # -------------------------------------------------------------------------
+    # Determinación del último día operativo completo y fecha de corte de datos
+    # -------------------------------------------------------------------------
+    # Si la fecha del último registro es hoy y la jornada aún no concluye (< 20:45),
+    # el último día operativo completo corresponde al día hábil previo cerrado.
+    if not df_final.empty:
+        fechas_unicas_todas = sorted(df_final["Fecha"].unique())
+        if es_dia_en_curso:
+            fechas_anteriores = [f for f in fechas_unicas_todas if f < hoy_local]
+            ultimo_dia_completo = max(fechas_anteriores) if fechas_anteriores else fechas_unicas_todas[0]
+        else:
+            ultimo_dia_completo = fechas_unicas_todas[-1]
+        ultimo_dia_completo_str = ultimo_dia_completo.isoformat() if hasattr(ultimo_dia_completo, "isoformat") else str(ultimo_dia_completo)
+    else:
+        if dt_ult and not es_dia_en_curso:
+            ultimo_dia_completo = dt_ult.date()
+            ultimo_dia_completo_str = ultimo_dia_completo.isoformat()
+        else:
+            ultimo_dia_completo = None
+            ultimo_dia_completo_str = None
+
+    # Información del modelo de afluencia vigente (metadatos de entrenamiento)
+    try:
+        from ml.services.predictor_afluencia import obtener_predictor_afluencia
+        _pred = obtener_predictor_afluencia()
+        _inf = _pred.obtener_informacion()
+        fecha_entrenamiento_str = str(_inf.get("fecha_entrenamiento", "2026-10-20"))
+        periodo_entrenamiento_str = str(_inf.get("periodo_entrenamiento_texto", "2026-05-13 al 2026-08-31"))
+        nombre_modelo_vigente = f"{_inf.get('algoritmo', 'GradientBoostingClassifier')} ({'Candidato H1' if _inf.get('es_candidato') else 'Producción'})"
+    except Exception:
+        fecha_entrenamiento_str = "2026-10-20"
+        periodo_entrenamiento_str = "2026-05-13 al 2026-08-31"
+        nombre_modelo_vigente = "GradientBoostingClassifier (Candidato)"
+
+    _HISTORIAL_REFRESCADO_MEMORIA[sede_str] = {
+        "df": df_final,
+        "hora_actualizacion": hora_act_str,
+        "ultimo_registro_incluido": ult_reg_str,
+        "ultimo_dia_completo": ultimo_dia_completo_str,
+        "fecha_corte_datos": ultimo_dia_completo_str,
+        "estado_dia": estado_dia,
+        "es_dia_en_curso": es_dia_en_curso,
+        "total_ingresos": int(total_ingresos_global),
+        "franjas_horarias": len(df_final),
+        "fechas_operativas": int(df_final["Fecha"].nunique()) if not df_final.empty else 0,
+        "fecha_entrenamiento_modelo": fecha_entrenamiento_str,
+        "periodo_entrenamiento_modelo": periodo_entrenamiento_str,
+        "modelo_vigente": nombre_modelo_vigente
+    }
+
+    return {
+        "status": "success",
+        "sede": sede_str,
+        "hora_actualizacion": hora_act_str,
+        "ultimo_registro_incluido": ult_reg_str,
+        "ultimo_dia_completo": ultimo_dia_completo_str,
+        "fecha_corte_datos": ultimo_dia_completo_str,
+        "estado_dia": estado_dia,
+        "es_dia_en_curso": es_dia_en_curso,
+        "total_ingresos": int(total_ingresos_global),
+        "franjas_horarias": len(df_final),
+        "fechas_operativas": int(df_final["Fecha"].nunique()) if not df_final.empty else 0,
+        "fecha_entrenamiento_modelo": fecha_entrenamiento_str,
+        "periodo_entrenamiento_modelo": periodo_entrenamiento_str,
+        "modelo_vigente": nombre_modelo_vigente,
+        "mensaje": (
+            f"Análisis y pronóstico de la sede '{sede_str}' actualizados en memoria con éxito "
+            f"mediante consulta de ingresos reales desde 2026-06-01 hasta {ultimo_dia_completo_str or ult_reg_str} (solo lectura)."
+        )
+    }
 
 
 def convertir_fecha(fecha_objetivo):
@@ -52,20 +354,16 @@ def convertir_fecha(fecha_objetivo):
 
 def obtener_historial_agrupado(
     fecha_objetivo,
-    sede="Central"
+    sede="Central",
+    cursor_externo=None
 ):
     """
     Obtiene la cantidad de ingresos por fecha y hora
     anteriores a la fecha que se desea predecir.
 
-    Utiliza exclusivamente la tabla analítica separada AfluenciaHistoricaAgregada,
-    excluyendo filas en horario atípico (EsHorarioAtipico = 0) y filas durante el
-    cierre de agosto (EsCierreAgosto = 0).
-
-    NO completa sedes sin historial suficiente utilizando RegistroIngresos
-    (las filas actuales son de prueba manual). Si la sede no tiene historial suficiente,
-    devuelve un estado explícito de datos insuficientes (ValueError).
-    Esta función solo ejecuta consultas SELECT.
+    Si se ejecutó previamente un refresco en memoria para la sede consultada,
+    utiliza el historial refrescado con los registros reales desde 2026-06-01.
+    De lo contrario, utiliza la tabla analítica AfluenciaHistoricaAgregada.
     """
     fecha_objetivo = convertir_fecha(
         fecha_objetivo
@@ -74,6 +372,38 @@ def obtener_historial_agrupado(
     sede = str(sede).strip()
     if not sede:
         raise ValueError("Debe especificar una sede válida.")
+
+    # 1. Prioridad: Si existe historial refrescado en memoria para esta sede, utilizarlo
+    if sede in _HISTORIAL_REFRESCADO_MEMORIA and _HISTORIAL_REFRESCADO_MEMORIA[sede].get("df") is not None:
+        df_mem = _HISTORIAL_REFRESCADO_MEMORIA[sede]["df"]
+        historial = df_mem[df_mem["Fecha"] < fecha_objetivo].copy()
+
+        # Si hoy es día en curso (parcial), excluir hoy de los lags históricos para usar solo días completos
+        if _HISTORIAL_REFRESCADO_MEMORIA[sede].get("es_dia_en_curso"):
+            ult_comp = _HISTORIAL_REFRESCADO_MEMORIA[sede].get("ultimo_dia_completo")
+            if ult_comp:
+                if isinstance(ult_comp, str):
+                    d_comp = datetime.strptime(ult_comp, "%Y-%m-%d").date()
+                else:
+                    d_comp = ult_comp
+                historial = historial[historial["Fecha"] <= d_comp].copy()
+
+        if not historial.empty:
+            fechas_operativas = historial["Fecha"].nunique()
+            if sede != "Central" and fechas_operativas < 15:
+                raise ValueError(
+                    f"Historial insuficiente: La sede '{sede}' cuenta con {fechas_operativas} fecha(s) "
+                    "operativa(s) registrada(s) en memoria, no alcanzando el mínimo "
+                    "configurado de 15 fechas operativas para generar un pronóstico confiable."
+                )
+            historial["Hora"] = historial["Hora"].astype(int)
+            historial["CantidadIngresos"] = historial["CantidadIngresos"].astype(int)
+            return historial
+        elif sede != "Central":
+            raise ValueError(
+                f"Historial insuficiente: La sede '{sede}' no cuenta con datos "
+                "históricos suficientes anteriores a la fecha objetivo."
+            )
 
     consulta_analitica = """
         SELECT
@@ -400,6 +730,75 @@ def obtener_historial_afluencia_periodo(sede="Central", dias=30):
     if sede not in SEDES_PERMITIDAS:
         raise ValueError("La sede especificada no es válida.")
 
+    # 1. Si existe historial refrescado en memoria para esta sede, calcular periodo desde memoria
+    if sede in _HISTORIAL_REFRESCADO_MEMORIA and _HISTORIAL_REFRESCADO_MEMORIA[sede].get("df") is not None:
+        df_mem = _HISTORIAL_REFRESCADO_MEMORIA[sede]["df"]
+        if df_mem.empty:
+            return {
+                "status": "success",
+                "sede": sede,
+                "periodo_dias": dias,
+                "fecha_inicio": None,
+                "fecha_fin": None,
+                "fechas_con_datos": 0,
+                "total_ingresos_periodo": 0,
+                "total_ingresos_fuera_horario": 0,
+                "horas": [],
+                "totales": [],
+                "promedios": [],
+                "unidad": "Ingresos acumulados en molinetes (entradas en torniquetes)",
+                "fuente_datos": "Registros consolidados de molinetes (refresco en memoria)",
+                "criterio_horario": "Horario habitual de atención (08:00 a 20:00)",
+                "registros_fuera_horario": {
+                    "total": 0,
+                    "criterio_aplicado": "Excluidos del gráfico operativo por encontrarse fuera del horario habitual de atención (08:00 a 20:00).",
+                    "detalle": []
+                },
+                "referencia_horaria": "Hora almacenada en la base de datos (horario habitual de 08:00 a 20:00)"
+            }
+
+        ultima_fecha = df_mem["Fecha"].max()
+        fecha_fin = ultima_fecha
+        fecha_inicio = fecha_fin - timedelta(days=dias - 1)
+
+        df_periodo = df_mem[(df_mem["Fecha"] >= fecha_inicio) & (df_mem["Fecha"] <= fecha_fin)]
+        fechas_con_datos = int(df_periodo["Fecha"].nunique())
+        horas = list(HORAS_PERMITIDAS)
+        totales = []
+        promedios = []
+
+        for h in horas:
+            filas_h = df_periodo[df_periodo["Hora"] == h]
+            total_h = int(filas_h["CantidadIngresos"].sum()) if not filas_h.empty else 0
+            promedio_h = round(total_h / fechas_con_datos, 2) if fechas_con_datos > 0 else 0.0
+            totales.append(total_h)
+            promedios.append(promedio_h)
+
+        total_ingresos_periodo = sum(totales)
+
+        return {
+            "status": "success",
+            "sede": sede,
+            "periodo_dias": dias,
+            "fecha_inicio": fecha_inicio.isoformat(),
+            "fecha_fin": fecha_fin.isoformat(),
+            "fechas_con_datos": fechas_con_datos,
+            "total_ingresos_periodo": total_ingresos_periodo,
+            "total_ingresos_fuera_horario": 0,
+            "horas": horas,
+            "totales": totales,
+            "promedios": promedios,
+            "unidad": "Ingresos acumulados en molinetes (entradas en torniquetes)",
+            "fuente_datos": "Registros consolidados de molinetes (refresco en memoria)",
+            "criterio_horario": "Horario habitual de atención (08:00 a 20:00)",
+            "registros_fuera_horario": {
+                "total": 0,
+                "criterio_aplicado": "Excluidos del gráfico operativo por encontrarse fuera del horario habitual de atención (08:00 a 20:00).",
+                "detalle": []
+            },
+            "referencia_horaria": "Hora almacenada en la base de datos (horario habitual de 08:00 a 20:00)"
+        }
+
     consulta_ultima_fecha = """
         SELECT MAX(Fecha) AS UltimaFecha
         FROM dbo.AfluenciaHistoricaAgregada
@@ -547,6 +946,102 @@ def obtener_historial_afluencia_periodo(sede="Central", dias=30):
         "referencia_horaria": "Hora almacenada en la base de datos (horario habitual de 08:00 a 20:00)"
     }
 
+
+def obtener_analisis_descriptivo_filial(fecha_objetivo, hora_objetivo, sede="Tarma", cursor_externo=None):
+    """
+    Genera el análisis puramente descriptivo para filiales (Tarma, La Merced, etc.)
+    donde el historial es aún insuficiente para modelado predictivo ML.
+
+    No emite predicciones con el modelo de Sede Central.
+    Operación de solo lectura en SQL Server (o lee de memoria si fue refrescado).
+    """
+    fecha_obj = convertir_fecha(fecha_objetivo)
+    hora_int = int(hora_objetivo)
+    sede_str = str(sede).strip()
+
+    # Si está refrescado en memoria, usarlo directamente
+    if sede_str in _HISTORIAL_REFRESCADO_MEMORIA and _HISTORIAL_REFRESCADO_MEMORIA[sede_str].get("df") is not None:
+        df_mem = _HISTORIAL_REFRESCADO_MEMORIA[sede_str]["df"]
+        tot_ing = _HISTORIAL_REFRESCADO_MEMORIA[sede_str].get("total_ingresos", 0)
+        ult_reg = _HISTORIAL_REFRESCADO_MEMORIA[sede_str].get("ultimo_registro_incluido")
+        fechas_cnt = _HISTORIAL_REFRESCADO_MEMORIA[sede_str].get("fechas_operativas", 0)
+
+        filas_h = df_mem[df_mem["Hora"] == hora_int]
+        prom_h = round(float(filas_h["CantidadIngresos"].mean()), 2) if not filas_h.empty else 0.0
+    else:
+        consulta_stats = """
+            SELECT
+                COUNT(*) AS TotalIngresos,
+                COUNT(DISTINCT CAST(FechaHora AS DATE)) AS FechasOperativas,
+                MAX(FechaHora) AS UltimoRegistro
+            FROM dbo.RegistroIngresos
+            WHERE ISNULL(EsPrueba, 0) = 0
+              AND Sede = ?
+        """
+        consulta_hora = """
+            SELECT
+                AVG(CAST(ConteoHora AS FLOAT)) AS PromedioHora
+            FROM (
+                SELECT
+                    CAST(FechaHora AS DATE) AS Fecha,
+                    COUNT(*) AS ConteoHora
+                FROM dbo.RegistroIngresos
+                WHERE ISNULL(EsPrueba, 0) = 0
+                  AND Sede = ?
+                  AND DATEPART(HOUR, FechaHora) = ?
+                GROUP BY CAST(FechaHora AS DATE)
+            ) sub
+        """
+
+        def _ejecutar(cur):
+            cur.execute(consulta_stats, (sede_str,))
+            row_stats = cur.fetchone()
+            tot = row_stats[0] if row_stats and row_stats[0] else 0
+            fechas = row_stats[1] if row_stats and row_stats[1] else 0
+            ult = row_stats[2] if row_stats and row_stats[2] else None
+
+            cur.execute(consulta_hora, (sede_str, hora_int))
+            row_h = cur.fetchone()
+            prom = round(float(row_h[0]), 2) if row_h and row_h[0] is not None else 0.0
+            return tot, fechas, ult, prom
+
+        if cursor_externo is not None:
+            tot_ing, fechas_cnt, ult_reg_dt, prom_h = _ejecutar(cursor_externo)
+        else:
+            with get_db_cursor(autocommit=True) as (_, cursor):
+                if cursor is None:
+                    raise ConnectionError("No fue posible conectarse a SQL Server.")
+                tot_ing, fechas_cnt, ult_reg_dt, prom_h = _ejecutar(cursor)
+
+        ult_reg = ult_reg_dt.strftime("%Y-%m-%d %H:%M:%S") if isinstance(ult_reg_dt, (datetime, date)) else (str(ult_reg_dt) if ult_reg_dt else None)
+
+    return {
+        "status": "filial_descriptivo",
+        "sede": sede_str,
+        "es_filial": True,
+        "presenta_prediccion_ml": False,
+        "mensaje": (
+            f"Para la filial '{sede_str}', el sistema presenta exclusivamente resultados descriptivos de molinetes. "
+            "Las predicciones de Machine Learning están reservadas para la Sede Central al no contar la filial "
+            f"con evaluación suficiente ni historial representativo (cuenta con {fechas_cnt} fecha(s) operativa(s) y {tot_ing} ingresos)."
+        ),
+        "periodo": {
+            "fecha": fecha_obj.isoformat(),
+            "hora": hora_int
+        },
+        "descriptivo": {
+            "total_ingresos": int(tot_ing),
+            "fechas_operativas": int(fechas_cnt),
+            "promedio_hora_consultada": float(prom_h),
+            "hora": hora_int,
+            "ultimo_registro": ult_reg
+        },
+        "limites_cobertura": {
+            "sedes_con_historial_suficiente": ["Central"],
+            "sedes_con_datos_insuficientes": ["Tarma", "La Merced", "Oxapampa", "Paucartambo", "Yanahuanca"],
+            "motivo": "Historial insuficiente para entrenamiento y validación de modelos predictivos."
+        }
+    }
 
 
 if __name__ == "__main__":

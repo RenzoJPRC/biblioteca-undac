@@ -1,0 +1,51 @@
+{
+    "nombre": "Modelo Candidato de Retorno Individual H1 (HistGradientBoosting)",
+    "version": "1.1.0-candidato-hgb-h1",
+    "algoritmo": "HistGradientBoostingClassifier",
+    "horizonte": "H1 (Retorno en el siguiente día hábil operativo)",
+    "criterio_seleccion_validacion": {
+        "justificacion": "Mejor calibración probabilística en validación (Brier Score: 0.0871, Log Loss: 0.3102) y mayor precisión positiva (37.52%). Adecuado para interfaz que muestra probabilidades continuas.",
+        "metricas_validacion_septiembre": {
+            "brier_score": 0.0871,
+            "log_loss": 0.3102,
+            "roc_auc": 0.755,
+            "pr_auc": 0.3234,
+            "macro_f1": 0.6397,
+            "precision_positivo": 0.3752,
+            "recall_positivo": 0.3359,
+            "accuracy": 0.8654,
+            "balanced_accuracy": 0.6334,
+            "umbral_optimo": 0.25,
+            "matriz_confusion": {
+                "TN": 37924,
+                "FP": 2816,
+                "FN": 3343,
+                "TP": 1691
+            }
+        }
+    },
+    "cobertura_entrenamiento": {
+        "fecha_inicio": "2026-06-01",
+        "fecha_corte": "2026-10-19",
+        "total_fechas_operativas": 73,
+        "total_observaciones": 126123,
+        "tasa_positivos": 0.1534,
+        "fechas_excluidas_por_censura": [
+            "2026-10-20 (ventana abierta en 21/10)",
+            "2026-10-21 (día en curso)"
+        ]
+    },
+    "variables": [
+        "dias_activos",
+        "total_visitas",
+        "recencia_dias",
+        "visitas_ultimos_7d",
+        "visitas_ultimos_14d",
+        "afinidad_dia_semana",
+        "visito_hoy",
+        "tasa_asistencia"
+    ],
+    "criterio_suficiencia": "minimo_dias_activos >= 3",
+    "umbral_decision_optimo": 0.25,
+    "aviso_conservacion": "El artefacto de produccion modelo_retorno_alumno.joblib permanece intacto y no fue modificado."
+}

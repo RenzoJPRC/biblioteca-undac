@@ -1,0 +1,19 @@
+{
+  "archivos": {
+    "auditoria_fechas.csv": "f0f8a5cb579959ff374984eb869d09154beec5e3d302c55fb66123b64e1723ce",
+    "calendario_aplicado.csv": "3550b2e827ffab523803c87315ba6076d7ca20e141ad762915c75423b8e78421",
+    "configuraciones.json": "959db42068c5177a89ce27bb08cd1af3e96259e51c553e43c34349d2df4c2996",
+    "constructor_congelado.py": "927ee23546f664df78b85c84027ad51dd71b31b1ce53bf96db6c2f6d3386048f",
+    "dataset_sin_identificadores.csv": "688012c8ce25f85591014b1c793d12e42e04b609083fd75e1a8d7365033ba62b",
+    "evidencia_diaria_agregada.csv": "e6aff3b8e27ca481f122bfb5fec9c91b6ec4d2a63f6028e0f6dff5aecd06dabf",
+    "informe.md": "2f1ca07d615108c554de7a005fd395031fb7bb7d9d56603ded4255c7f063f405",
+    "inicio_evaluacion.json": "c53ed0fcdd6fbd63ad067d115ed6f8a8e709b44099a21f2d3070980650e378fb",
+    "metadatos_candidato.json": "dcf9b1d9e9553f216e5fa500224d7ae53c1d425af4a79647569c4800bdc35413",
+    "modelo_retorno_7_operativos_experimental.joblib": "a82f051c337cb158ad73cc4764eb6130d893b606d4d7d913b1ebfdcf49e0fc0f",
+    "preflight.json": "3d322699549caf252ef5099d5b7458cdb1b61c9c4c604a91325da446330af4c4",
+    "reglas_calendario_fuente.py": "23f3705a666fa669354bee360541dd1b99ec946de026ab7b6a3d45cf7724954b",
+    "seleccion_validacion.json": "1278bfc400c2cabb7994f0c52a41d2be8e2f80f8e7aef836f2c77614ed49a39c",
+    "verificacion.json": "80c22c5c0cc9c018f62eb2524131e83997694f0558a453aee2574566f2327a00"
+  },
+  "modelos_existentes_intactos": true
+}

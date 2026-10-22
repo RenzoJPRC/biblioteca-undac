@@ -1,0 +1,180 @@
+{
+  "candidato": "HistGradientBoosting",
+  "convergencia": {
+    "Dummy (Clase Mayoritaria)": {
+      "advertencias": [],
+      "estado": "No aplica (presupuesto fijo o baseline)",
+      "n_iter": null,
+      "sin_ConvergenceWarning": true
+    },
+    "Extra Trees": {
+      "advertencias": [],
+      "estado": "No aplica (presupuesto fijo o baseline)",
+      "n_iter": null,
+      "sin_ConvergenceWarning": true
+    },
+    "Gradient Boosting": {
+      "advertencias": [],
+      "estado": "No aplica (presupuesto fijo o baseline)",
+      "n_iter": null,
+      "sin_ConvergenceWarning": true
+    },
+    "HistGradientBoosting": {
+      "advertencias": [],
+      "estado": "Parada interna anticipada",
+      "n_iter": 57,
+      "sin_ConvergenceWarning": true
+    },
+    "Random Forest": {
+      "advertencias": [],
+      "estado": "No aplica (presupuesto fijo o baseline)",
+      "n_iter": null,
+      "sin_ConvergenceWarning": true
+    },
+    "Regresión Logística": {
+      "advertencias": [
+        "DeprecationWarning: scipy.optimize: The `disp` and `iprint` options of the L-BFGS-B solver are deprecated and will be removed in SciPy 1.18.0."
+      ],
+      "estado": "Sí",
+      "n_iter": [
+        31
+      ],
+      "sin_ConvergenceWarning": true
+    }
+  },
+  "criterio": "menor Brier septiembre, desempate log-loss, mayor PR-AUC(AP), nombre; solo modelos sin ConvergenceWarning",
+  "validacion": {
+    "Dummy (Clase Mayoritaria)": {
+      "accuracy": 0.6603398808210108,
+      "balanced_accuracy": 0.5,
+      "brier": 0.3396601191789892,
+      "log_loss": 12.24259160579371,
+      "macro_f1": 0.39771367805396785,
+      "matriz_confusion": [
+        [
+          2992,
+          0
+        ],
+        [
+          1539,
+          0
+        ]
+      ],
+      "pr_auc_ap": 0.3396601191789892,
+      "precision_positivo": 0.0,
+      "recall_positivo": 0.0,
+      "roc_auc": 0.5,
+      "umbral": 0.5
+    },
+    "Extra Trees": {
+      "accuracy": 0.6671816376075922,
+      "balanced_accuracy": 0.61593782249742,
+      "brier": 0.24207041781166583,
+      "log_loss": 0.6807438595836949,
+      "macro_f1": 0.6184698025551684,
+      "matriz_confusion": [
+        [
+          2321,
+          671
+        ],
+        [
+          837,
+          702
+        ]
+      ],
+      "pr_auc_ap": 0.5060339561386867,
+      "precision_positivo": 0.5112891478514202,
+      "recall_positivo": 0.45614035087719296,
+      "roc_auc": 0.6712798999628204,
+      "umbral": 0.6
+    },
+    "Gradient Boosting": {
+      "accuracy": 0.6528360185389539,
+      "balanced_accuracy": 0.6252705937948455,
+      "brier": 0.2083780986992612,
+      "log_loss": 0.6060699501185457,
+      "macro_f1": 0.6217986934255841,
+      "matriz_confusion": [
+        [
+          2128,
+          864
+        ],
+        [
+          709,
+          830
+        ]
+      ],
+      "pr_auc_ap": 0.5022375655117806,
+      "precision_positivo": 0.4899645808736718,
+      "recall_positivo": 0.539311241065627,
+      "roc_auc": 0.6720189294041203,
+      "umbral": 0.4
+    },
+    "HistGradientBoosting": {
+      "accuracy": 0.6559258441845067,
+      "balanced_accuracy": 0.6283990359390257,
+      "brier": 0.20794969275464403,
+      "log_loss": 0.6053640137768422,
+      "macro_f1": 0.6249577841646696,
+      "matriz_confusion": [
+        [
+          2137,
+          855
+        ],
+        [
+          704,
+          835
+        ]
+      ],
+      "pr_auc_ap": 0.5175188849300318,
+      "precision_positivo": 0.4940828402366864,
+      "recall_positivo": 0.5425601039636128,
+      "roc_auc": 0.6751992751734753,
+      "umbral": 0.4
+    },
+    "Random Forest": {
+      "accuracy": 0.6726991834032222,
+      "balanced_accuracy": 0.6175912461387177,
+      "brier": 0.23876180905218325,
+      "log_loss": 0.673349947548631,
+      "macro_f1": 0.6208183123003603,
+      "matriz_confusion": [
+        [
+          2362,
+          630
+        ],
+        [
+          853,
+          686
+        ]
+      ],
+      "pr_auc_ap": 0.500788565783155,
+      "precision_positivo": 0.5212765957446809,
+      "recall_positivo": 0.4457439896036387,
+      "roc_auc": 0.672199289072354,
+      "umbral": 0.6
+    },
+    "Regresión Logística": {
+      "accuracy": 0.6548223350253807,
+      "balanced_accuracy": 0.6221991587703661,
+      "brier": 0.32469098848810896,
+      "log_loss": 0.8848256087660491,
+      "macro_f1": 0.6203683386318851,
+      "matriz_confusion": [
+        [
+          2166,
+          826
+        ],
+        [
+          738,
+          801
+        ]
+      ],
+      "pr_auc_ap": 0.5267758557034448,
+      "precision_positivo": 0.49231714812538413,
+      "recall_positivo": 0.52046783625731,
+      "roc_auc": 0.6818383786263043,
+      "umbral": 0.75
+    }
+  }
+}

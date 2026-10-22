@@ -1,0 +1,313 @@
+{
+  "convergencia": {
+    "Dummy (Clase Mayoritaria)": {
+      "advertencias": [],
+      "estado": "No aplica (presupuesto fijo o baseline)",
+      "n_iter": null,
+      "sin_ConvergenceWarning": true
+    },
+    "Extra Trees": {
+      "advertencias": [],
+      "estado": "No aplica (presupuesto fijo o baseline)",
+      "n_iter": null,
+      "sin_ConvergenceWarning": true
+    },
+    "Gradient Boosting": {
+      "advertencias": [],
+      "estado": "No aplica (presupuesto fijo o baseline)",
+      "n_iter": null,
+      "sin_ConvergenceWarning": true
+    },
+    "HistGradientBoosting": {
+      "advertencias": [],
+      "estado": "Parada interna anticipada",
+      "n_iter": 57,
+      "sin_ConvergenceWarning": true
+    },
+    "Random Forest": {
+      "advertencias": [],
+      "estado": "No aplica (presupuesto fijo o baseline)",
+      "n_iter": null,
+      "sin_ConvergenceWarning": true
+    },
+    "Regresión Logística": {
+      "advertencias": [
+        "DeprecationWarning: scipy.optimize: The `disp` and `iprint` options of the L-BFGS-B solver are deprecated and will be removed in SciPy 1.18.0."
+      ],
+      "estado": "Sí",
+      "n_iter": [
+        31
+      ],
+      "sin_ConvergenceWarning": true
+    }
+  },
+  "octubre_retrospectivo_ya_examinado": {
+    "Dummy (Clase Mayoritaria)": {
+      "accuracy": 0.6245006657789614,
+      "balanced_accuracy": 0.5,
+      "brier": 0.3754993342210386,
+      "log_loss": 13.534367850507374,
+      "macro_f1": 0.3844262295081967,
+      "matriz_confusion": [
+        [
+          938,
+          0
+        ],
+        [
+          564,
+          0
+        ]
+      ],
+      "pr_auc_ap": 0.3754993342210386,
+      "precision_positivo": 0.0,
+      "recall_positivo": 0.0,
+      "roc_auc": 0.5,
+      "umbral": 0.5
+    },
+    "Extra Trees": {
+      "accuracy": 0.7130492676431425,
+      "balanced_accuracy": 0.6635061773200865,
+      "brier": 0.20768829533008962,
+      "log_loss": 0.6035305643018758,
+      "macro_f1": 0.6691722944917582,
+      "matriz_confusion": [
+        [
+          809,
+          129
+        ],
+        [
+          302,
+          262
+        ]
+      ],
+      "pr_auc_ap": 0.6741535616678912,
+      "precision_positivo": 0.670076726342711,
+      "recall_positivo": 0.4645390070921986,
+      "roc_auc": 0.7462544798802342,
+      "umbral": 0.6
+    },
+    "Gradient Boosting": {
+      "accuracy": 0.7163781624500666,
+      "balanced_accuracy": 0.6686457529979283,
+      "brier": 0.19327729952363187,
+      "log_loss": 0.5704559989495251,
+      "macro_f1": 0.6746338784476447,
+      "matriz_confusion": [
+        [
+          807,
+          131
+        ],
+        [
+          295,
+          269
+        ]
+      ],
+      "pr_auc_ap": 0.6686555310529738,
+      "precision_positivo": 0.6725,
+      "recall_positivo": 0.4769503546099291,
+      "roc_auc": 0.7454360038712213,
+      "umbral": 0.4
+    },
+    "HistGradientBoosting": {
+      "accuracy": 0.7117177097203728,
+      "balanced_accuracy": 0.6638539823677962,
+      "brier": 0.1950363660695546,
+      "log_loss": 0.5749108294844568,
+      "macro_f1": 0.6694681686390007,
+      "matriz_confusion": [
+        [
+          803,
+          135
+        ],
+        [
+          298,
+          266
+        ]
+      ],
+      "pr_auc_ap": 0.659743363369073,
+      "precision_positivo": 0.6633416458852868,
+      "recall_positivo": 0.4716312056737589,
+      "roc_auc": 0.7376567012959518,
+      "umbral": 0.4
+    },
+    "Random Forest": {
+      "accuracy": 0.7170439414114514,
+      "balanced_accuracy": 0.6681183746918901,
+      "brier": 0.20794400165562038,
+      "log_loss": 0.6038828894861507,
+      "macro_f1": 0.6741414788009468,
+      "matriz_confusion": [
+        [
+          811,
+          127
+        ],
+        [
+          298,
+          266
+        ]
+      ],
+      "pr_auc_ap": 0.6675350423921131,
+      "precision_positivo": 0.6768447837150128,
+      "recall_positivo": 0.4716312056737589,
+      "roc_auc": 0.7422934718504741,
+      "umbral": 0.6
+    },
+    "Regresión Logística": {
+      "accuracy": 0.699733688415446,
+      "balanced_accuracy": 0.6118420057765881,
+      "brier": 0.20687459397634544,
+      "log_loss": 0.601558465091172,
+      "macro_f1": 0.596766042253127,
+      "matriz_confusion": [
+        [
+          905,
+          33
+        ],
+        [
+          418,
+          146
+        ]
+      ],
+      "pr_auc_ap": 0.6825172636036723,
+      "precision_positivo": 0.8156424581005587,
+      "recall_positivo": 0.25886524822695034,
+      "roc_auc": 0.7556782954528272,
+      "umbral": 0.75
+    }
+  },
+  "seleccionado_solo_por_septiembre": "HistGradientBoosting",
+  "validacion_septiembre": {
+    "Dummy (Clase Mayoritaria)": {
+      "accuracy": 0.6603398808210108,
+      "balanced_accuracy": 0.5,
+      "brier": 0.3396601191789892,
+      "log_loss": 12.24259160579371,
+      "macro_f1": 0.39771367805396785,
+      "matriz_confusion": [
+        [
+          2992,
+          0
+        ],
+        [
+          1539,
+          0
+        ]
+      ],
+      "pr_auc_ap": 0.3396601191789892,
+      "precision_positivo": 0.0,
+      "recall_positivo": 0.0,
+      "roc_auc": 0.5,
+      "umbral": 0.5
+    },
+    "Extra Trees": {
+      "accuracy": 0.6671816376075922,
+      "balanced_accuracy": 0.61593782249742,
+      "brier": 0.24207041781166583,
+      "log_loss": 0.6807438595836949,
+      "macro_f1": 0.6184698025551684,
+      "matriz_confusion": [
+        [
+          2321,
+          671
+        ],
+        [
+          837,
+          702
+        ]
+      ],
+      "pr_auc_ap": 0.5060339561386867,
+      "precision_positivo": 0.5112891478514202,
+      "recall_positivo": 0.45614035087719296,
+      "roc_auc": 0.6712798999628204,
+      "umbral": 0.6
+    },
+    "Gradient Boosting": {
+      "accuracy": 0.6528360185389539,
+      "balanced_accuracy": 0.6252705937948455,
+      "brier": 0.2083780986992612,
+      "log_loss": 0.6060699501185457,
+      "macro_f1": 0.6217986934255841,
+      "matriz_confusion": [
+        [
+          2128,
+          864
+        ],
+        [
+          709,
+          830
+        ]
+      ],
+      "pr_auc_ap": 0.5022375655117806,
+      "precision_positivo": 0.4899645808736718,
+      "recall_positivo": 0.539311241065627,
+      "roc_auc": 0.6720189294041203,
+      "umbral": 0.4
+    },
+    "HistGradientBoosting": {
+      "accuracy": 0.6559258441845067,
+      "balanced_accuracy": 0.6283990359390257,
+      "brier": 0.20794969275464403,
+      "log_loss": 0.6053640137768422,
+      "macro_f1": 0.6249577841646696,
+      "matriz_confusion": [
+        [
+          2137,
+          855
+        ],
+        [
+          704,
+          835
+        ]
+      ],
+      "pr_auc_ap": 0.5175188849300318,
+      "precision_positivo": 0.4940828402366864,
+      "recall_positivo": 0.5425601039636128,
+      "roc_auc": 0.6751992751734753,
+      "umbral": 0.4
+    },
+    "Random Forest": {
+      "accuracy": 0.6726991834032222,
+      "balanced_accuracy": 0.6175912461387177,
+      "brier": 0.23876180905218325,
+      "log_loss": 0.673349947548631,
+      "macro_f1": 0.6208183123003603,
+      "matriz_confusion": [
+        [
+          2362,
+          630
+        ],
+        [
+          853,
+          686
+        ]
+      ],
+      "pr_auc_ap": 0.500788565783155,
+      "precision_positivo": 0.5212765957446809,
+      "recall_positivo": 0.4457439896036387,
+      "roc_auc": 0.672199289072354,
+      "umbral": 0.6
+    },
+    "Regresión Logística": {
+      "accuracy": 0.6548223350253807,
+      "balanced_accuracy": 0.6221991587703661,
+      "brier": 0.32469098848810896,
+      "log_loss": 0.8848256087660491,
+      "macro_f1": 0.6203683386318851,
+      "matriz_confusion": [
+        [
+          2166,
+          826
+        ],
+        [
+          738,
+          801
+        ]
+      ],
+      "pr_auc_ap": 0.5267758557034448,
+      "precision_positivo": 0.49231714812538413,
+      "recall_positivo": 0.52046783625731,
+      "roc_auc": 0.6818383786263043,
+      "umbral": 0.75
+    }
+  }
+}

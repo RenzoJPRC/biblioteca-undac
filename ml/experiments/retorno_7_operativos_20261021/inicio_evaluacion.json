@@ -1,0 +1,4 @@
+{
+  "criterio": "Menor Brier de validación septiembre; desempate menor log-loss, mayor AP, nombre. Sin ConvergenceWarning. Umbral fijo 0.5 para todos.",
+  "fecha": "2026-10-21T23:51:52.227921-05:00"
+}

@@ -37,6 +37,8 @@ llm/data/
 *.zip
 !modulo_google_maps_undac.zip
 !ml/data/dataset_afluencia_real_preparado.csv
+!ml/experiments/retorno_h1_ventanas_finitas_20261021/calendario_aplicado.csv
+!ml/experiments/retorno_7_operativos_20261021/calendario_aplicado.csv
 !.env.example
 
 # Cloudflare y credenciales

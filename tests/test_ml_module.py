@@ -9,6 +9,12 @@ class TestModuloMachineLearning(unittest.TestCase):
     def setUp(self):
         self.app = app
         self.client = self.app.test_client()
+        from ml.services.datos_afluencia import limpiar_cache_refresco_memoria
+        limpiar_cache_refresco_memoria()
+
+    def tearDown(self):
+        from ml.services.datos_afluencia import limpiar_cache_refresco_memoria
+        limpiar_cache_refresco_memoria()
 
     def test_01_usuario_sin_sesion_redirigido(self):
         """Usuario sin sesión accediendo a /admin/ml debe ser redirigido a login (302)."""

@@ -1,0 +1,135 @@
+{
+  "algoritmo": "HistGradientBoosting",
+  "alumnos_ajuste_final": 1847,
+  "alumnos_compartidos": {
+    "train_octubre_retrospectivo": 611,
+    "train_val": 541,
+    "val_octubre_retrospectivo": 414
+  },
+  "artefacto_sha256": "cf45277814b20df6304fbeee64d46ceefa337807a4c1eed6308510aaa871ccb4",
+  "convergencia_ajuste_final": {
+    "advertencias": [],
+    "estado": "Parada interna anticipada",
+    "n_iter": 70,
+    "sin_ConvergenceWarning": true
+  },
+  "corte_captura": "2026-10-21",
+  "dataset_sha256": "6f8b8f69a1727a1264cc1ba2ed12c61abeb72f311fb72a5c4addbd84ec2744dd",
+  "entorno": {
+    "numpy": "2.4.6",
+    "pandas": "3.0.5",
+    "sklearn": "1.6.1"
+  },
+  "max_fecha_objetivo": "2026-10-21",
+  "max_fecha_referencia": "2026-10-20",
+  "nota_metricas": "Selección histórica, no evaluación independiente del reajuste final; octubre ya examinado y también incorporado al ajuste final",
+  "observaciones_ajuste_final": 32101,
+  "parametros": {
+    "categorical_features": "'from_dtype'",
+    "class_weight": "None",
+    "early_stopping": "'auto'",
+    "interaction_cst": "None",
+    "l2_regularization": "0.0",
+    "learning_rate": "0.08",
+    "loss": "'log_loss'",
+    "max_bins": "255",
+    "max_depth": "None",
+    "max_features": "1.0",
+    "max_iter": "100",
+    "max_leaf_nodes": "31",
+    "min_samples_leaf": "20",
+    "monotonic_cst": "None",
+    "n_iter_no_change": "10",
+    "random_state": "42",
+    "scoring": "'loss'",
+    "tol": "1e-07",
+    "validation_fraction": "0.1",
+    "verbose": "0",
+    "warm_start": "False"
+  },
+  "particiones": {
+    "octubre_retrospectivo": {
+      "alumnos": 776,
+      "clases": {
+        "0": 938,
+        "1": 564
+      },
+      "fechas": 2,
+      "fin": "2026-10-20",
+      "inicio": "2026-10-19",
+      "observaciones": 1502
+    },
+    "solo_ajuste_final": {
+      "alumnos": 129,
+      "clases": {
+        "0": 171,
+        "1": 160
+      },
+      "fechas": 5,
+      "fin": "2026-08-31",
+      "inicio": "2026-08-25",
+      "observaciones": 331
+    },
+    "train": {
+      "alumnos": 1594,
+      "clases": {
+        "0": 18447,
+        "1": 7290
+      },
+      "fechas": 28,
+      "fin": "2026-07-21",
+      "inicio": "2026-06-11",
+      "observaciones": 25737
+    },
+    "val": {
+      "alumnos": 665,
+      "clases": {
+        "0": 2992,
+        "1": 1539
+      },
+      "fechas": 12,
+      "fin": "2026-09-16",
+      "inicio": "2026-09-01",
+      "observaciones": 4531
+    }
+  },
+  "produccion_reemplazada": false,
+  "reglas_preflight_sha256": "6172ff4d122708915e0f9c610ba8a20fdcb756fdec85c26c8af22d88bcc22ca7",
+  "seleccion_septiembre": {
+    "accuracy": 0.6559258441845067,
+    "balanced_accuracy": 0.6283990359390257,
+    "brier": 0.20794969275464403,
+    "log_loss": 0.6053640137768422,
+    "macro_f1": 0.6249577841646696,
+    "matriz_confusion": [
+      [
+        2137,
+        855
+      ],
+      [
+        704,
+        835
+      ]
+    ],
+    "pr_auc_ap": 0.5175188849300318,
+    "precision_positivo": 0.4940828402366864,
+    "recall_positivo": 0.5425601039636128,
+    "roc_auc": 0.6751992751734753,
+    "umbral": 0.4
+  },
+  "variables": [
+    "dias_activos_7d",
+    "visitas_7d",
+    "tasa_asistencia_7d",
+    "dias_activos_14d",
+    "visitas_14d",
+    "tasa_asistencia_14d",
+    "dias_activos_30d",
+    "visitas_30d",
+    "tasa_asistencia_30d",
+    "recencia_30d",
+    "afinidad_dia_objetivo_30d",
+    "dias_apertura_30d"
+  ],
+  "version": "retorno-h1-ventanas-7-14-30-corte-20261021-v1"
+}

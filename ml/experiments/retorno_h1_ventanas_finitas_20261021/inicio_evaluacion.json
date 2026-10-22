@@ -1,0 +1,5 @@
+{
+  "fecha": "2026-10-21T22:02:01.259985-05:00",
+  "seleccion": "menor Brier septiembre, desempate log-loss, mayor PR-AUC(AP), nombre; solo modelos sin ConvergenceWarning",
+  "umbral": "Macro F1 máximo en septiembre en rejilla 0.15..0.80 paso0.05; empate umbral menor; no usa octubre"
+}

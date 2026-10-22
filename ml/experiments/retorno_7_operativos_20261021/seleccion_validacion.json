@@ -1,0 +1,123 @@
+{
+  "baseline_prevalencia_train": {
+    "brier": 0.11959275215112232,
+    "log_loss": 0.41406996414455366,
+    "macro_f1": 0.470917225950783,
+    "matriz_confusion": [
+      [
+        0,
+        156
+      ],
+      [
+        0,
+        1263
+      ]
+    ],
+    "pr_auc_ap": 0.8900634249471459,
+    "roc_auc": 0.5,
+    "umbral": 0.5
+  },
+  "ganador": "GradientBoostingClassifier",
+  "resultados": {
+    "ExtraTreesClassifier": {
+      "brier": 0.15256122086417045,
+      "convergencia": "No aplica: presupuesto fijo",
+      "log_loss": 0.4692425928471527,
+      "macro_f1": 0.564487970536184,
+      "matriz_confusion": [
+        [
+          53,
+          103
+        ],
+        [
+          205,
+          1058
+        ]
+      ],
+      "pr_auc_ap": 0.955124260203418,
+      "roc_auc": 0.7130357106604137,
+      "sin_ConvergenceWarning": true,
+      "umbral": 0.5
+    },
+    "GradientBoostingClassifier": {
+      "brier": 0.09383995677684963,
+      "convergencia": "No aplica: presupuesto fijo",
+      "log_loss": 0.32000121706542733,
+      "macro_f1": 0.470917225950783,
+      "matriz_confusion": [
+        [
+          0,
+          156
+        ],
+        [
+          0,
+          1263
+        ]
+      ],
+      "pr_auc_ap": 0.9524386986255526,
+      "roc_auc": 0.7071913636640477,
+      "sin_ConvergenceWarning": true,
+      "umbral": 0.5
+    },
+    "HistGradientBoostingClassifier": {
+      "brier": 0.1062080314533801,
+      "convergencia": "No aplica: presupuesto fijo",
+      "log_loss": 0.3542142643296822,
+      "macro_f1": 0.4809238661733114,
+      "matriz_confusion": [
+        [
+          2,
+          154
+        ],
+        [
+          11,
+          1252
+        ]
+      ],
+      "pr_auc_ap": 0.9490415843050741,
+      "roc_auc": 0.6807103558885031,
+      "sin_ConvergenceWarning": true,
+      "umbral": 0.5
+    },
+    "LogisticRegression": {
+      "brier": 0.11436471162678073,
+      "convergencia": "Sí",
+      "log_loss": 0.37617814743422867,
+      "macro_f1": 0.5073272130437919,
+      "matriz_confusion": [
+        [
+          6,
+          150
+        ],
+        [
+          4,
+          1259
+        ]
+      ],
+      "pr_auc_ap": 0.9583255126586662,
+      "roc_auc": 0.7369916966116491,
+      "sin_ConvergenceWarning": true,
+      "umbral": 0.5
+    },
+    "RandomForestClassifier": {
+      "brier": 0.14991693465391132,
+      "convergencia": "No aplica: presupuesto fijo",
+      "log_loss": 0.46331896991841504,
+      "macro_f1": 0.5679425837320574,
+      "matriz_confusion": [
+        [
+          55,
+          101
+        ],
+        [
+          207,
+          1056
+        ]
+      ],
+      "pr_auc_ap": 0.9523886670316145,
+      "roc_auc": 0.7036258805855007,
+      "sin_ConvergenceWarning": true,
+      "umbral": 0.5
+    }
+  }
+}

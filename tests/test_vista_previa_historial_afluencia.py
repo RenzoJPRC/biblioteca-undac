@@ -494,10 +494,44 @@ class TestCalendarioOperativoYRegla24Julio(unittest.TestCase):
         self.assertIn("pendiente de confirmación documental", regla_24["descripcion"].lower())
 
     def test_cierre_27_julio_confirmado(self):
-        """El 27/07/2026 es cierre institucional confirmado previo a Fiestas Patrias."""
+        """El 27/07/2026 es cierre institucional confirmado previo a Fiestas Patrias (EsCierre27Julio=1, horario regular 10h=0)."""
         res = calcular_banderas_analiticas("2026-07-27", 10)
         self.assertEqual(res["EsCierre27Julio"], 1)
-        self.assertEqual(res["EsHorarioAtipico"], 1)
+        self.assertEqual(res["EsHorarioAtipico"], 0)
+
+    def test_fila_agosto_cierre_agosto_1_y_horario_atipico_0(self):
+        """
+        Una fila en día laborable de agosto durante horario operativo (ej. lunes 2026-08-03 a las 10:00)
+        debe tener EsCierreAgosto=1 y EsHorarioAtipico=0 (metodología de banderas ortogonales).
+        """
+        res = calcular_banderas_analiticas("2026-08-03", 10)
+        self.assertEqual(res["EsCierreAgosto"], 1)
+        self.assertEqual(res["EsHorarioAtipico"], 0)
+        self.assertEqual(res["EsFeriado"], 0)
+
+    def test_fila_agosto_coincidencia_exacta_entre_ri_y_aha(self):
+        """
+        Si RI y AHA tienen una fila en agosto con EsCierreAgosto=1 y EsHorarioAtipico=0,
+        la vista previa debe clasificarla como coincidencia exacta histórica y no como discrepancia.
+        """
+        cursor_mock = MagicMock()
+        filas_ri = [
+            (date(2026, 8, 3), 10, "Central", 15, 15, 0)
+        ]
+        filas_aha = [
+            (date(2026, 8, 3), 10, "Central", 15, 0, 1, 0, 0, 0)  # EsHorarioAtipico=0, EsCierreAgosto=1
+        ]
+        cursor_mock.fetchall.side_effect = [filas_ri, filas_aha]
+
+        res = obtener_vista_previa_historial_afluencia(
+            fecha_corte="2026-09-28",
+            cursor_externo=cursor_mock
+        )
+
+        hist = res["reconciliacion_periodo_historico"]
+        self.assertEqual(hist["coincidencias_exactas_filas"], 1)
+        self.assertEqual(hist["discrepancias_filas"], 0)
+        self.assertEqual(len(hist["detalle_discrepancias"]), 0)
 
 
 class TestComparacionBanderasAnaliticas(unittest.TestCase):
@@ -535,6 +569,44 @@ class TestComparacionBanderasAnaliticas(unittest.TestCase):
         self.assertIn("EsHorarioAtipico", detalle["DiscrepanciasBanderas"])
         self.assertEqual(detalle["DiscrepanciasBanderas"]["EsHorarioAtipico"]["esperado"], 0)
         self.assertEqual(detalle["DiscrepanciasBanderas"]["EsHorarioAtipico"]["almacenado"], 1)
+
+    def test_separacion_discrepancias_cantidad_vs_banderas(self):
+        """
+        Verifica que el resumen separe claramente las discrepancias de cantidad
+        de las discrepancias de banderas analíticas.
+        """
+        # Fila 1: Discrepancia solo en cantidad (2026-05-05 17h: RI=2 vs AHA=4, banderas coinciden)
+        # Fila 2: Discrepancia solo en banderas (2026-06-01 10h: RI=50 vs AHA=50, EsHorarioAtipico difiere)
+        filas_ri = [
+            (date(2026, 5, 5), 17, "Central", 2, 2, 0),
+            (date(2026, 6, 1), 10, "Central", 50, 50, 0)
+        ]
+        filas_aha = [
+            (date(2026, 5, 5), 17, "Central", 4, 0, 0, 0, 0, 0),
+            (date(2026, 6, 1), 10, "Central", 50, 1, 0, 0, 0, 0)
+        ]
+        self.cursor_mock.fetchall.side_effect = [filas_ri, filas_aha]
+
+        res = obtener_vista_previa_historial_afluencia(
+            fecha_corte="2026-09-28",
+            cursor_externo=self.cursor_mock
+        )
+
+        hist = res["reconciliacion_periodo_historico"]
+        self.assertEqual(hist["discrepancias_filas"], 2)
+        resumen_disc = hist["resumen_discrepancias"]
+
+        self.assertEqual(resumen_disc["total_discrepancias"], 2)
+        self.assertEqual(resumen_disc["discrepancias_cantidad"], 1)
+        self.assertEqual(resumen_disc["discrepancias_solo_cantidad"], 1)
+        self.assertEqual(resumen_disc["discrepancias_banderas"], 1)
+        self.assertEqual(resumen_disc["discrepancias_solo_banderas"], 1)
+        self.assertEqual(resumen_disc["discrepancias_mixtas_cantidad_y_banderas"], 0)
+
+        self.assertEqual(len(hist["detalle_discrepancias_cantidad"]), 1)
+        self.assertEqual(hist["detalle_discrepancias_cantidad"][0]["Fecha"], "2026-05-05")
+        self.assertEqual(len(hist["detalle_discrepancias_banderas"]), 1)
+        self.assertEqual(hist["detalle_discrepancias_banderas"][0]["Fecha"], "2026-06-01")
 
 
 class TestFilasExclusivasYDiscrepanciaHistorica(unittest.TestCase):

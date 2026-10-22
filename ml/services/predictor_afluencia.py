@@ -1,74 +1,138 @@
+import json
+import logging
+import os
 from functools import lru_cache
 from pathlib import Path
 
 import joblib
 import pandas as pd
 
+logger = logging.getLogger(__name__)
+
 
 class PredictorAfluencia:
     """
-    Carga y ejecuta el modelo de predicción de afluencia.
+    Carga y ejecuta el modelo de predicción de afluencia para Sede Central.
 
-    El modelo no consulta directamente la base de datos.
-    Recibe las 12 variables ya calculadas y devuelve:
-    - nivel estimado;
-    - probabilidades por clase;
-    - versión y advertencia del modelo.
+    Soporta dos artefactos:
+    1. Modelo de Producción: RandomForestClassifier (modelo_afluencia_undac.joblib).
+    2. Modelo Candidato: GradientBoostingClassifier (modelo_afluencia_candidato_gb.joblib),
+       ganador de la evaluación comparativa.
+
+    Resiliencia y Conmutación:
+    - Por defecto ejecuta el modelo candidato si está disponible.
+    - Si el artefacto candidato no existe o falla en ejecución, conmuta automáticamente
+      al Random Forest de producción sin lanzar error al usuario ni a la API.
+    - Permite conmutar explícitamente entre 'candidato' y 'produccion' vía parámetro,
+      método o variable de entorno MODELO_AFLUENCIA_ACTIVO.
     """
 
     def __init__(self):
-        ruta_ml = Path(__file__).resolve().parents[1]
+        self.ruta_ml = Path(__file__).resolve().parents[1]
+        self.ruta_modelo_prod = self.ruta_ml / "models" / "modelo_afluencia_undac.joblib"
+        self.ruta_modelo_candidato = self.ruta_ml / "models" / "modelo_afluencia_candidato_gb.joblib"
 
-        self.ruta_modelo = (
-            ruta_ml
-            / "models"
-            / "modelo_afluencia_undac.joblib"
-        )
-
-        if not self.ruta_modelo.exists():
+        # 1. Cargar obligatoriamente el modelo de producción (Random Forest)
+        if not self.ruta_modelo_prod.exists():
             raise FileNotFoundError(
-                "No se encontró el modelo en: "
-                f"{self.ruta_modelo}"
+                f"No se encontró el modelo de producción en: {self.ruta_modelo_prod}"
             )
 
-        paquete = joblib.load(self.ruta_modelo)
+        paquete_prod = joblib.load(self.ruta_modelo_prod)
+        if not isinstance(paquete_prod, dict) or "modelo" not in paquete_prod or "metadatos" not in paquete_prod:
+            raise ValueError("El paquete del modelo de producción no contiene una estructura válida.")
 
-        if not isinstance(paquete, dict):
-            raise ValueError(
-                "El archivo del modelo no contiene "
-                "un paquete válido."
-            )
+        self.modelo_prod = paquete_prod["modelo"]
+        self.metadatos_prod = dict(paquete_prod["metadatos"])
 
-        if "modelo" not in paquete:
-            raise ValueError(
-                "El paquete no contiene la clave 'modelo'."
-            )
-
-        if "metadatos" not in paquete:
-            raise ValueError(
-                "El paquete no contiene la clave 'metadatos'."
-            )
-
-        self.modelo = paquete["modelo"]
-        self.metadatos = paquete["metadatos"]
-
-        ruta_metadatos_json = (
-            ruta_ml / "models" / "metadatos_modelo_afluencia.json"
-        )
-        self.metadatos_json = {}
-        if ruta_metadatos_json.exists():
-            import json
+        # Cargar metadatos JSON de producción si existen
+        ruta_meta_prod_json = self.ruta_ml / "models" / "metadatos_modelo_afluencia.json"
+        if ruta_meta_prod_json.exists():
             try:
-                with open(ruta_metadatos_json, "r", encoding="utf-8") as archivo_json:
-                    self.metadatos_json = json.load(archivo_json)
-            except Exception:
-                self.metadatos_json = {}
+                with open(ruta_meta_prod_json, "r", encoding="utf-8") as f_json:
+                    self.metadatos_prod.update(json.load(f_json))
+            except Exception as e_json:
+                logger.warning("No se pudo cargar metadatos JSON de producción: %s", e_json)
 
-        self.variables = list(
-            self.metadatos["variables"]
-        )
+        # 2. Intentar cargar el modelo candidato (Gradient Boosting)
+        self.modelo_candidato = None
+        self.metadatos_candidato = None
 
-    def obtener_informacion(self):
+        if self.ruta_modelo_candidato.exists():
+            try:
+                paquete_cand = joblib.load(self.ruta_modelo_candidato)
+                if isinstance(paquete_cand, dict) and "modelo" in paquete_cand and "metadatos" in paquete_cand:
+                    self.modelo_candidato = paquete_cand["modelo"]
+                    self.metadatos_candidato = dict(paquete_cand["metadatos"])
+
+                    ruta_meta_cand_json = self.ruta_ml / "models" / "metadatos_modelo_afluencia_candidato_gb.json"
+                    if ruta_meta_cand_json.exists():
+                        try:
+                            with open(ruta_meta_cand_json, "r", encoding="utf-8") as f_cand_json:
+                                self.metadatos_candidato.update(json.load(f_cand_json))
+                        except Exception:
+                            pass
+                else:
+                    logger.warning("El archivo candidato no contiene un diccionario con 'modelo' y 'metadatos'.")
+            except Exception as e_cand:
+                logger.warning("Error al cargar modelo candidato: %s. Se mantendrá Random Forest como único activo.", e_cand)
+                self.modelo_candidato = None
+                self.metadatos_candidato = None
+
+        # 3. Definir modelo activo por defecto
+        # Configuración por variable de entorno: 'candidato' (default) o 'produccion'
+        preferencia_env = os.getenv("MODELO_AFLUENCIA_ACTIVO", "candidato").strip().lower()
+        if preferencia_env in ("candidato", "gradient_boosting", "gb") and self.modelo_candidato is not None:
+            self.tipo_modelo_activo = "candidato"
+        else:
+            self.tipo_modelo_activo = "produccion"
+
+        # Variables predictoras (idénticas en ambos modelos y en mismo orden)
+        self.variables = list(self.metadatos_prod.get("variables", []))
+
+    def establecer_modelo_activo(self, tipo: str):
+        """
+        Cambia el modelo activo por defecto para futuras predicciones.
+        Acepta 'candidato' o 'produccion' (también 'random_forest' o 'gradient_boosting').
+        """
+        tipo_normalizado = str(tipo).strip().lower()
+        if tipo_normalizado in ("candidato", "gradient_boosting", "gb"):
+            if self.modelo_candidato is not None:
+                self.tipo_modelo_activo = "candidato"
+            else:
+                logger.warning("Modelo candidato no disponible. Se mantiene en producción.")
+                self.tipo_modelo_activo = "produccion"
+        elif tipo_normalizado in ("produccion", "random_forest", "rf", "default"):
+            self.tipo_modelo_activo = "produccion"
+        else:
+            raise ValueError(f"Tipo de modelo no reconocido: '{tipo}'. Use 'candidato' o 'produccion'.")
+
+    def _resolver_modelo_y_metadatos(self, modelo_solicitado=None):
+        """Resuelve qué modelo y metadatos usar, con fallback automático a producción."""
+        if modelo_solicitado:
+            solicitud = str(modelo_solicitado).strip().lower()
+            if solicitud in ("candidato", "gradient_boosting", "gb"):
+                tipo_deseado = "candidato"
+            else:
+                tipo_deseado = "produccion"
+        else:
+            tipo_deseado = self.tipo_modelo_activo
+
+        fallback_activado = False
+        if tipo_deseado == "candidato":
+            if self.modelo_candidato is not None:
+                return self.modelo_candidato, self.metadatos_candidato, "candidato", False
+            else:
+                fallback_activado = True
+
+        return self.modelo_prod, self.metadatos_prod, "produccion", fallback_activado
+
+    def obtener_informacion(self, modelo=None):
+        """
+        Retorna la información y metadatos del modelo activo o solicitado.
+        """
+        modelo_obj, metadatos, tipo_modelo, _ = self._resolver_modelo_y_metadatos(modelo)
+
         umbrales_defecto = {
             "bajo_maximo": 7,
             "medio_minimo": 8,
@@ -76,121 +140,138 @@ class PredictorAfluencia:
             "alto_minimo": 36,
             "metodo": "Percentiles 33 y 66 del conjunto real de entrenamiento"
         }
-        umbrales = (
-            self.metadatos_json.get("umbrales")
-            or self.metadatos.get("umbrales")
-            or umbrales_defecto
-        )
+        umbrales = metadatos.get("umbrales", umbrales_defecto)
+
+        periodo_entrenamiento = metadatos.get("periodo_entrenamiento", {})
+        if isinstance(periodo_entrenamiento, dict):
+            periodo_txt = f"{periodo_entrenamiento.get('inicio', '2026-05-13')} al {periodo_entrenamiento.get('fin', '2026-08-31')}"
+        else:
+            periodo_txt = str(periodo_entrenamiento)
+
+        fecha_entrenamiento = metadatos.get("fecha_entrenamiento") or metadatos.get("fecha_exportacion", "2026-10-05")
+
+        metricas = metadatos.get("metricas_validacion_septiembre") or metadatos.get("metricas_prueba_septiembre", {})
+
         return {
-            "nombre": self.metadatos.get("nombre"),
-            "version": self.metadatos.get("version"),
-            "algoritmo": self.metadatos.get("algoritmo"),
-            "version_sklearn": self.metadatos.get(
-                "version_sklearn"
-            ),
+            "nombre": metadatos.get("nombre", "Modelo de predicción de afluencia UNDAC"),
+            "version": metadatos.get("version", "1.0.0"),
+            "algoritmo": metadatos.get("algoritmo", "RandomForestClassifier"),
+            "tipo_modelo": tipo_modelo,
+            "es_candidato": (tipo_modelo == "candidato"),
+            "modelo_candidato_disponible": (self.modelo_candidato is not None),
+            "modelo_produccion_disponible": True,
+            "fecha_entrenamiento": fecha_entrenamiento,
+            "periodo_entrenamiento": periodo_entrenamiento,
+            "periodo_entrenamiento_texto": periodo_txt,
+            "version_sklearn": metadatos.get("version_sklearn", "1.6.1"),
             "variables": self.variables,
-            "clases": [
-                str(clase)
-                for clase in self.modelo.classes_
-            ],
-            "metricas": self.metadatos.get(
-                "metricas_prueba_septiembre",
-                {}
-            ),
+            "clases": [str(c) for c in modelo_obj.classes_],
+            "metricas": metricas,
             "umbrales": umbrales,
-            "advertencia": self.metadatos.get(
-                "advertencia"
-            )
+            "advertencia": metadatos.get("advertencia", "Modelo de apoyo referencial.")
         }
 
     def validar_variables(self, datos):
         if not isinstance(datos, dict):
-            raise ValueError(
-                "Los datos deben enviarse como diccionario."
-            )
+            raise ValueError("Los datos deben enviarse como diccionario.")
 
-        faltantes = [
-            variable
-            for variable in self.variables
-            if variable not in datos
-        ]
-
+        faltantes = [v for v in self.variables if v not in datos]
         if faltantes:
-            raise ValueError(
-                "Faltan variables requeridas: "
-                + ", ".join(faltantes)
-            )
+            raise ValueError(f"Faltan variables requeridas: {', '.join(faltantes)}")
 
         datos_limpios = {}
-
         for variable in self.variables:
             try:
                 valor = float(datos[variable])
             except (TypeError, ValueError):
-                raise ValueError(
-                    f"La variable '{variable}' "
-                    "debe ser numérica."
-                )
-
+                raise ValueError(f"La variable '{variable}' debe ser numérica.")
             datos_limpios[variable] = valor
 
         return datos_limpios
 
-    def predecir(self, datos):
-        datos_limpios = self.validar_variables(
-            datos
-        )
+    def predecir(self, datos, modelo=None):
+        """
+        Ejecuta la predicción del nivel de afluencia.
 
+        Si se solicita el candidato y ocurre cualquier falla interna, conmuta de inmediato
+        al modelo de producción (Random Forest) garantizando la continuidad del servicio.
+        """
+        datos_limpios = self.validar_variables(datos)
         entrada = pd.DataFrame(
-            [[
-                datos_limpios[variable]
-                for variable in self.variables
-            ]],
+            [[datos_limpios[var] for var in self.variables]],
             columns=self.variables
         )
 
-        nivel_estimado = str(
-            self.modelo.predict(entrada)[0]
-        )
+        modelo_obj, metadatos, tipo_modelo, fallback_activado = self._resolver_modelo_y_metadatos(modelo)
 
-        probabilidades_modelo = (
-            self.modelo.predict_proba(entrada)[0]
-        )
+        # Si el modelo elegido es el candidato, intentar predecir con él; si falla, fallback a producción
+        if tipo_modelo == "candidato":
+            try:
+                nivel_estimado = str(modelo_obj.predict(entrada)[0])
+                probabilidades_raw = modelo_obj.predict_proba(entrada)[0]
+            except Exception as e_pred_cand:
+                logger.warning(
+                    "Error ejecutando predicción con modelo candidato: %s. Activando fallback a Random Forest.",
+                    e_pred_cand
+                )
+                modelo_obj = self.modelo_prod
+                metadatos = self.metadatos_prod
+                tipo_modelo = "produccion"
+                fallback_activado = True
+                nivel_estimado = str(modelo_obj.predict(entrada)[0])
+                probabilidades_raw = modelo_obj.predict_proba(entrada)[0]
+        else:
+            nivel_estimado = str(modelo_obj.predict(entrada)[0])
+            probabilidades_raw = modelo_obj.predict_proba(entrada)[0]
 
         probabilidades = {
-            str(clase): round(
-                float(probabilidad),
-                4
-            )
-            for clase, probabilidad in zip(
-                self.modelo.classes_,
-                probabilidades_modelo
-            )
+            str(clase): round(float(prob), 4)
+            for clase, prob in zip(modelo_obj.classes_, probabilidades_raw)
         }
+
+        advertencia = metadatos.get("advertencia", "Modelo de apoyo referencial.")
+        if fallback_activado:
+            advertencia = (
+                "[FALLBACK AUTOMÁTICO] El modelo candidato no estuvo disponible; "
+                "la predicción se generó exitosamente con el modelo de producción Random Forest. "
+                + advertencia
+            )
+
+        fecha_entrenamiento = metadatos.get("fecha_entrenamiento") or metadatos.get("fecha_exportacion", "2026-10-05")
 
         return {
             "nivel_estimado": nivel_estimado,
             "probabilidades": probabilidades,
-            "version_modelo": self.metadatos.get(
-                "version"
-            ),
-            "advertencia": self.metadatos.get(
-                "advertencia"
-            )
+            "version_modelo": metadatos.get("version", "1.0.0"),
+            "algoritmo": metadatos.get("algoritmo", "RandomForestClassifier"),
+            "modelo_utilizado": metadatos.get("nombre", "Modelo de predicción de afluencia UNDAC"),
+            "tipo_modelo": tipo_modelo,
+            "es_candidato": (tipo_modelo == "candidato"),
+            "fecha_entrenamiento": fecha_entrenamiento,
+            "periodo_entrenamiento": metadatos.get("periodo_entrenamiento", {}),
+            "fallback_activado": fallback_activado,
+            "advertencia": advertencia
         }
 
 
 @lru_cache(maxsize=1)
 def obtener_predictor_afluencia():
-    """
-    Devuelve una única instancia del predictor durante
-    la ejecución del proceso Flask.
-    """
+    """Devuelve la instancia singleton del predictor de afluencia."""
     return PredictorAfluencia()
+
+
+def limpiar_cache_predictor():
+    """Limpia el caché singleton del predictor para pruebas o recargas."""
+    obtener_predictor_afluencia.cache_clear()
+
+
+def establecer_modelo_afluencia_activo(tipo: str):
+    """Permite cambiar dinámicamente el modelo activo por defecto."""
+    predictor = obtener_predictor_afluencia()
+    predictor.establecer_modelo_activo(tipo)
 
 
 if __name__ == "__main__":
     predictor = obtener_predictor_afluencia()
-
-    print("Modelo cargado correctamente.")
+    print("Información del modelo activo:")
     print(predictor.obtener_informacion())

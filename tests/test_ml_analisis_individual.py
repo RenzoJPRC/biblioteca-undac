@@ -8,7 +8,8 @@ from ml.services.analisis_individual import (
     calcular_proximo_dia_operativo,
     enmascarar_codigo,
     PredictorRetornoAlumno,
-    DIAS_FERIADOS_O_CIERRES
+    DIAS_FERIADOS_O_CIERRES,
+    limpiar_cache_analisis_descriptivo
 )
 from llm.services.consultas_biblioteca import (
     consultar_analisis_descriptivo_individual,
@@ -104,6 +105,7 @@ def _generar_filas_fixture_descriptivo():
 
 
 _FILAS_FIXTURE_DESCRIPTIVO = _generar_filas_fixture_descriptivo()
+_MOCK_MAX_FECHA_BD = date(2026, 7, 31)
 
 
 def _crear_mock_db_cursor(*args, **kwargs):
@@ -148,6 +150,8 @@ def _crear_mock_db_cursor(*args, **kwargs):
             except Exception:
                 f_ref = date(2026, 7, 31)
             mock_cursor.fetchall.return_value = [(d,) for d in _FECHAS_OPERATIVAS_FIXTURE if d <= f_ref]
+        elif "MAX(CAST(FECHAHORA AS DATE))" in sql_u:
+            mock_cursor.fetchone.return_value = (_MOCK_MAX_FECHA_BD,) if _MOCK_MAX_FECHA_BD is not None else (None,)
         else:
             mock_cursor.fetchall.return_value = []
             mock_cursor.fetchone.return_value = None
@@ -164,11 +168,13 @@ class TestAnalisisIndividualML(unittest.TestCase):
     def setUp(self):
         self.app = app
         self.client = self.app.test_client()
+        limpiar_cache_analisis_descriptivo()
         self.patcher_db = patch("ml.services.analisis_individual.get_db_cursor", side_effect=_crear_mock_db_cursor)
         self.patcher_db.start()
 
     def tearDown(self):
         self.patcher_db.stop()
+        limpiar_cache_analisis_descriptivo()
 
     # =========================================================================
     # 1. PRUEBAS DE DEFINICIÓN DE "VOLVER MAÑANA" Y CALENDARIO OPERATIVO
@@ -200,6 +206,58 @@ class TestAnalisisIndividualML(unittest.TestCase):
         miercoles = date(2026, 7, 22)
         sig = calcular_proximo_dia_operativo(miercoles)
         self.assertEqual(sig, date(2026, 7, 30))
+
+    def test_04b_proximo_dia_operativo_receso_agosto(self):
+        """
+        El receso de agosto (01/08 al 23/08 inclusive) debe ser saltado completamente:
+        - Viernes 31/07/2026 debe retornar como próximo día operativo el lunes 24/08/2026.
+        - Fechas intermedias dentro del receso (ej. lunes 10/08/2026) deben retornar el 24/08/2026.
+        """
+        viernes_cierre = date(2026, 7, 31)
+        sig = calcular_proximo_dia_operativo(viernes_cierre)
+        self.assertEqual(sig, date(2026, 8, 24))
+        self.assertEqual(sig.weekday(), 0)  # Lunes de retorno
+
+        # Fecha intermedia dentro del receso
+        lunes_receso = date(2026, 8, 10)
+        sig_intermedio = calcular_proximo_dia_operativo(lunes_receso)
+        self.assertEqual(sig_intermedio, date(2026, 8, 24))
+
+    def test_04c_proximo_dia_operativo_salta_combate_angamos_08_10(self):
+        """
+        El feriado nacional del jueves 08/10/2026 (Combate de Angamos) debe ser saltado:
+        - Miércoles 07/10/2026 debe saltar jueves 08/10 y retornar viernes 09/10/2026.
+        - Jueves 08/10/2026 consultado en el feriado debe retornar viernes 09/10/2026.
+        """
+        miercoles = date(2026, 10, 7)
+        sig = calcular_proximo_dia_operativo(miercoles)
+        self.assertEqual(sig, date(2026, 10, 9))
+        self.assertEqual(sig.weekday(), 4)  # Viernes
+
+        jueves_feriado = date(2026, 10, 8)
+        sig_feriado = calcular_proximo_dia_operativo(jueves_feriado)
+        self.assertEqual(sig_feriado, date(2026, 10, 9))
+
+    def test_04d_proximo_dia_operativo_con_calendario_explicito_filtra_cierres(self):
+        """
+        Al suministrar un calendario_operativo explícito, se deben filtrar automáticamente
+        los días de receso o feriados aunque vengan en la lista de fechas.
+        """
+        # Calendario que contiene erróneamente un día del receso (05/08) y el feriado (08/10)
+        calendario_con_cierres = [
+            date(2026, 8, 5),   # Dentro del receso (debe filtrarse)
+            date(2026, 8, 24),  # Retorno válido
+            date(2026, 8, 25),  # Hábil
+            date(2026, 10, 8),  # Combate de Angamos (debe filtrarse)
+            date(2026, 10, 9),  # Hábil
+        ]
+        # Desde 31/07 debe ignorar el 05/08 y retornar 24/08
+        sig_agosto = calcular_proximo_dia_operativo(date(2026, 7, 31), calendario_operativo=calendario_con_cierres)
+        self.assertEqual(sig_agosto, date(2026, 8, 24))
+
+        # Desde 07/10 debe ignorar el 08/10 y retornar 09/10
+        sig_octubre = calcular_proximo_dia_operativo(date(2026, 10, 7), calendario_operativo=calendario_con_cierres)
+        self.assertEqual(sig_octubre, date(2026, 10, 9))
 
     # =========================================================================
     # 2. PRUEBAS DE FILTRO DE PRUEBA Y EXCLUSIÓN DE DNI (SEGURIDAD Y PRIVACIDAD)
@@ -243,9 +301,9 @@ class TestAnalisisIndividualML(unittest.TestCase):
     def test_08_exclusion_de_filas_de_prueba(self):
         """Las 38 filas con EsPrueba = 1 deben quedar estrictamente excluidas de los conteos reales."""
         resultado = obtener_analisis_descriptivo_ingresos()
-        # Debe reportar exactamente 18,168 visitas reales y 38 registros de prueba excluidos
+        # La fixture histórica conserva sus visitas; no se inventa un conteo actual de pruebas.
         self.assertEqual(resultado["total_visitas"], 18168)
-        self.assertEqual(resultado["registros_prueba_excluidos"], 38)
+        self.assertNotIn("registros_prueba_excluidos", resultado)
         self.assertEqual(resultado["total_alumnos"], 3013)
 
     # =========================================================================
@@ -524,11 +582,197 @@ class TestAnalisisIndividualML(unittest.TestCase):
         self.assertEqual(pisos[3]["total_visitas"], 7077)
         self.assertEqual(pisos.get(1, {}).get("total_visitas", 0), 0)
 
-        # Verificar resumen de salas configuradas en Central
+        # El resumen describe solo las salas observadas; no supone un inventario fijo.
         res_pisos = resultado["resumen_pisos"]
-        self.assertEqual(res_pisos["salas_configuradas_central"], 8)
+        self.assertEqual(set(res_pisos["pisos_con_visitas"]), {2, 3})
         self.assertEqual(res_pisos["salas_con_visitas"], 6)
+
+    def test_25_separacion_fechas_referencia_bd_y_entrenamiento(self):
+        """
+        Verifica la estricta separación entre:
+        1. fecha_referencia (la fecha del pronóstico).
+        2. fecha_corte_bd / ultima_fecha_bd (la fecha máxima observada en la base de datos).
+        3. fecha_entrenamiento_artefacto (corte fijo del entrenamiento del modelo: 2026-07-31).
+        """
+        # Caso A: Pronóstico dentro del periodo de entrenamiento (fecha_referencia <= 2026-07-31)
+        res_entrenamiento = predecir_retorno_alumno(
+            codigo_matricula="2341304357",
+            fecha_referencia="2026-07-31"
+        )
+        self.assertEqual(res_entrenamiento["status"], "success")
+        self.assertEqual(res_entrenamiento["fecha_referencia"], "2026-07-31")
+        self.assertEqual(res_entrenamiento["fecha_entrenamiento_artefacto"], "2026-07-31")
+        self.assertFalse(res_entrenamiento["es_experimental"])
+        self.assertEqual(res_entrenamiento["tipo_prediccion"], "vigente_en_periodo_entrenamiento")
+        self.assertEqual(res_entrenamiento["estado_vigencia"], "vigente")
+
+        # Caso B: Pronóstico post-entrenamiento pero con datos actualizados en BD (ej. octubre)
+        global _MOCK_MAX_FECHA_BD
+        fecha_bd_anterior = _MOCK_MAX_FECHA_BD
+        try:
+            import tests.test_ml_analisis_individual as mod_test
+            mod_test._MOCK_MAX_FECHA_BD = date(2026, 10, 20)
+            res_post = predecir_retorno_alumno(
+                codigo_matricula="2341304357",
+                fecha_referencia="2026-10-15"
+            )
+            self.assertEqual(res_post["status"], "success")
+            self.assertEqual(res_post["fecha_referencia"], "2026-10-15")
+            self.assertEqual(res_post["ultima_fecha_bd"], "2026-10-20")
+            self.assertEqual(res_post["fecha_entrenamiento_artefacto"], "2026-07-31")
+            self.assertTrue(res_post["es_experimental"])
+            self.assertEqual(res_post["tipo_prediccion"], "experimental_post_entrenamiento")
+            self.assertEqual(res_post["estado_validacion"], "pendiente_validacion_prospectiva")
+            self.assertEqual(res_post["dias_desfase_bd"], 0)
+            self.assertFalse(res_post["es_desfase_severo"])
+        finally:
+            import tests.test_ml_analisis_individual as mod_test
+            mod_test._MOCK_MAX_FECHA_BD = fecha_bd_anterior
+
+    def test_26_fecha_por_defecto_dinamica_toma_ultima_fecha_bd(self):
+        """
+        Si el usuario no especifica fecha_referencia, el sistema debe tomar dinámicamente
+        la última fecha real disponible en la base de datos (y no quedarse fijo en 2026-07-31).
+        """
+        global _MOCK_MAX_FECHA_BD
+        fecha_bd_anterior = _MOCK_MAX_FECHA_BD
+        try:
+            import tests.test_ml_analisis_individual as mod_test
+            # Simular que en la BD los ingresos llegan hasta el 20 de octubre de 2026
+            mod_test._MOCK_MAX_FECHA_BD = date(2026, 10, 20)
+            res = predecir_retorno_alumno(codigo_matricula="2341304357")
+            self.assertEqual(res["status"], "success")
+            self.assertEqual(res["fecha_referencia"], "2026-10-20")
+            self.assertEqual(res["ultima_fecha_bd"], "2026-10-20")
+            self.assertEqual(res["origen_fecha_referencia"], "predeterminada_ultima_bd")
+            self.assertEqual(res["fecha_entrenamiento_artefacto"], "2026-07-31")
+            self.assertTrue(res["es_experimental"])
+            self.assertEqual(res["tipo_prediccion"], "experimental_post_entrenamiento")
+            self.assertEqual(res["estado_validacion"], "pendiente_validacion_prospectiva")
+        finally:
+            import tests.test_ml_analisis_individual as mod_test
+            mod_test._MOCK_MAX_FECHA_BD = fecha_bd_anterior
+
+    def test_27_fecha_historica_seleccionada_respeta_input_usuario(self):
+        """
+        Si el usuario selecciona explícitamente una fecha de referencia histórica,
+        el sistema debe respetarla exactamente para permitir evaluaciones retrospectivas.
+        """
+        global _MOCK_MAX_FECHA_BD
+        fecha_bd_anterior = _MOCK_MAX_FECHA_BD
+        try:
+            import tests.test_ml_analisis_individual as mod_test
+            # Aunque la BD tenga datos hasta octubre, el usuario solicita fecha retrospectiva de junio
+            mod_test._MOCK_MAX_FECHA_BD = date(2026, 10, 20)
+            res = predecir_retorno_alumno(
+                codigo_matricula="2341304357",
+                fecha_referencia="2026-06-25"
+            )
+            self.assertEqual(res["status"], "success")
+            self.assertEqual(res["fecha_referencia"], "2026-06-25")
+            self.assertEqual(res["origen_fecha_referencia"], "seleccionada_por_usuario")
+            self.assertEqual(res["ultima_fecha_bd"], "2026-10-20")
+            self.assertEqual(res["fecha_entrenamiento_artefacto"], "2026-07-31")
+            self.assertFalse(res["es_experimental"])
+            self.assertEqual(res["tipo_prediccion"], "vigente_en_periodo_entrenamiento")
+            self.assertEqual(res["estado_validacion"], "validada_en_muestra")
+        finally:
+            import tests.test_ml_analisis_individual as mod_test
+            mod_test._MOCK_MAX_FECHA_BD = fecha_bd_anterior
+
+    def test_28_ausencia_de_datos_en_bd_sin_fecha_devuelve_estado_explicito(self):
+        """
+        Si no hay registros en la base de datos (MAX FechaHora es None) y no se proporciona fecha,
+        debe devolver un estado explícito 'sin_datos_en_bd' en lugar de usar silenciosamente el corte del artefacto.
+        """
+        global _MOCK_MAX_FECHA_BD
+        fecha_bd_anterior = _MOCK_MAX_FECHA_BD
+        try:
+            import tests.test_ml_analisis_individual as mod_test
+            mod_test._MOCK_MAX_FECHA_BD = None
+            res = predecir_retorno_alumno(codigo_matricula="2341304357")
+            self.assertEqual(res["status"], "sin_datos_en_bd")
+            self.assertFalse(res["confiable"])
+            self.assertIsNone(res["fecha_referencia"])
+            self.assertIsNone(res["ultima_fecha_bd"])
+            self.assertEqual(res["fecha_entrenamiento_artefacto"], "2026-07-31")
+            self.assertIn("No se encontraron registros de ingresos", res["mensaje"])
+        finally:
+            import tests.test_ml_analisis_individual as mod_test
+            mod_test._MOCK_MAX_FECHA_BD = fecha_bd_anterior
+
+    def test_29_exclusion_estricta_de_visitas_posteriores_al_corte(self):
+        """
+        Comprobar que las visitas posteriores a la fecha_referencia quedan estrictamente excluidas
+        del vector de características y métricas de historial del alumno.
+        """
+        # Para alumno 200, si consultamos al 2026-06-15, solo debe contabilizar visitas hasta esa fecha
+        res_corte_temprano = predecir_retorno_alumno(
+            codigo_matricula="2341304357",
+            fecha_referencia="2026-06-15"
+        )
+        # Y si consultamos al 2026-07-31, contabiliza más días activos
+        res_corte_tardio = predecir_retorno_alumno(
+            codigo_matricula="2341304357",
+            fecha_referencia="2026-07-31"
+        )
+        if res_corte_temprano["status"] == "success" and res_corte_tardio["status"] == "success":
+            dias_temprano = res_corte_temprano["metricas_historial"]["dias_activos"]
+            dias_tardio = res_corte_tardio["metricas_historial"]["dias_activos"]
+            self.assertLess(dias_temprano, dias_tardio)
+            # En la fecha temprana no puede haber visitas con fecha posterior a 2026-06-15
+            self.assertEqual(res_corte_temprano["fecha_referencia"], "2026-06-15")
+
+    def test_30_presentacion_estado_experimental_post_entrenamiento(self):
+        """
+        Verifica que una consulta post-entrenamiento (fecha_referencia > 2026-07-31) presente
+        claramente el estado experimental y la advertencia de validación prospectiva.
+        """
+        global _MOCK_MAX_FECHA_BD
+        fecha_bd_anterior = _MOCK_MAX_FECHA_BD
+        try:
+            import tests.test_ml_analisis_individual as mod_test
+            mod_test._MOCK_MAX_FECHA_BD = date(2026, 10, 20)
+            res = predecir_retorno_alumno(
+                codigo_matricula="2341304357",
+                fecha_referencia="2026-10-15"
+            )
+            self.assertEqual(res["status"], "success")
+            self.assertTrue(res["es_experimental"])
+            self.assertEqual(res["tipo_prediccion"], "experimental_post_entrenamiento")
+            self.assertEqual(res["estado_validacion"], "pendiente_validacion_prospectiva")
+            self.assertIsNotNone(res["advertencia_experimental"])
+            self.assertIn("validación prospectiva", res["advertencia_experimental"].lower())
+            self.assertIn("[EXPERIMENTAL - PENDIENTE VALIDACIÓN PROSPECTIVA]", res["mensaje"])
+        finally:
+            import tests.test_ml_analisis_individual as mod_test
+            mod_test._MOCK_MAX_FECHA_BD = fecha_bd_anterior
+
+    def test_31_consulta_posterior_a_ultima_fecha_bd_es_no_calculable(self):
+        """
+        Verifica que una consulta con fecha de referencia posterior al último día con
+        registros en BD (ej. 23/10 con BD hasta 21/10) sea rechazada como 'no_calculable'
+        debido a la ausencia de cobertura intermedia confirmada.
+        """
+        global _MOCK_MAX_FECHA_BD
+        fecha_bd_anterior = _MOCK_MAX_FECHA_BD
+        try:
+            import tests.test_ml_analisis_individual as mod_test
+            mod_test._MOCK_MAX_FECHA_BD = date(2026, 10, 21)
+            res = predecir_retorno_alumno(
+                codigo_matricula="2341304357",
+                fecha_referencia="2026-10-23"
+            )
+            self.assertEqual(res["status"], "no_calculable")
+            self.assertIsNone(res["probabilidad_retorno"])
+            self.assertEqual(res["nivel_probabilidad"], "No calculable")
+            self.assertIn("posterior", res["mensaje"])
+            self.assertIn("sin cobertura confirmada", res["mensaje"])
+        finally:
+            import tests.test_ml_analisis_individual as mod_test
+            mod_test._MOCK_MAX_FECHA_BD = fecha_bd_anterior
 
 
 if __name__ == "__main__":
     unittest.main()
+

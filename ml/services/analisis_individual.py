@@ -14,26 +14,66 @@ Proporciona:
 
 from datetime import date, datetime, timedelta
 from pathlib import Path
+import copy
 import json
+import os
+import time
 import joblib
 import pandas as pd
 import numpy as np
 
 from db import get_db_cursor
 
-# Cierres institucionales y feriados confirmados en el calendario de biblioteca
-DIAS_FERIADOS_O_CIERRES = {
-    date(2026, 6, 29),  # San Pedro y San Pablo
-    date(2026, 7, 23),  # Día de la FAP
-    date(2026, 7, 24),  # Cierre no laborable puente FAP
-    date(2026, 7, 27),  # Cierre institucional 27 de julio
-    date(2026, 7, 28),  # Fiestas Patrias
-    date(2026, 7, 29),  # Fiestas Patrias
+# =============================================================================
+# CALENDARIO INSTITUCIONAL Y HORARIOS DE OPERACIÓN CONFIRMADOS (UNDAC)
+# =============================================================================
+# Horario oficial de atención: Lunes a viernes de 08:00 a 20:45 horas.
+# Sábados y domingos: Biblioteca cerrada.
+# Feriados nacionales oficiales (D. Leg. 713 y modificatorias) y cierres confirmados:
+FERIADOS_CONFIRMADOS_2026 = {
+    date(2026, 1, 1),   # Año Nuevo
+    date(2026, 4, 2),   # Jueves Santo
+    date(2026, 4, 3),   # Viernes Santo
+    date(2026, 5, 1),   # Día del Trabajo
+    date(2026, 6, 7),   # Batalla de Arica y Día de la Bandera (domingo)
+    date(2026, 6, 29),  # San Pedro y San Pablo (lunes)
+    date(2026, 7, 23),  # Día de la Fuerza Aérea del Perú (jueves)
+    date(2026, 7, 24),  # Cierre no laborable puente FAP (viernes)
+    date(2026, 7, 27),  # Cierre institucional 27 de julio (lunes)
+    date(2026, 7, 28),  # Fiestas Patrias (martes)
+    date(2026, 7, 29),  # Fiestas Patrias (miércoles)
+    date(2026, 8, 6),   # Batalla de Junín (jueves, dentro de receso de agosto)
+    date(2026, 8, 30),  # Santa Rosa de Lima (domingo)
+    date(2026, 10, 8),  # Combate de Angamos (jueves)
+    date(2026, 11, 1),  # Todos los Santos (domingo)
+    date(2026, 12, 8),  # Inmaculada Concepción (martes)
+    date(2026, 12, 9),  # Batalla de Ayacucho (miércoles)
+    date(2026, 12, 25), # Navidad (viernes)
 }
 
-# Rango oficial de cobertura de datos reales cargados
+# Receso institucional de medio año (vacaciones intersemestrales):
+# Desde el 01/08/2026 hasta el 23/08/2026 inclusive. Retorno a la atención: lunes 24/08/2026.
+RECESO_AGOSTO_INICIO = date(2026, 8, 1)
+RECESO_AGOSTO_FIN = date(2026, 8, 23)
+RECESO_AGOSTO_RETORNO = date(2026, 8, 24)
+
+DIAS_RECESO_AGOSTO = {
+    date(2026, 8, dia) for dia in range(1, 24)
+}
+
+# Conjunto unificado de días no operativos confirmados (feriados oficiales + receso intersemestral)
+DIAS_FERIADOS_O_CIERRES = FERIADOS_CONFIRMADOS_2026 | DIAS_RECESO_AGOSTO
+
+# =============================================================================
+# DEFINICIÓN INMUTABLE DEL ARTEFACTO DE PRODUCCIÓN (HistGradientBoosting v1.0.0)
+# =============================================================================
+# Fecha máxima de entrenamiento y evaluación con la que fue generado el artefacto activo:
 FECHA_MINIMA_DATOS = date(2026, 6, 1)
-FECHA_MAXIMA_DATOS = date(2026, 7, 31)
+FECHA_ENTRENAMIENTO_ARTEFACTO = date(2026, 7, 31)
+FECHA_MAXIMA_ENTRENAMIENTO = FECHA_ENTRENAMIENTO_ARTEFACTO
+
+# Alias de compatibilidad hacia atrás:
+FECHA_MAXIMA_DATOS = FECHA_ENTRENAMIENTO_ARTEFACTO
 
 
 def enmascarar_codigo(codigo):
@@ -55,12 +95,12 @@ def enmascarar_codigo(codigo):
 def calcular_proximo_dia_operativo(fecha_referencia, calendario_operativo=None):
     """
     Define operativamente qué significa "volver mañana":
-    En una biblioteca académica que opera de lunes a viernes, "volver mañana"
+    En la biblioteca central que opera de lunes a viernes (08:00 a 20:45), "volver mañana"
     corresponde al siguiente día hábil operativo disponible:
     - Si hoy es jueves -> viernes.
     - Si hoy es viernes -> lunes siguiente (salta sábado y domingo).
-    - Si hay feriado nacional o cierre institucional (ej. 29/06 o 27-29/07),
-      salta los días de cierre y evalúa el primer día hábil con atención.
+    - Salta feriados confirmados (ej: 29/06, 23/07, 24/07, 27-29/07, 08/10 Combate de Angamos, etc.).
+    - Salta el receso intersemestral de agosto (01/08 al 23/08 inclusive), retornando el 24/08.
     """
     if isinstance(fecha_referencia, str):
         fecha_referencia = datetime.strptime(fecha_referencia.strip(), "%Y-%m-%d").date()
@@ -68,7 +108,10 @@ def calcular_proximo_dia_operativo(fecha_referencia, calendario_operativo=None):
         fecha_referencia = fecha_referencia.date()
 
     if calendario_operativo:
-        fechas_futuras = sorted([d for d in calendario_operativo if d > fecha_referencia])
+        fechas_futuras = sorted([
+            d for d in calendario_operativo
+            if d > fecha_referencia and d not in DIAS_FERIADOS_O_CIERRES and d.weekday() < 5
+        ])
         if fechas_futuras:
             return fechas_futuras[0]
 
@@ -80,10 +123,82 @@ def calcular_proximo_dia_operativo(fecha_referencia, calendario_operativo=None):
         candidato += timedelta(days=1)
 
 
-def obtener_analisis_descriptivo_ingresos(fecha_inicio=None, fecha_fin=None, sede="Central"):
+TTL_CACHE_DESCRIPTIVO_SEGUNDOS = int(os.getenv("ML_CACHE_TTL_DESCRIPTIVO", "300"))
+_CACHE_ANALISIS_DESCRIPTIVO = {}
+
+
+def _ahora_descriptivo():
+    from zoneinfo import ZoneInfo
+    return datetime.now(ZoneInfo("America/Lima"))
+
+
+def _periodo_descriptivo(fecha_inicio=None, fecha_fin=None):
+    """Días calendario terminados; no presupone que la carga de datos sea completa."""
+    def convertir(valor):
+        if isinstance(valor, datetime):
+            return valor.date()
+        return date.fromisoformat(valor.strip()) if isinstance(valor, str) else valor
+
+    inicio = max(FECHA_MINIMA_DATOS, convertir(fecha_inicio)) if fecha_inicio else FECHA_MINIMA_DATOS
+    limite = _ahora_descriptivo().date() - timedelta(days=1)
+    fin = min(limite, convertir(fecha_fin)) if fecha_fin else limite
+    if inicio > fin:
+        raise ValueError("El inicio del periodo debe ser anterior o igual al último día completo permitido.")
+    return inicio, fin
+
+
+def _clave_cache_descriptivo(fecha_inicio, fecha_fin, sede, mostrar_codigo_completo=False):
+    inicio, fin = _periodo_descriptivo(fecha_inicio, fecha_fin)
+    return (inicio.isoformat(), fin.isoformat(), str(sede) if sede else "Central", bool(mostrar_codigo_completo))
+
+
+def limpiar_cache_analisis_descriptivo(sede=None):
+    """
+    Limpia la caché en memoria de análisis descriptivo.
+    Si se especifica sede, invalida solo las entradas de esa sede.
+    Si sede es None, invalida toda la caché.
+    """
+    global _CACHE_ANALISIS_DESCRIPTIVO
+    if sede is None:
+        _CACHE_ANALISIS_DESCRIPTIVO.clear()
+    else:
+        sede_str = str(sede).strip()
+        claves_a_borrar = [k for k in _CACHE_ANALISIS_DESCRIPTIVO if k[2] == sede_str]
+        for k in claves_a_borrar:
+            _CACHE_ANALISIS_DESCRIPTIVO.pop(k, None)
+
+
+def obtener_estado_cache_descriptivo(fecha_inicio=None, fecha_fin=None, sede="Central", mostrar_codigo_completo=False):
+    """
+    Devuelve metadatos de diagnóstico sobre una entrada en la caché de análisis descriptivo.
+    """
+    clave = _clave_cache_descriptivo(fecha_inicio, fecha_fin, sede, mostrar_codigo_completo)
+    entrada = _CACHE_ANALISIS_DESCRIPTIVO.get(clave)
+    if not entrada:
+        return {
+            "sede": sede,
+            "en_cache": False,
+            "edad_segundos": None,
+            "segundos_restantes": 0,
+            "ttl_segundos": TTL_CACHE_DESCRIPTIVO_SEGUNDOS,
+            "expirada": True
+        }
+    edad = time.time() - entrada.get("timestamp", 0)
+    segundos_restantes = max(0.0, round(TTL_CACHE_DESCRIPTIVO_SEGUNDOS - edad, 2))
+    return {
+        "sede": sede,
+        "en_cache": True,
+        "edad_segundos": round(edad, 2),
+        "segundos_restantes": segundos_restantes,
+        "ttl_segundos": TTL_CACHE_DESCRIPTIVO_SEGUNDOS,
+        "expirada": edad >= TTL_CACHE_DESCRIPTIVO_SEGUNDOS
+    }
+
+
+def obtener_analisis_descriptivo_ingresos(fecha_inicio=None, fecha_fin=None, sede="Central", forzar_refresco=False, mostrar_codigo_completo=False):
     """
     Genera el análisis descriptivo integral de ingresos reales por alumno:
-    - Visitas por mes (junio, julio de 2026).
+    - Visitas por mes desde junio de 2026 hasta el último día terminado disponible.
     - Visitas por escuela académica / carrera profesional.
     - Visitas por sala y piso de biblioteca.
     - Visitas por hora de atención (08:00 a 20:45, marcando la franja parcial de las 20:00).
@@ -93,27 +208,23 @@ def obtener_analisis_descriptivo_ingresos(fecha_inicio=None, fecha_fin=None, sed
     - Excluye siempre registros de prueba: ISNULL(EsPrueba, 0) = 0.
     - NUNCA consulta la columna DNI.
     """
+    f_ini, f_fin = _periodo_descriptivo(fecha_inicio, fecha_fin)
+    # No compartir una respuesta con códigos completos con los consumidores enmascarados.
+    clave_cache = (f_ini.isoformat(), f_fin.isoformat(), str(sede) if sede else "Central", bool(mostrar_codigo_completo))
+
+    ahora = time.time()
+    if not forzar_refresco and clave_cache in _CACHE_ANALISIS_DESCRIPTIVO:
+        entrada = _CACHE_ANALISIS_DESCRIPTIVO[clave_cache]
+        if ahora - entrada.get("timestamp", 0) < TTL_CACHE_DESCRIPTIVO_SEGUNDOS:
+            return copy.deepcopy(entrada.get("datos", {}))
+
     filtros = [
         "ISNULL(R.EsPrueba, 0) = 0",
-        "R.AlumnoID IS NOT NULL"
+        "R.AlumnoID IS NOT NULL",
+        "R.FechaHora >= ?",
+        "R.FechaHora < ?"
     ]
-    params = []
-
-    if fecha_inicio:
-        if isinstance(fecha_inicio, str):
-            f_ini = datetime.strptime(fecha_inicio.strip(), "%Y-%m-%d").date()
-        else:
-            f_ini = fecha_inicio
-        filtros.append("CAST(R.FechaHora AS DATE) >= ?")
-        params.append(f_ini.isoformat())
-
-    if fecha_fin:
-        if isinstance(fecha_fin, str):
-            f_fin = datetime.strptime(fecha_fin.strip(), "%Y-%m-%d").date()
-        else:
-            f_fin = fecha_fin
-        filtros.append("CAST(R.FechaHora AS DATE) <= ?")
-        params.append(f_fin.isoformat())
+    params = [f_ini.isoformat(), (f_fin + timedelta(days=1)).isoformat()]
 
     if sede and sede != "Todas":
         filtros.append("ISNULL(R.Sede, 'Central') = ?")
@@ -130,7 +241,7 @@ def obtener_analisis_descriptivo_ingresos(fecha_inicio=None, fecha_fin=None, sed
             ISNULL(S.Piso, R.Piso) AS Piso,
             R.FechaHora,
             DATEPART(HOUR, R.FechaHora) AS Hora,
-            FORMAT(R.FechaHora, 'yyyy-MM') AS Mes,
+            CONVERT(VARCHAR(7), R.FechaHora, 120) AS Mes,
             ISNULL(A.CodigoMatricula, 'N/D') AS CodigoMatricula
         FROM dbo.RegistroIngresos R
         INNER JOIN dbo.Alumnos A ON R.AlumnoID = A.AlumnoID
@@ -145,8 +256,24 @@ def obtener_analisis_descriptivo_ingresos(fecha_inicio=None, fecha_fin=None, sed
         cursor.execute(sql, tuple(params))
         filas = cursor.fetchall()
 
+    ultima_fecha = max((r[5].date() for r in filas), default=None)
+    metadatos = {
+        "sede": sede,
+        "tipo_analisis": "estadisticas_descriptivas",
+        "actualizado_en": _ahora_descriptivo().isoformat(timespec="seconds"),
+        "fecha_ultimo_dato_completo": ultima_fecha.isoformat() if ultima_fecha else None,
+        "periodo_analizado": {
+            "fecha_inicio": f_ini.isoformat(),
+            "fecha_fin": ultima_fecha.isoformat() if ultima_fecha else None,
+            "fecha_limite_consulta": f_fin.isoformat(),
+            "total_fechas_operativas": len({r[5].date() for r in filas}),
+        },
+        "criterio_dia_completo": "Día calendario terminado en America/Lima con ingresos válidos disponibles; no certifica completitud de importaciones.",
+    }
+
     if not filas:
-        return {
+        res_vacio = {
+            **metadatos,
             "status": "success",
             "total_visitas": 0,
             "total_alumnos": 0,
@@ -154,9 +281,21 @@ def obtener_analisis_descriptivo_ingresos(fecha_inicio=None, fecha_fin=None, sed
             "visitas_por_mes": [],
             "visitas_por_escuela": [],
             "visitas_por_sala": [],
+            "visitas_por_piso": [],
+            "total_dias_distintos": 0,
             "visitas_por_hora": [],
-            "frecuencia_por_alumno": {}
+            "visitas_por_hora_atipica": [],
+            "total_visitas_horario_operativo": 0,
+            "total_visitas_horario_atipico": 0,
+            "frecuencia_por_alumno": {},
+            "ranking_alumnos_por_visitas": [],
+            "ranking_alumnos_por_dias": []
         }
+        _CACHE_ANALISIS_DESCRIPTIVO[clave_cache] = {
+            "timestamp": ahora,
+            "datos": res_vacio
+        }
+        return copy.deepcopy(res_vacio)
 
     total_visitas = len(filas)
 
@@ -252,34 +391,44 @@ def obtener_analisis_descriptivo_ingresos(fecha_inicio=None, fecha_fin=None, sed
     )
 
     resumen_pisos_configurados = {
-        "pisos_configurados_central": [1, 2, 3],
-        "salas_configuradas_central": 8,
-        "salas_configuradas_total_universidad": 14,
-        "pisos_con_visitas": [2, 3],
+        "pisos_con_visitas": list(conteo_piso),
         "salas_con_visitas": len(visitas_por_sala),
-        "aclaracion": (
-            "En la Sede Central existen 8 salas configuradas en Pisos 1, 2 y 3 (no existe Piso 4). "
-            "Durante junio–julio 2026, únicamente los Pisos 2 y 3 registraron visitas (18,168 en 6 salas). "
-            "El Piso 1 de Central cuenta con 1 sala (Auditorio) que registró 0 visitas, al igual que la Hemeroteca en Piso 2. "
-            "Las 6 salas de filiales provinciales corresponden a sedes externas y no registraron visitas en este periodo."
-        )
+        "aclaracion": "Distribución observada en los ingresos del periodo seleccionado; no representa el inventario de salas configuradas."
     }
 
     # 4. Visitas por Hora (08:00 a 20:00)
     conteo_hora = {}
+    conteo_hora_atipica = {}
     for r in filas:
         h = r[6]
-        conteo_hora[h] = conteo_hora.get(h, 0) + 1
+        # Comparar la hora completa, incluidos segundos y fracciones, sin eliminar visitas.
+        hora_real = r[5].time()
+        if datetime.min.replace(hour=8).time() <= hora_real <= datetime.min.replace(hour=20, minute=45).time():
+            conteo_hora[h] = conteo_hora.get(h, 0) + 1
+        else:
+            conteo_hora_atipica[h] = conteo_hora_atipica.get(h, 0) + 1
 
     visitas_por_hora = [
         {
             "hora": h,
-            "hora_formato": f"{h:02d}:00 - {h+1:02d}:00" if h != 20 else "20:00 - 20:45 (parcial)",
+            "hora_formato": f"{h:02d}:00 - {(h+1) % 24:02d}:00" if h != 20 else "20:00 - 20:45 (parcial)",
             "es_parcial": (h == 20),
+            "es_atipica": False,
             "total_visitas": conteo_hora.get(h, 0),
             "porcentaje": round((conteo_hora.get(h, 0) / total_visitas) * 100, 2)
         }
         for h in range(8, 21)
+    ]
+    visitas_por_hora_atipica = [
+        {
+            "hora": h,
+            "hora_formato": f"{h:02d}:00 - {(h+1) % 24:02d}:00" if h != 20 else "Después de 20:45 hasta 21:00",
+            "es_atipica": True,
+            "motivo": "Fuera del horario operativo de 08:00 a 20:45",
+            "total_visitas": cantidad,
+            "porcentaje": round(cantidad * 100 / total_visitas, 2),
+        }
+        for h, cantidad in sorted(conteo_hora_atipica.items())
     ]
 
     # 5. Frecuencia y Recurrencia por Alumno
@@ -287,6 +436,7 @@ def obtener_analisis_descriptivo_ingresos(fecha_inicio=None, fecha_fin=None, sed
     alumno_dias = {}
     alumno_escuelas = {}
     alumno_codigos = {}
+    alumno_codigos_completos = {}
     for r in filas:
         al_id = r[1]
         f_dia = r[5].date()
@@ -297,11 +447,14 @@ def obtener_analisis_descriptivo_ingresos(fecha_inicio=None, fecha_fin=None, sed
         alumno_escuelas[al_id] = r[2]
         if al_id not in alumno_codigos:
             alumno_codigos[al_id] = enmascarar_codigo(r[8])
+            if mostrar_codigo_completo:
+                alumno_codigos_completos[al_id] = str(r[8])
 
     ranking_alumnos_por_visitas = sorted(
         [
             {
                 "codigo_mascarado": alumno_codigos[al_id],
+                **({"codigo_matricula": alumno_codigos_completos[al_id]} if mostrar_codigo_completo else {}),
                 "escuela": alumno_escuelas[al_id],
                 "total_visitas": alumno_visitas[al_id],
                 "dias_distintos": len(alumno_dias[al_id]),
@@ -319,6 +472,7 @@ def obtener_analisis_descriptivo_ingresos(fecha_inicio=None, fecha_fin=None, sed
         [
             {
                 "codigo_mascarado": alumno_codigos[al_id],
+                **({"codigo_matricula": alumno_codigos_completos[al_id]} if mostrar_codigo_completo else {}),
                 "escuela": alumno_escuelas[al_id],
                 "dias_distintos": len(alumno_dias[al_id]),
                 "dias_activos": len(alumno_dias[al_id]),
@@ -374,28 +528,32 @@ def obtener_analisis_descriptivo_ingresos(fecha_inicio=None, fecha_fin=None, sed
         }
     }
 
-    return {
+    resultado = {
+        **metadatos,
         "status": "success",
-        "sede": sede,
-        "periodo_analizado": {
-            "fecha_inicio": FECHA_MINIMA_DATOS.isoformat(),
-            "fecha_fin": FECHA_MAXIMA_DATOS.isoformat(),
-            "total_fechas_operativas": 39
-        },
         "fuente": "dbo.RegistroIngresos (EsPrueba = 0), dbo.Alumnos, dbo.Salas",
         "total_visitas": total_visitas,
         "total_alumnos": total_alumnos_unicos,
-        "registros_prueba_excluidos": 38,
+        "total_dias_distintos": len({r[5].date() for r in filas}),
         "visitas_por_mes": visitas_por_mes,
         "visitas_por_escuela": visitas_por_escuela,
         "visitas_por_sala": visitas_por_sala,
         "visitas_por_piso": visitas_por_piso,
         "resumen_pisos": resumen_pisos_configurados,
         "visitas_por_hora": visitas_por_hora,
+        "visitas_por_hora_atipica": visitas_por_hora_atipica,
+        "total_visitas_horario_operativo": sum(conteo_hora.values()),
+        "total_visitas_horario_atipico": sum(conteo_hora_atipica.values()),
         "frecuencia_por_alumno": frecuencia_por_alumno,
         "ranking_alumnos_por_visitas": ranking_alumnos_por_visitas,
         "ranking_alumnos_por_dias": ranking_alumnos_por_dias
     }
+
+    _CACHE_ANALISIS_DESCRIPTIVO[clave_cache] = {
+        "timestamp": ahora,
+        "datos": resultado
+    }
+    return copy.deepcopy(resultado)
 
 
 class PredictorRetornoAlumno:
@@ -448,34 +606,71 @@ class PredictorRetornoAlumno:
         if not codigo_matricula and not alumno_id:
             raise ValueError("Debe proporcionar el código de matrícula o el identificador del alumno.")
 
-        # Resolver fecha de referencia (por defecto, última fecha del periodo: 2026-07-31)
+        # Resolver fecha de referencia provista explícitamente por el usuario
+        fecha_referencia_provista = False
         if fecha_referencia:
             if isinstance(fecha_referencia, (date, datetime)):
                 f_ref = fecha_referencia.date() if isinstance(fecha_referencia, datetime) else fecha_referencia
+                fecha_referencia_provista = True
             elif isinstance(fecha_referencia, str):
                 fecha_str = fecha_referencia.strip()
-                formatos = ["%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%Y/%m/%d"]
-                f_ref = None
-                for fmt in formatos:
-                    try:
-                        f_ref = datetime.strptime(fecha_str, fmt).date()
-                        break
-                    except ValueError:
-                        continue
-                if f_ref is None:
-                    raise ValueError(
-                        f"La fecha de referencia '{fecha_str}' no tiene un formato válido. "
-                        "Utilice el formato AAAA-MM-DD (ejemplo: 2026-07-31) o DD/MM/AAAA."
-                    )
+                if fecha_str:
+                    formatos = ["%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%Y/%m/%d"]
+                    f_ref = None
+                    for fmt in formatos:
+                        try:
+                            f_ref = datetime.strptime(fecha_str, fmt).date()
+                            fecha_referencia_provista = True
+                            break
+                        except ValueError:
+                            continue
+                    if f_ref is None:
+                        raise ValueError(
+                            f"La fecha de referencia '{fecha_str}' no tiene un formato válido. "
+                            "Utilice el formato AAAA-MM-DD (ejemplo: 2026-07-31) o DD/MM/AAAA."
+                        )
+                else:
+                    f_ref = None
             else:
                 raise ValueError("La fecha de referencia proporcionada no es válida.")
         else:
-            f_ref = FECHA_MAXIMA_DATOS
+            f_ref = None
 
         # 1. Identificar al alumno en la BD sin consultar DNI
         with get_db_cursor(autocommit=True) as (_, cursor):
             if cursor is None:
                 raise ConnectionError("No fue posible conectarse a SQL Server.")
+
+            # Consultar la última fecha de ingresos registrada en BD (excluyendo pruebas) una sola vez
+            cursor.execute("""
+                SELECT MAX(CAST(FechaHora AS DATE))
+                FROM dbo.RegistroIngresos
+                WHERE ISNULL(EsPrueba, 0) = 0
+            """)
+            row_max_bd = cursor.fetchone()
+            ultima_fecha_bd = row_max_bd[0] if (row_max_bd and row_max_bd[0]) else None
+            ultima_fecha_bd_str = ultima_fecha_bd.isoformat() if ultima_fecha_bd else None
+            origen_fecha_ref = "seleccionada_por_usuario" if fecha_referencia_provista else "predeterminada_ultima_bd"
+
+            # Si el usuario no seleccionó fecha, usar la última fecha real disponible en BD
+            if not fecha_referencia_provista:
+                if ultima_fecha_bd is None:
+                    # Sin datos en BD y sin fecha seleccionada: devolver estado explícito sin inventar fecha
+                    cod_mascarado = enmascarar_codigo(str(codigo_matricula or alumno_id))
+                    return {
+                        "status": "sin_datos_en_bd",
+                        "confiable": False,
+                        "codigo_mascarado": cod_mascarado,
+                        "mensaje": (
+                            "No se encontraron registros de ingresos en la base de datos para determinar "
+                            "la fecha de referencia por defecto. Seleccione una fecha de referencia manualmente."
+                        ),
+                        "fecha_referencia": None,
+                        "ultima_fecha_bd": None,
+                        "fecha_entrenamiento_artefacto": FECHA_ENTRENAMIENTO_ARTEFACTO.isoformat(),
+                        "es_experimental": False
+                    }
+                f_ref = ultima_fecha_bd
 
             if codigo_matricula:
                 cursor.execute("""
@@ -501,6 +696,49 @@ class PredictorRetornoAlumno:
             id_alumno = int(alumno_row[0])
             cod_alumno = str(alumno_row[1]) if alumno_row[1] else "N/D"
             escuela_alumno = str(alumno_row[2])
+            cod_mascarado = enmascarar_codigo(cod_alumno)
+
+            # Si la fecha consultada es posterior al último registro en BD, no se puede calcular
+            # una predicción porque faltan fechas intermedias con cobertura confirmada.
+            if ultima_fecha_bd and f_ref > ultima_fecha_bd:
+                dias_faltantes = (f_ref - ultima_fecha_bd).days
+                return {
+                    "status": "no_calculable",
+                    "confiable": False,
+                    "codigo_mascarado": cod_mascarado,
+                    "escuela": escuela_alumno,
+                    "fecha_referencia": f_ref.isoformat(),
+                    "origen_fecha_referencia": origen_fecha_ref,
+                    "fecha_corte_bd": ultima_fecha_bd_str,
+                    "ultima_fecha_bd": ultima_fecha_bd_str,
+                    "fecha_entrenamiento_artefacto": FECHA_ENTRENAMIENTO_ARTEFACTO.isoformat(),
+                    "fecha_corte_entrenamiento": FECHA_ENTRENAMIENTO_ARTEFACTO.isoformat(),
+                    "proximo_dia_operativo": None,
+                    "horizonte_prediccion": "H1",
+                    "es_experimental": True,
+                    "tipo_prediccion": "no_calculable_sin_cobertura",
+                    "estado_validacion": "sin_cobertura_confirmada",
+                    "probabilidad_retorno": None,
+                    "nivel_probabilidad": "No calculable",
+                    "motivo": "cobertura_no_confirmada",
+                    "mensaje": (
+                        f"No calculable: La fecha de referencia consultada ({f_ref.strftime('%d/%m/%Y')}) es posterior "
+                        f"al último día con registros en base de datos ({ultima_fecha_bd.strftime('%d/%m/%Y')}). "
+                        f"Faltan {dias_faltantes} día(s) intermedio(s) sin cobertura confirmada."
+                    ),
+                    "explicacion": (
+                        f"La base de datos cuenta con registros confirmados únicamente hasta el {ultima_fecha_bd.strftime('%d/%m/%Y')}. "
+                        "No se puede calcular una predicción para una fecha posterior porque faltan registros de ingresos intermedios."
+                    ),
+                    "desfase_temporal": {
+                        "es_desactualizado": True,
+                        "dias_desfase_bd": dias_faltantes,
+                        "dias_desfase_corte": dias_faltantes,
+                        "vigente": False,
+                        "desfase_severo": True,
+                        "estado_vigencia": "posterior_al_corte_bd"
+                    }
+                }
 
             # 2. Consultar historial cronológico estricto del alumno hasta f_ref (EsPrueba = 0)
             cursor.execute("""
@@ -527,6 +765,18 @@ class PredictorRetornoAlumno:
         proximo_dia_operativo = calcular_proximo_dia_operativo(f_ref, fechas_operativas_globales)
         dias_operativos_transcurridos = max(1, len(fechas_operativas_globales))
 
+        ultima_fecha_bd_str = ultima_fecha_bd.isoformat() if ultima_fecha_bd else None
+        origen_fecha_ref = "seleccionada_por_usuario" if fecha_referencia_provista else "predeterminada_ultima_bd"
+        es_exp_general = bool(f_ref > FECHA_ENTRENAMIENTO_ARTEFACTO)
+        tipo_pred_general = "experimental_post_entrenamiento" if es_exp_general else "vigente_en_periodo_entrenamiento"
+        estado_val_general = "pendiente_validacion_prospectiva" if es_exp_general else "validada_en_muestra"
+        adv_exp_general = (
+            "Predicción experimental: El modelo en producción fue entrenado y evaluado con datos "
+            f"hasta el {FECHA_ENTRENAMIENTO_ARTEFACTO.strftime('%d/%m/%Y')}. La fecha consultada utiliza "
+            "datos del historial de la base de datos pero corresponde a un periodo posterior en régimen experimental "
+            "pendiente de validación prospectiva en sombra; no debe interpretarse como una predicción validada en producción."
+        ) if es_exp_general else None
+
         # Caso A: Cero visitas en el historial
         if not visitas_rows:
             return {
@@ -535,21 +785,39 @@ class PredictorRetornoAlumno:
                 "codigo_mascarado": cod_mascarado,
                 "escuela": escuela_alumno,
                 "fecha_referencia": f_ref.isoformat(),
+                "origen_fecha_referencia": origen_fecha_ref,
+                "fecha_corte_bd": ultima_fecha_bd_str,
+                "ultima_fecha_bd": ultima_fecha_bd_str,
+                "fecha_entrenamiento_artefacto": FECHA_ENTRENAMIENTO_ARTEFACTO.isoformat(),
+                "fecha_corte_entrenamiento": FECHA_ENTRENAMIENTO_ARTEFACTO.isoformat(),
                 "proximo_dia_operativo": proximo_dia_operativo.isoformat(),
+                "horizonte_prediccion": "H1",
+                "es_experimental": es_exp_general,
+                "tipo_prediccion": tipo_pred_general,
+                "estado_validacion": estado_val_general,
+                "advertencia_experimental": adv_exp_general,
                 "dias_activos_historicos": 0,
                 "total_visitas_historicas": 0,
                 "probabilidad_retorno": None,
                 "nivel_probabilidad": "Indeterminado",
                 "definicion_retorno": (
                     "Probabilidad estimada de que el alumno registre al menos un ingreso en el siguiente "
-                    f"día hábil operativo de biblioteca ({proximo_dia_operativo.isoformat()})."
+                    f"día hábil operativo de biblioteca ({proximo_dia_operativo.isoformat()}). "
+                    "Horizonte H1 operativo (lunes a viernes, 08:00 a 20:45)."
                 ),
                 "explicacion": (
                     f"El alumno con código {cod_mascarado} no registra ningún ingreso previo en el sistema "
                     f"hasta el {f_ref.isoformat()}. No se dispone de datos para estimar su retorno."
                 ),
+                "advertencia": (
+                    "Estimación orientativa de propensión de asistencia. "
+                    "No representa certeza matemática ni debe utilizarse para calificar abandono, deserción "
+                    "ni para calcular directamente afluencia agregada total."
+                ),
                 "limites_cobertura": {
-                    "periodo_disponible": f"{FECHA_MINIMA_DATOS.isoformat()} a {FECHA_MAXIMA_DATOS.isoformat()}",
+                    "corte_entrenamiento_artefacto": FECHA_ENTRENAMIENTO_ARTEFACTO.isoformat(),
+                    "ultima_fecha_ingresos_bd": ultima_fecha_bd_str,
+                    "periodo_disponible": f"{FECHA_MINIMA_DATOS.isoformat()} a {FECHA_ENTRENAMIENTO_ARTEFACTO.isoformat()}",
                     "registros_prueba_excluidos": 38
                 }
             }
@@ -567,14 +835,25 @@ class PredictorRetornoAlumno:
                 "codigo_mascarado": cod_mascarado,
                 "escuela": escuela_alumno,
                 "fecha_referencia": f_ref.isoformat(),
+                "origen_fecha_referencia": origen_fecha_ref,
+                "fecha_corte_bd": ultima_fecha_bd_str,
+                "ultima_fecha_bd": ultima_fecha_bd_str,
+                "fecha_entrenamiento_artefacto": FECHA_ENTRENAMIENTO_ARTEFACTO.isoformat(),
+                "fecha_corte_entrenamiento": FECHA_ENTRENAMIENTO_ARTEFACTO.isoformat(),
                 "proximo_dia_operativo": proximo_dia_operativo.isoformat(),
+                "horizonte_prediccion": "H1",
+                "es_experimental": es_exp_general,
+                "tipo_prediccion": tipo_pred_general,
+                "estado_validacion": estado_val_general,
+                "advertencia_experimental": adv_exp_general,
                 "dias_activos_historicos": dias_activos,
                 "total_visitas_historicas": total_visitas,
                 "probabilidad_retorno": None,
                 "nivel_probabilidad": "Indeterminado (historial insuficiente)",
                 "definicion_retorno": (
                     "Probabilidad estimada de que el alumno registre al menos un ingreso en el siguiente "
-                    f"día hábil operativo de biblioteca ({proximo_dia_operativo.isoformat()})."
+                    f"día hábil operativo de biblioteca ({proximo_dia_operativo.isoformat()}). "
+                    "Horizonte H1 operativo (lunes a viernes, 08:00 a 20:45)."
                 ),
                 "explicacion": (
                     f"Historial insuficiente: El alumno registra únicamente {dias_activos} día(s) con visitas "
@@ -582,9 +861,16 @@ class PredictorRetornoAlumno:
                     "de 3 días activos para identificar patrones de asistencia y calcular una estimación de retorno confiable. "
                     "Emitir una probabilidad con 1 o 2 visitas resultaría estadísticamente espurio e impreciso."
                 ),
+                "advertencia": (
+                    "Estimación orientativa de propensión de asistencia. "
+                    "No representa certeza matemática ni debe utilizarse para calificar abandono, deserción "
+                    "ni para calcular directamente afluencia agregada total."
+                ),
                 "limites_cobertura": {
                     "criterio_minimo": "Mínimo 3 días activos en el historial previo",
-                    "periodo_disponible": f"{FECHA_MINIMA_DATOS.isoformat()} a {FECHA_MAXIMA_DATOS.isoformat()}",
+                    "corte_entrenamiento_artefacto": FECHA_ENTRENAMIENTO_ARTEFACTO.isoformat(),
+                    "ultima_fecha_ingresos_bd": ultima_fecha_bd_str,
+                    "periodo_disponible": f"{FECHA_MINIMA_DATOS.isoformat()} a {FECHA_ENTRENAMIENTO_ARTEFACTO.isoformat()}",
                     "registros_prueba_excluidos": 38
                 }
             }
@@ -635,51 +921,116 @@ class PredictorRetornoAlumno:
         }
         nombre_proximo_dia = dia_nombre_es.get(proximo_dia_operativo.weekday(), "día hábil")
 
-        # Evaluación de desfase temporal respecto a la fecha máxima de datos (2026-07-31)
-        dias_desfase_corte = (f_ref - FECHA_MAXIMA_DATOS).days
-        es_desactualizado = dias_desfase_corte > 0
-        es_desfase_critico = dias_desfase_corte > 30
-        es_desfase_severo = dias_desfase_corte > 60
-        es_vigente = not es_desfase_severo
+        # ---------------------------------------------------------------------
+        # Evaluación rigurosa de desfase temporal y régimen metodológico
+        # ---------------------------------------------------------------------
+        # 1. Desfase respecto a los registros disponibles en base de datos:
+        dias_desfase_bd = (f_ref - ultima_fecha_bd).days if ultima_fecha_bd else 0
+        es_desactualizado_bd = dias_desfase_bd > 0
+        es_desfase_critico_bd = dias_desfase_bd > 30
+        es_desfase_severo_bd = dias_desfase_bd > 60
+
+        # 2. Relación respecto a la fecha de entrenamiento del artefacto (corte: 31/07/2026):
+        dias_desfase_entrenamiento = (f_ref - FECHA_ENTRENAMIENTO_ARTEFACTO).days
+        es_posterior_entrenamiento = dias_desfase_entrenamiento > 0
+
+        # Régimen de validación metodológica
+        if es_posterior_entrenamiento:
+            es_experimental = True
+            tipo_prediccion = "experimental_post_entrenamiento"
+            estado_validacion = "pendiente_validacion_prospectiva"
+            advertencia_experimental = (
+                "Predicción experimental: El modelo en producción fue entrenado y evaluado con datos "
+                f"hasta el {FECHA_ENTRENAMIENTO_ARTEFACTO.strftime('%d/%m/%Y')}. La fecha consultada utiliza "
+                "datos del historial de la base de datos pero corresponde a un periodo posterior en régimen experimental "
+                "pendiente de validación prospectiva en sombra; no debe interpretarse como una predicción validada en producción."
+            )
+        else:
+            es_experimental = False
+            tipo_prediccion = "vigente_en_periodo_entrenamiento"
+            estado_validacion = "validada_en_muestra"
+            advertencia_experimental = None
+
+        # Evaluación de vigencia técnica:
+        # Si la fecha consultada sobrepasa en >60 días la última fecha cargada en BD, los datos faltantes
+        # deprimen espuriamente la probabilidad (inactividad artificial por atraso de ingesta en BD).
+        if es_desfase_severo_bd:
+            es_vigente = False
+            estado_vigencia = "no_representativo"
+            es_desfase_severo = True
+            es_desfase_critico = True
+        elif es_desfase_critico_bd:
+            es_vigente = True
+            estado_vigencia = "desactualizado_moderado"
+            es_desfase_severo = False
+            es_desfase_critico = True
+        else:
+            es_vigente = True
+            estado_vigencia = "experimental_pendiente_validacion" if es_experimental else "vigente"
+            es_desfase_severo = False
+            es_desfase_critico = False
+
+        fecha_corte_bd_fmt = ultima_fecha_bd.strftime('%d/%m/%Y') if ultima_fecha_bd else 'N/D'
 
         info_desfase = {
-            "es_desactualizado": es_desactualizado,
-            "dias_desfase_corte": max(0, dias_desfase_corte),
-            "fecha_corte_bd": FECHA_MAXIMA_DATOS.isoformat(),
+            "es_desactualizado": es_desactualizado_bd,
+            "dias_desfase_bd": max(0, dias_desfase_bd),
+            "dias_desfase_corte": max(0, dias_desfase_bd),
+            "dias_desfase_entrenamiento": max(0, dias_desfase_entrenamiento),
             "fecha_consultada": f_ref.isoformat(),
+            "origen_fecha_referencia": origen_fecha_ref,
+            "fecha_corte_bd": ultima_fecha_bd_str,
+            "ultima_fecha_bd": ultima_fecha_bd_str,
+            "fecha_entrenamiento_artefacto": FECHA_ENTRENAMIENTO_ARTEFACTO.isoformat(),
+            "fecha_corte_entrenamiento": FECHA_ENTRENAMIENTO_ARTEFACTO.isoformat(),
             "desfase_critico": es_desfase_critico,
             "desfase_severo": es_desfase_severo,
             "vigente": es_vigente,
+            "es_experimental": es_experimental,
+            "tipo_prediccion": tipo_prediccion,
+            "estado_validacion": estado_validacion,
             "aviso": (
                 (
-                    f"Aviso de datos desactualizados: La base de datos de visitas contiene registros únicamente "
-                    f"hasta el {FECHA_MAXIMA_DATOS.strftime('%d/%m/%Y')}. La fecha consultada ({f_ref.strftime('%d/%m/%Y')}) "
-                    f"presenta un desfase de {dias_desfase_corte} días sin nuevos ingresos registrados en el sistema. "
+                    f"Aviso de datos desactualizados en BD: La base de datos contiene registros únicamente "
+                    f"hasta el {fecha_corte_bd_fmt}. La fecha consultada ({f_ref.strftime('%d/%m/%Y')}) "
+                    f"presenta un desfase de {dias_desfase_bd} días sin nuevos ingresos registrados en el sistema. "
                     + (
                         "Al superar los 60 días de desfase, esta estimación no debe considerarse como una predicción vigente "
                         "del comportamiento actual del estudiante. Para consultar la propensión real en su periodo activo, "
-                        "consulte a la fecha de corte institucional (31/07/2026)."
+                        f"consulte a la fecha de corte en BD ({fecha_corte_bd_fmt}) o a la de entrenamiento ({FECHA_ENTRENAMIENTO_ARTEFACTO.strftime('%d/%m/%Y')})."
                         if es_desfase_severo else
-                        "La inactividad calculada deprime la probabilidad a valores basales. "
-                        "Para evaluar la propensión real del alumno con datos activos, consulte a la fecha de corte institucional (31/07/2026)."
+                        "La inactividad calculada deprime la probabilidad a valores basales."
                     )
-                ) if es_desactualizado else None
+                ) if es_desactualizado_bd else (
+                    (
+                        f"Aviso de régimen experimental: El artefacto activo fue entrenado hasta el {FECHA_ENTRENAMIENTO_ARTEFACTO.strftime('%d/%m/%Y')}. "
+                        f"La fecha consultada ({f_ref.strftime('%d/%m/%Y')}) cuenta con datos en BD pero corresponde a un periodo "
+                        "posterior pendiente de validación prospectiva en sombra."
+                    ) if es_experimental else None
+                )
             )
         }
 
         if es_desfase_severo:
             mensaje = (
-                f"[DATOS DESACTUALIZADOS >60 DÍAS] El alumno con código {cod_mascarado} ({escuela_alumno}) presenta "
-                f"un desfase de {dias_desfase_corte} días respecto al corte en BD ({FECHA_MAXIMA_DATOS.strftime('%d/%m/%Y')}). "
+                f"[DATOS DESACTUALIZADOS EN BD >60 DÍAS] El alumno con código {cod_mascarado} ({escuela_alumno}) presenta "
+                f"un desfase de {dias_desfase_bd} días respecto a la última fecha en BD ({fecha_corte_bd_fmt}). "
                 "La predicción no es representativa como probabilidad vigente para la fecha actual. "
-                "Consulte la estimación histórica a la fecha de corte (31/07/2026) para observar su propensión en periodo activo."
+                f"Consulte la estimación histórica a la fecha de corte ({FECHA_ENTRENAMIENTO_ARTEFACTO.strftime('%d/%m/%Y')}) para observar su propensión en periodo validado."
+            )
+        elif es_experimental:
+            mensaje = (
+                f"[EXPERIMENTAL - PENDIENTE VALIDACIÓN PROSPECTIVA] El alumno con código {cod_mascarado} ({escuela_alumno}) "
+                f"presenta una probabilidad {nivel.lower()} ({round(prob * 100, 1)}%) de volver a la biblioteca el siguiente día hábil operativo "
+                f"({nombre_proximo_dia} {proximo_dia_operativo.isoformat()}). "
+                f"Historial previo al {f_ref.isoformat()}: {dias_activos} días activos ({total_visitas} visitas totales, última visita hace {recencia_dias} días). "
+                f"Modelo entrenado al {FECHA_ENTRENAMIENTO_ARTEFACTO.strftime('%d/%m/%Y')}; inferencia pendiente de validación prospectiva."
             )
         elif es_desfase_critico:
             mensaje = (
-                f"[AVISO: DATOS DESACTUALIZADOS] El alumno con código {cod_mascarado} ({escuela_alumno}) presenta "
-                f"un desfase de {dias_desfase_corte} días respecto al corte en BD (31/07/2026). "
-                f"La estimación calculada ({round(prob * 100, 1)}%) está deprimida por falta de datos recientes en el sistema. "
-                "Para conocer la propensión activa del alumno, consulte con fecha 31/07/2026."
+                f"[AVISO: DATOS DESACTUALIZADOS EN BD] El alumno con código {cod_mascarado} ({escuela_alumno}) presenta "
+                f"un desfase de {dias_desfase_bd} días respecto al corte en BD ({fecha_corte_bd_fmt}). "
+                f"La estimación calculada ({round(prob * 100, 1)}%) está deprimida por falta de datos recientes en el sistema."
             )
         else:
             mensaje = (
@@ -691,21 +1042,34 @@ class PredictorRetornoAlumno:
 
         return {
             "status": "success",
-            "confiable": not es_desfase_critico,
+            "confiable": not es_desfase_severo,
             "vigente": es_vigente,
-            "estado_vigencia": "no_representativo" if es_desfase_severo else ("desactualizado_moderado" if es_desactualizado else "vigente"),
+            "estado_vigencia": estado_vigencia,
             "codigo_mascarado": cod_mascarado,
             "escuela": escuela_alumno,
             "fecha_referencia": f_ref.isoformat(),
-            "fecha_corte_bd": FECHA_MAXIMA_DATOS.isoformat(),
+            "origen_fecha_referencia": origen_fecha_ref,
+            "fecha_corte_bd": ultima_fecha_bd_str,
+            "ultima_fecha_bd": ultima_fecha_bd_str,
+            "fecha_entrenamiento_artefacto": FECHA_ENTRENAMIENTO_ARTEFACTO.isoformat(),
+            "fecha_corte_entrenamiento": FECHA_ENTRENAMIENTO_ARTEFACTO.isoformat(),
             "proximo_dia_operativo": proximo_dia_operativo.isoformat(),
+            "horizonte_prediccion": "H1",
             "definicion_retorno": (
                 "Probabilidad estimada de que el alumno registre al menos un ingreso en el siguiente "
-                f"día hábil operativo de biblioteca ({nombre_proximo_dia} {proximo_dia_operativo.isoformat()})."
+                f"día hábil operativo de biblioteca ({nombre_proximo_dia} {proximo_dia_operativo.isoformat()}). "
+                "Horizonte H1 operativo (lunes a viernes, 08:00 a 20:45)."
             ),
             "probabilidad_retorno": round(prob, 4),
             "probabilidad_porcentaje": f"{round(prob * 100, 1)}%",
             "nivel_probabilidad": nivel,
+            "es_experimental": es_experimental,
+            "tipo_prediccion": tipo_prediccion,
+            "estado_validacion": estado_validacion,
+            "advertencia_experimental": advertencia_experimental,
+            "dias_desfase_bd": max(0, dias_desfase_bd),
+            "dias_desfase_corte": max(0, dias_desfase_bd),
+            "dias_desfase_entrenamiento": max(0, dias_desfase_entrenamiento),
             "desfase_temporal": info_desfase,
             "aviso_desactualizado": info_desfase["aviso"],
             "es_desfase_critico": es_desfase_critico,
@@ -721,11 +1085,15 @@ class PredictorRetornoAlumno:
                 "tasa_asistencia_periodo": round(tasa_asistencia, 4)
             },
             "advertencia": (
-                "Estimación orientativa basada en el historial disponible de junio–julio de 2026. "
-                "Una probabilidad calculada no representa una certeza matemática ni garantiza resultados futuros."
+                "Estimación orientativa de propensión de asistencia. "
+                "No representa certeza matemática ni debe utilizarse para calificar abandono, deserción "
+                "ni para calcular directamente afluencia agregada total."
             ),
             "limites_cobertura": {
-                "periodo_disponible": f"{FECHA_MINIMA_DATOS.isoformat()} a {FECHA_MAXIMA_DATOS.isoformat()}",
+                "periodo_entrenamiento_modelo": f"{FECHA_MINIMA_DATOS.isoformat()} a {FECHA_ENTRENAMIENTO_ARTEFACTO.isoformat()}",
+                "corte_entrenamiento_artefacto": FECHA_ENTRENAMIENTO_ARTEFACTO.isoformat(),
+                "ultima_fecha_ingresos_bd": ultima_fecha_bd_str,
+                "periodo_disponible": f"{FECHA_MINIMA_DATOS.isoformat()} a {FECHA_ENTRENAMIENTO_ARTEFACTO.isoformat()}",
                 "registros_prueba_excluidos": 38
             },
             "mensaje": mensaje

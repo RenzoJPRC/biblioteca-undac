@@ -1,0 +1,11 @@
+{
+  "fecha": "2026-10-21T23:53:37.225933-05:00",
+  "pruebas": 12,
+  "resultado": "OK",
+  "comando": ".venv/Scripts/python.exe -m unittest tests.test_retorno_7_operativos_experimental -v",
+  "modelos_existentes_intactos": true,
+  "consultas_reales_completadas": 2,
+  "solo_SELECT": true,
+  "sin_exportar_identificadores": true,
+  "test_sha256": "96cc9646b7b945f48012ee68f7cf27314e6af800643b2444aa5a3ce33082866f"
+}

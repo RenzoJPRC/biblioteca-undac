@@ -1,0 +1,647 @@
+{
+    "metadatos_benchmark": {
+        "fecha_ejecucion": "2026-10-21",
+        "sede": "Central",
+        "metodologia": "Purged Temporal Split con validación purgada interna y prueba ciega",
+        "poblacion_evaluada": "Alumnos conocidos con regularidad demostrable (>= 3 días activos previos)",
+        "distincion_agosto": [
+            "Cierres efectivos: Sábados, domingos y feriados confirmados (29/06, 23-29/07, 06/08, 30/08, 08/10).",
+            "Atención reducida en agosto: 03/08 al 21/08 (jornada diurna con afluencia intersemestral).",
+            "Atención regular: Junio, Julio, 24-31/08, Septiembre y Octubre (94 fechas operativas totales)."
+        ],
+        "tratamiento_julio_17_31": [
+            "Para H1: Resuelto sin censura (todas tienen siguiente día observable, 31/07 -> 03/08).",
+            "Para H7: Resuelto en agosto (17/07 completa al 04/08; 31/07 completa al 17/08)."
+        ],
+        "censuras_corte_octubre": [
+            "H1 censurado: Referencias >= 20/10/2026 (siguiente día 21/10 en curso).",
+            "H7 censurado: Referencias >= 12/10/2026 (ventana de 7 días no concluida al corte)."
+        ]
+    },
+    "horizontes": {
+        "horizonte_1_dia": {
+            "nombre": "Horizonte 1 (Siguiente Día Hábil)",
+            "horizonte_dias": 1,
+            "particiones": {
+                "train_obs": 49096,
+                "train_fechas": 39,
+                "val_obs": 45774,
+                "val_fechas": 21,
+                "val_fechas_purgadas": 1,
+                "test_obs": 28938,
+                "test_fechas": 12,
+                "test_fechas_censuradas": 1
+            },
+            "ganador_declarado_en_validacion": "Regresión Logística",
+            "mejor_macro_f1_validacion": 0.6552,
+            "modelos": {
+                "Dummy (Clase Mayoritaria)": {
+                    "tipo": "Línea base ingenua (fuera de los 5 candidatos)",
+                    "es_linea_base": true,
+                    "umbral_seleccionado_en_validacion": 0.15,
+                    "desempeno_validacion_septiembre": {
+                        "metricas_independientes_del_umbral": {
+                            "auc_roc": 0.5,
+                            "pr_auc": 0.11,
+                            "brier_score": 0.11
+                        },
+                        "metricas_dependientes_del_umbral": {
+                            "umbral": 0.15,
+                            "balanced_accuracy": 0.5,
+                            "accuracy": 0.89,
+                            "precision_positivo": 0.0,
+                            "recall_positivo": 0.0,
+                            "f1_score_positivo": 0.0,
+                            "macro_f1": 0.4709,
+                            "matriz_confusion": {
+                                "verdaderos_negativos_TN": 40740,
+                                "falsos_positivos_FP": 0,
+                                "falsos_negativos_FN": 5034,
+                                "verdaderos_positivos_TP": 0
+                            }
+                        }
+                    },
+                    "desempeno_prueba_final_octubre": {
+                        "metricas_independientes_del_umbral": {
+                            "auc_roc": 0.5,
+                            "pr_auc": 0.1391,
+                            "brier_score": 0.1391
+                        },
+                        "metricas_dependientes_del_umbral": {
+                            "umbral": 0.15,
+                            "balanced_accuracy": 0.5,
+                            "accuracy": 0.8609,
+                            "precision_positivo": 0.0,
+                            "recall_positivo": 0.0,
+                            "f1_score_positivo": 0.0,
+                            "macro_f1": 0.4626,
+                            "matriz_confusion": {
+                                "verdaderos_negativos_TN": 24914,
+                                "falsos_positivos_FP": 0,
+                                "falsos_negativos_FN": 4024,
+                                "verdaderos_positivos_TP": 0
+                            }
+                        }
+                    }
+                },
+                "Regresión Logística": {
+                    "tipo": "Modelo lineal regularizado balanceado",
+                    "es_linea_base": false,
+                    "umbral_seleccionado_en_validacion": 0.6,
+                    "desempeno_validacion_septiembre": {
+                        "metricas_independientes_del_umbral": {
+                            "auc_roc": 0.7689,
+                            "pr_auc": 0.3459,
+                            "brier_score": 0.1496
+                        },
+                        "metricas_dependientes_del_umbral": {
+                            "umbral": 0.6,
+                            "balanced_accuracy": 0.6676,
+                            "accuracy": 0.8547,
+                            "precision_positivo": 0.3634,
+                            "recall_positivo": 0.4277,
+                            "f1_score_positivo": 0.3929,
+                            "macro_f1": 0.6552,
+                            "matriz_confusion": {
+                                "verdaderos_negativos_TN": 36968,
+                                "falsos_positivos_FP": 3772,
+                                "falsos_negativos_FN": 2881,
+                                "verdaderos_positivos_TP": 2153
+                            }
+                        }
+                    },
+                    "desempeno_prueba_final_octubre": {
+                        "metricas_independientes_del_umbral": {
+                            "auc_roc": 0.7944,
+                            "pr_auc": 0.4496,
+                            "brier_score": 0.1474
+                        },
+                        "metricas_dependientes_del_umbral": {
+                            "umbral": 0.6,
+                            "balanced_accuracy": 0.6859,
+                            "accuracy": 0.8507,
+                            "precision_positivo": 0.4627,
+                            "recall_positivo": 0.4578,
+                            "f1_score_positivo": 0.4602,
+                            "macro_f1": 0.6868,
+                            "matriz_confusion": {
+                                "verdaderos_negativos_TN": 22775,
+                                "falsos_positivos_FP": 2139,
+                                "falsos_negativos_FN": 2182,
+                                "verdaderos_positivos_TP": 1842
+                            }
+                        }
+                    }
+                },
+                "Random Forest": {
+                    "tipo": "Ensamble bagging no lineal balanceado",
+                    "es_linea_base": false,
+                    "umbral_seleccionado_en_validacion": 0.55,
+                    "desempeno_validacion_septiembre": {
+                        "metricas_independientes_del_umbral": {
+                            "auc_roc": 0.7565,
+                            "pr_auc": 0.3216,
+                            "brier_score": 0.1268
+                        },
+                        "metricas_dependientes_del_umbral": {
+                            "umbral": 0.55,
+                            "balanced_accuracy": 0.6541,
+                            "accuracy": 0.8483,
+                            "precision_positivo": 0.3406,
+                            "recall_positivo": 0.405,
+                            "f1_score_positivo": 0.3701,
+                            "macro_f1": 0.6419,
+                            "matriz_confusion": {
+                                "verdaderos_negativos_TN": 36793,
+                                "falsos_positivos_FP": 3947,
+                                "falsos_negativos_FN": 2995,
+                                "verdaderos_positivos_TP": 2039
+                            }
+                        }
+                    },
+                    "desempeno_prueba_final_octubre": {
+                        "metricas_independientes_del_umbral": {
+                            "auc_roc": 0.7871,
+                            "pr_auc": 0.4357,
+                            "brier_score": 0.1209
+                        },
+                        "metricas_dependientes_del_umbral": {
+                            "umbral": 0.55,
+                            "balanced_accuracy": 0.6588,
+                            "accuracy": 0.8572,
+                            "precision_positivo": 0.483,
+                            "recall_positivo": 0.3839,
+                            "f1_score_positivo": 0.4278,
+                            "macro_f1": 0.6731,
+                            "matriz_confusion": {
+                                "verdaderos_negativos_TN": 23260,
+                                "falsos_positivos_FP": 1654,
+                                "falsos_negativos_FN": 2479,
+                                "verdaderos_positivos_TP": 1545
+                            }
+                        }
+                    }
+                },
+                "Extra Trees": {
+                    "tipo": "Ensamble de árboles extremadamente aleatorizados",
+                    "es_linea_base": false,
+                    "umbral_seleccionado_en_validacion": 0.55,
+                    "desempeno_validacion_septiembre": {
+                        "metricas_independientes_del_umbral": {
+                            "auc_roc": 0.7536,
+                            "pr_auc": 0.3261,
+                            "brier_score": 0.1498
+                        },
+                        "metricas_dependientes_del_umbral": {
+                            "umbral": 0.55,
+                            "balanced_accuracy": 0.6609,
+                            "accuracy": 0.8436,
+                            "precision_positivo": 0.3346,
+                            "recall_positivo": 0.4267,
+                            "f1_score_positivo": 0.3751,
+                            "macro_f1": 0.6429,
+                            "matriz_confusion": {
+                                "verdaderos_negativos_TN": 36469,
+                                "falsos_positivos_FP": 4271,
+                                "falsos_negativos_FN": 2886,
+                                "verdaderos_positivos_TP": 2148
+                            }
+                        }
+                    },
+                    "desempeno_prueba_final_octubre": {
+                        "metricas_independientes_del_umbral": {
+                            "auc_roc": 0.7803,
+                            "pr_auc": 0.4323,
+                            "brier_score": 0.1484
+                        },
+                        "metricas_dependientes_del_umbral": {
+                            "umbral": 0.55,
+                            "balanced_accuracy": 0.6757,
+                            "accuracy": 0.8449,
+                            "precision_positivo": 0.4421,
+                            "recall_positivo": 0.4414,
+                            "f1_score_positivo": 0.4417,
+                            "macro_f1": 0.6758,
+                            "matriz_confusion": {
+                                "verdaderos_negativos_TN": 22673,
+                                "falsos_positivos_FP": 2241,
+                                "falsos_negativos_FN": 2248,
+                                "verdaderos_positivos_TP": 1776
+                            }
+                        }
+                    }
+                },
+                "Gradient Boosting": {
+                    "tipo": "Boosting secuencial tradicional",
+                    "es_linea_base": false,
+                    "umbral_seleccionado_en_validacion": 0.25,
+                    "desempeno_validacion_septiembre": {
+                        "metricas_independientes_del_umbral": {
+                            "auc_roc": 0.7526,
+                            "pr_auc": 0.32,
+                            "brier_score": 0.0871
+                        },
+                        "metricas_dependientes_del_umbral": {
+                            "umbral": 0.25,
+                            "balanced_accuracy": 0.6381,
+                            "accuracy": 0.8577,
+                            "precision_positivo": 0.3541,
+                            "recall_positivo": 0.3566,
+                            "f1_score_positivo": 0.3553,
+                            "macro_f1": 0.6377,
+                            "matriz_confusion": {
+                                "verdaderos_negativos_TN": 37466,
+                                "falsos_positivos_FP": 3274,
+                                "falsos_negativos_FN": 3239,
+                                "verdaderos_positivos_TP": 1795
+                            }
+                        }
+                    },
+                    "desempeno_prueba_final_octubre": {
+                        "metricas_independientes_del_umbral": {
+                            "auc_roc": 0.7758,
+                            "pr_auc": 0.4078,
+                            "brier_score": 0.1043
+                        },
+                        "metricas_dependientes_del_umbral": {
+                            "umbral": 0.25,
+                            "balanced_accuracy": 0.6165,
+                            "accuracy": 0.8651,
+                            "precision_positivo": 0.5287,
+                            "recall_positivo": 0.2721,
+                            "f1_score_positivo": 0.3593,
+                            "macro_f1": 0.6419,
+                            "matriz_confusion": {
+                                "verdaderos_negativos_TN": 23938,
+                                "falsos_positivos_FP": 976,
+                                "falsos_negativos_FN": 2929,
+                                "verdaderos_positivos_TP": 1095
+                            }
+                        }
+                    }
+                },
+                "HistGradientBoosting": {
+                    "tipo": "Boosting por histogramas y cuantiles",
+                    "es_linea_base": false,
+                    "umbral_seleccionado_en_validacion": 0.25,
+                    "desempeno_validacion_septiembre": {
+                        "metricas_independientes_del_umbral": {
+                            "auc_roc": 0.755,
+                            "pr_auc": 0.3234,
+                            "brier_score": 0.0871
+                        },
+                        "metricas_dependientes_del_umbral": {
+                            "umbral": 0.25,
+                            "balanced_accuracy": 0.6334,
+                            "accuracy": 0.8654,
+                            "precision_positivo": 0.3752,
+                            "recall_positivo": 0.3359,
+                            "f1_score_positivo": 0.3545,
+                            "macro_f1": 0.6397,
+                            "matriz_confusion": {
+                                "verdaderos_negativos_TN": 37924,
+                                "falsos_positivos_FP": 2816,
+                                "falsos_negativos_FN": 3343,
+                                "verdaderos_positivos_TP": 1691
+                            }
+                        }
+                    },
+                    "desempeno_prueba_final_octubre": {
+                        "metricas_independientes_del_umbral": {
+                            "auc_roc": 0.7825,
+                            "pr_auc": 0.4328,
+                            "brier_score": 0.1033
+                        },
+                        "metricas_dependientes_del_umbral": {
+                            "umbral": 0.25,
+                            "balanced_accuracy": 0.6318,
+                            "accuracy": 0.8676,
+                            "precision_positivo": 0.5424,
+                            "recall_positivo": 0.3052,
+                            "f1_score_positivo": 0.3906,
+                            "macro_f1": 0.6582,
+                            "matriz_confusion": {
+                                "verdaderos_negativos_TN": 23878,
+                                "falsos_positivos_FP": 1036,
+                                "falsos_negativos_FN": 2796,
+                                "verdaderos_positivos_TP": 1228
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "horizonte_7_dias": {
+            "nombre": "Horizonte 2 (Próximos 7 Días Operativos)",
+            "horizonte_dias": 7,
+            "particiones": {
+                "train_obs": 49096,
+                "train_fechas": 39,
+                "val_obs": 32202,
+                "val_fechas": 15,
+                "val_fechas_purgadas": 7,
+                "test_obs": 14225,
+                "test_fechas": 6,
+                "test_fechas_censuradas": 7
+            },
+            "ganador_declarado_en_validacion": "Random Forest",
+            "mejor_macro_f1_validacion": 0.6793,
+            "modelos": {
+                "Dummy (Clase Mayoritaria)": {
+                    "tipo": "Línea base ingenua (fuera de los 5 candidatos)",
+                    "es_linea_base": true,
+                    "umbral_seleccionado_en_validacion": 0.15,
+                    "desempeno_validacion_septiembre": {
+                        "metricas_independientes_del_umbral": {
+                            "auc_roc": 0.5,
+                            "pr_auc": 0.3963,
+                            "brier_score": 0.6037
+                        },
+                        "metricas_dependientes_del_umbral": {
+                            "umbral": 0.15,
+                            "balanced_accuracy": 0.5,
+                            "accuracy": 0.3963,
+                            "precision_positivo": 0.3963,
+                            "recall_positivo": 1.0,
+                            "f1_score_positivo": 0.5677,
+                            "macro_f1": 0.2838,
+                            "matriz_confusion": {
+                                "verdaderos_negativos_TN": 0,
+                                "falsos_positivos_FP": 19439,
+                                "falsos_negativos_FN": 0,
+                                "verdaderos_positivos_TP": 12763
+                            }
+                        }
+                    },
+                    "desempeno_prueba_final_octubre": {
+                        "metricas_independientes_del_umbral": {
+                            "auc_roc": 0.5,
+                            "pr_auc": 0.4671,
+                            "brier_score": 0.5329
+                        },
+                        "metricas_dependientes_del_umbral": {
+                            "umbral": 0.15,
+                            "balanced_accuracy": 0.5,
+                            "accuracy": 0.4671,
+                            "precision_positivo": 0.4671,
+                            "recall_positivo": 1.0,
+                            "f1_score_positivo": 0.6367,
+                            "macro_f1": 0.3184,
+                            "matriz_confusion": {
+                                "verdaderos_negativos_TN": 0,
+                                "falsos_positivos_FP": 7581,
+                                "falsos_negativos_FN": 0,
+                                "verdaderos_positivos_TP": 6644
+                            }
+                        }
+                    }
+                },
+                "Regresión Logística": {
+                    "tipo": "Modelo lineal regularizado balanceado",
+                    "es_linea_base": false,
+                    "umbral_seleccionado_en_validacion": 0.3,
+                    "desempeno_validacion_septiembre": {
+                        "metricas_independientes_del_umbral": {
+                            "auc_roc": 0.725,
+                            "pr_auc": 0.6612,
+                            "brier_score": 0.2286
+                        },
+                        "metricas_dependientes_del_umbral": {
+                            "umbral": 0.3,
+                            "balanced_accuracy": 0.654,
+                            "accuracy": 0.6854,
+                            "precision_positivo": 0.6292,
+                            "recall_positivo": 0.5022,
+                            "f1_score_positivo": 0.5586,
+                            "macro_f1": 0.6571,
+                            "matriz_confusion": {
+                                "verdaderos_negativos_TN": 15662,
+                                "falsos_positivos_FP": 3777,
+                                "falsos_negativos_FN": 6353,
+                                "verdaderos_positivos_TP": 6410
+                            }
+                        }
+                    },
+                    "desempeno_prueba_final_octubre": {
+                        "metricas_independientes_del_umbral": {
+                            "auc_roc": 0.6019,
+                            "pr_auc": 0.5552,
+                            "brier_score": 0.3382
+                        },
+                        "metricas_dependientes_del_umbral": {
+                            "umbral": 0.3,
+                            "balanced_accuracy": 0.5213,
+                            "accuracy": 0.5503,
+                            "precision_positivo": 0.6497,
+                            "recall_positivo": 0.0807,
+                            "f1_score_positivo": 0.1435,
+                            "macro_f1": 0.4193,
+                            "matriz_confusion": {
+                                "verdaderos_negativos_TN": 7292,
+                                "falsos_positivos_FP": 289,
+                                "falsos_negativos_FN": 6108,
+                                "verdaderos_positivos_TP": 536
+                            }
+                        }
+                    }
+                },
+                "Random Forest": {
+                    "tipo": "Ensamble bagging no lineal balanceado",
+                    "es_linea_base": false,
+                    "umbral_seleccionado_en_validacion": 0.35,
+                    "desempeno_validacion_septiembre": {
+                        "metricas_independientes_del_umbral": {
+                            "auc_roc": 0.7361,
+                            "pr_auc": 0.674,
+                            "brier_score": 0.2083
+                        },
+                        "metricas_dependientes_del_umbral": {
+                            "umbral": 0.35,
+                            "balanced_accuracy": 0.676,
+                            "accuracy": 0.7018,
+                            "precision_positivo": 0.6449,
+                            "recall_positivo": 0.5512,
+                            "f1_score_positivo": 0.5944,
+                            "macro_f1": 0.6793,
+                            "matriz_confusion": {
+                                "verdaderos_negativos_TN": 15565,
+                                "falsos_positivos_FP": 3874,
+                                "falsos_negativos_FN": 5728,
+                                "verdaderos_positivos_TP": 7035
+                            }
+                        }
+                    },
+                    "desempeno_prueba_final_octubre": {
+                        "metricas_independientes_del_umbral": {
+                            "auc_roc": 0.7631,
+                            "pr_auc": 0.7608,
+                            "brier_score": 0.2425
+                        },
+                        "metricas_dependientes_del_umbral": {
+                            "umbral": 0.35,
+                            "balanced_accuracy": 0.675,
+                            "accuracy": 0.6906,
+                            "precision_positivo": 0.8144,
+                            "recall_positivo": 0.4372,
+                            "f1_score_positivo": 0.569,
+                            "macro_f1": 0.6638,
+                            "matriz_confusion": {
+                                "verdaderos_negativos_TN": 6919,
+                                "falsos_positivos_FP": 662,
+                                "falsos_negativos_FN": 3739,
+                                "verdaderos_positivos_TP": 2905
+                            }
+                        }
+                    }
+                },
+                "Extra Trees": {
+                    "tipo": "Ensamble de árboles extremadamente aleatorizados",
+                    "es_linea_base": false,
+                    "umbral_seleccionado_en_validacion": 0.45,
+                    "desempeno_validacion_septiembre": {
+                        "metricas_independientes_del_umbral": {
+                            "auc_roc": 0.7332,
+                            "pr_auc": 0.6719,
+                            "brier_score": 0.2001
+                        },
+                        "metricas_dependientes_del_umbral": {
+                            "umbral": 0.45,
+                            "balanced_accuracy": 0.6733,
+                            "accuracy": 0.6975,
+                            "precision_positivo": 0.635,
+                            "recall_positivo": 0.5568,
+                            "f1_score_positivo": 0.5934,
+                            "macro_f1": 0.6763,
+                            "matriz_confusion": {
+                                "verdaderos_negativos_TN": 15354,
+                                "falsos_positivos_FP": 4085,
+                                "falsos_negativos_FN": 5656,
+                                "verdaderos_positivos_TP": 7107
+                            }
+                        }
+                    },
+                    "desempeno_prueba_final_octubre": {
+                        "metricas_independientes_del_umbral": {
+                            "auc_roc": 0.7504,
+                            "pr_auc": 0.7503,
+                            "brier_score": 0.2156
+                        },
+                        "metricas_dependientes_del_umbral": {
+                            "umbral": 0.45,
+                            "balanced_accuracy": 0.6825,
+                            "accuracy": 0.6934,
+                            "precision_positivo": 0.7495,
+                            "recall_positivo": 0.5161,
+                            "f1_score_positivo": 0.6113,
+                            "macro_f1": 0.6791,
+                            "matriz_confusion": {
+                                "verdaderos_negativos_TN": 6435,
+                                "falsos_positivos_FP": 1146,
+                                "falsos_negativos_FN": 3215,
+                                "verdaderos_positivos_TP": 3429
+                            }
+                        }
+                    }
+                },
+                "Gradient Boosting": {
+                    "tipo": "Boosting secuencial tradicional",
+                    "es_linea_base": false,
+                    "umbral_seleccionado_en_validacion": 0.2,
+                    "desempeno_validacion_septiembre": {
+                        "metricas_independientes_del_umbral": {
+                            "auc_roc": 0.7193,
+                            "pr_auc": 0.6708,
+                            "brier_score": 0.2415
+                        },
+                        "metricas_dependientes_del_umbral": {
+                            "umbral": 0.2,
+                            "balanced_accuracy": 0.6701,
+                            "accuracy": 0.6961,
+                            "precision_positivo": 0.6361,
+                            "recall_positivo": 0.5449,
+                            "f1_score_positivo": 0.587,
+                            "macro_f1": 0.6733,
+                            "matriz_confusion": {
+                                "verdaderos_negativos_TN": 15461,
+                                "falsos_positivos_FP": 3978,
+                                "falsos_negativos_FN": 5808,
+                                "verdaderos_positivos_TP": 6955
+                            }
+                        }
+                    },
+                    "desempeno_prueba_final_octubre": {
+                        "metricas_independientes_del_umbral": {
+                            "auc_roc": 0.6776,
+                            "pr_auc": 0.6952,
+                            "brier_score": 0.3557
+                        },
+                        "metricas_dependientes_del_umbral": {
+                            "umbral": 0.2,
+                            "balanced_accuracy": 0.5943,
+                            "accuracy": 0.6198,
+                            "precision_positivo": 0.9109,
+                            "recall_positivo": 0.2062,
+                            "f1_score_positivo": 0.3363,
+                            "macro_f1": 0.535,
+                            "matriz_confusion": {
+                                "verdaderos_negativos_TN": 7447,
+                                "falsos_positivos_FP": 134,
+                                "falsos_negativos_FN": 5274,
+                                "verdaderos_positivos_TP": 1370
+                            }
+                        }
+                    }
+                },
+                "HistGradientBoosting": {
+                    "tipo": "Boosting por histogramas y cuantiles",
+                    "es_linea_base": false,
+                    "umbral_seleccionado_en_validacion": 0.15,
+                    "desempeno_validacion_septiembre": {
+                        "metricas_independientes_del_umbral": {
+                            "auc_roc": 0.7053,
+                            "pr_auc": 0.6628,
+                            "brier_score": 0.2639
+                        },
+                        "metricas_dependientes_del_umbral": {
+                            "umbral": 0.15,
+                            "balanced_accuracy": 0.6649,
+                            "accuracy": 0.6918,
+                            "precision_positivo": 0.6312,
+                            "recall_positivo": 0.535,
+                            "f1_score_positivo": 0.5791,
+                            "macro_f1": 0.668,
+                            "matriz_confusion": {
+                                "verdaderos_negativos_TN": 15449,
+                                "falsos_positivos_FP": 3990,
+                                "falsos_negativos_FN": 5935,
+                                "verdaderos_positivos_TP": 6828
+                            }
+                        }
+                    },
+                    "desempeno_prueba_final_octubre": {
+                        "metricas_independientes_del_umbral": {
+                            "auc_roc": 0.6859,
+                            "pr_auc": 0.7077,
+                            "brier_score": 0.3567
+                        },
+                        "metricas_dependientes_del_umbral": {
+                            "umbral": 0.15,
+                            "balanced_accuracy": 0.6186,
+                            "accuracy": 0.6408,
+                            "precision_positivo": 0.8493,
+                            "recall_positivo": 0.2809,
+                            "f1_score_positivo": 0.4221,
+                            "macro_f1": 0.5808,
+                            "matriz_confusion": {
+                                "verdaderos_negativos_TN": 7250,
+                                "falsos_positivos_FP": 331,
+                                "falsos_negativos_FN": 4778,
+                                "verdaderos_positivos_TP": 1866
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,3505 @@
+{
+    "metadatos_benchmark": {
+        "fecha_ejecucion": "2026-10-21",
+        "sede": "Central",
+        "metodologia": "Comparación experimental de ML con Purged Split y suficiencia de validación",
+        "poblacion_evaluada": "Alumnos conocidos con regularidad demostrable (>= 3 días activos previos)",
+        "total_cortes_evaluados": 4,
+        "periodos_temporales_unicos": [
+            "Periodo 1: Semestre I (Julio)",
+            "Periodo 2: Intersemestral (Septiembre)",
+            "Periodo 3: Semestre II (Octubre)"
+        ],
+        "nota_metodologica_agregacion": "C3A y C3B comparten exactamente el mismo conjunto de prueba de Octubre bajo dos regímenes de entrenamiento distintos."
+    },
+    "cortes": {
+        "corte_1_semestre_1_historico": {
+            "nombre": "Corte 1: Semestre I (Referencia Histórica Junio -> Julio)",
+            "periodo_temporal": "Periodo 1: Semestre I",
+            "estrategia_entrenamiento": "Referencia Histórica Junio",
+            "descripcion": "Entrenamiento en Junio 2026, validación interna en Junio tardío, prueba en Julio 2026.",
+            "horizontes": {
+                "horizonte_1_dia": {
+                    "nombre": "Horizonte 1 (Siguiente Día)",
+                    "horizonte_dias": 1,
+                    "particiones_detalladas": {
+                        "full_train": {
+                            "fecha_min": "2026-06-01",
+                            "fecha_max": "2026-06-26",
+                            "fechas_calendario": 20,
+                            "fechas_con_obs": 20,
+                            "num_obs": 17890
+                        },
+                        "inner_train": {
+                            "fecha_min": "2026-06-01",
+                            "fecha_max": "2026-06-17",
+                            "fechas_calendario": 13,
+                            "fechas_con_obs": 13,
+                            "num_obs": 9844
+                        },
+                        "inner_val": {
+                            "fecha_min": "2026-06-19",
+                            "fecha_max": "2026-06-26",
+                            "fechas_calendario": 6,
+                            "fechas_con_obs": 6,
+                            "num_obs": 7014
+                        },
+                        "test_final": {
+                            "fecha_min": "2026-07-01",
+                            "fecha_max": "2026-07-30",
+                            "fechas_calendario": 17,
+                            "fechas_con_obs": 17,
+                            "num_obs": 27958
+                        },
+                        "fechas_purgadas_train": 1,
+                        "fechas_censuradas_test": 1,
+                        "estado_suficiencia_val": "suficiente"
+                    },
+                    "modelos": {
+                        "Dummy (Clase Mayoritaria)": {
+                            "es_linea_base": true,
+                            "tipo": "Línea base ingenua",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.5,
+                                "pr_auc": 0.2074,
+                                "brier_score": 0.2074
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.15,
+                                "estado_validacion": "optimizado_en_validacion",
+                                "es_suficiente_validacion": true,
+                                "balanced_accuracy": 0.5,
+                                "accuracy": 0.7926,
+                                "precision_positivo": 0.0,
+                                "recall_positivo": 0.0,
+                                "f1_score_positivo": 0.0,
+                                "macro_f1": 0.4421,
+                                "matriz_confusion": {
+                                    "TN": 22159,
+                                    "FP": 0,
+                                    "FN": 5799,
+                                    "TP": 0
+                                }
+                            }
+                        },
+                        "Regresión Logística": {
+                            "es_linea_base": false,
+                            "tipo": "Lineal regularizado balanceado",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.7436,
+                                "pr_auc": 0.465,
+                                "brier_score": 0.2578
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.8,
+                                "estado_validacion": "optimizado_en_validacion",
+                                "es_suficiente_validacion": true,
+                                "balanced_accuracy": 0.6588,
+                                "accuracy": 0.7934,
+                                "precision_positivo": 0.5022,
+                                "recall_positivo": 0.4289,
+                                "f1_score_positivo": 0.4627,
+                                "macro_f1": 0.6674,
+                                "matriz_confusion": {
+                                    "TN": 19694,
+                                    "FP": 2465,
+                                    "FN": 3312,
+                                    "TP": 2487
+                                }
+                            }
+                        },
+                        "Random Forest": {
+                            "es_linea_base": false,
+                            "tipo": "Ensamble bagging no lineal",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.7354,
+                                "pr_auc": 0.4422,
+                                "brier_score": 0.202
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.6,
+                                "estado_validacion": "optimizado_en_validacion",
+                                "es_suficiente_validacion": true,
+                                "balanced_accuracy": 0.6535,
+                                "accuracy": 0.7729,
+                                "precision_positivo": 0.4522,
+                                "recall_positivo": 0.4494,
+                                "f1_score_positivo": 0.4508,
+                                "macro_f1": 0.6538,
+                                "matriz_confusion": {
+                                    "TN": 19002,
+                                    "FP": 3157,
+                                    "FN": 3193,
+                                    "TP": 2606
+                                }
+                            }
+                        },
+                        "Extra Trees": {
+                            "es_linea_base": false,
+                            "tipo": "Árboles extremadamente aleatorizados balanceados",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.745,
+                                "pr_auc": 0.4633,
+                                "brier_score": 0.2112
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.65,
+                                "estado_validacion": "optimizado_en_validacion",
+                                "es_suficiente_validacion": true,
+                                "balanced_accuracy": 0.6662,
+                                "accuracy": 0.7884,
+                                "precision_positivo": 0.4892,
+                                "recall_positivo": 0.4575,
+                                "f1_score_positivo": 0.4728,
+                                "macro_f1": 0.6702,
+                                "matriz_confusion": {
+                                    "TN": 19389,
+                                    "FP": 2770,
+                                    "FN": 3146,
+                                    "TP": 2653
+                                }
+                            }
+                        },
+                        "Gradient Boosting": {
+                            "es_linea_base": false,
+                            "tipo": "Boosting secuencial clásico",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.7304,
+                                "pr_auc": 0.4294,
+                                "brier_score": 0.1459
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.3,
+                                "estado_validacion": "optimizado_en_validacion",
+                                "es_suficiente_validacion": true,
+                                "balanced_accuracy": 0.6631,
+                                "accuracy": 0.739,
+                                "precision_positivo": 0.4026,
+                                "recall_positivo": 0.5332,
+                                "f1_score_positivo": 0.4588,
+                                "macro_f1": 0.6434,
+                                "matriz_confusion": {
+                                    "TN": 17570,
+                                    "FP": 4589,
+                                    "FN": 2707,
+                                    "TP": 3092
+                                }
+                            }
+                        },
+                        "HistGradientBoosting": {
+                            "es_linea_base": false,
+                            "tipo": "Boosting por histogramas (modelo de producción)",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.7418,
+                                "pr_auc": 0.4668,
+                                "brier_score": 0.1408
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.3,
+                                "estado_validacion": "optimizado_en_validacion",
+                                "es_suficiente_validacion": true,
+                                "balanced_accuracy": 0.6782,
+                                "accuracy": 0.7533,
+                                "precision_positivo": 0.4266,
+                                "recall_positivo": 0.5499,
+                                "f1_score_positivo": 0.4805,
+                                "macro_f1": 0.6594,
+                                "matriz_confusion": {
+                                    "TN": 17872,
+                                    "FP": 4287,
+                                    "FN": 2610,
+                                    "TP": 3189
+                                }
+                            }
+                        }
+                    }
+                },
+                "horizonte_7_dias": {
+                    "nombre": "Horizonte 2 (Próximos 7 Días)",
+                    "horizonte_dias": 7,
+                    "particiones_detalladas": {
+                        "full_train": {
+                            "fecha_min": "2026-06-01",
+                            "fecha_max": "2026-06-18",
+                            "fechas_calendario": 14,
+                            "fechas_con_obs": 14,
+                            "num_obs": 10876
+                        },
+                        "inner_train": {
+                            "fecha_min": "2026-06-01",
+                            "fecha_max": "2026-06-11",
+                            "fechas_calendario": 9,
+                            "fechas_con_obs": 9,
+                            "num_obs": 6139
+                        },
+                        "inner_val": {
+                            "fecha_min": "N/A",
+                            "fecha_max": "N/A",
+                            "fechas_calendario": 0,
+                            "fechas_con_obs": 0,
+                            "num_obs": 0
+                        },
+                        "test_final": {
+                            "fecha_min": "2026-07-01",
+                            "fecha_max": "2026-07-15",
+                            "fechas_calendario": 11,
+                            "fechas_con_obs": 11,
+                            "num_obs": 16857
+                        },
+                        "fechas_purgadas_train": 7,
+                        "fechas_censuradas_test": 7,
+                        "estado_suficiencia_val": "insuficiente_por_purga"
+                    },
+                    "modelos": {
+                        "Dummy (Clase Mayoritaria)": {
+                            "es_linea_base": true,
+                            "tipo": "Línea base ingenua",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.5,
+                                "pr_auc": 0.6489,
+                                "brier_score": 0.3511
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.5,
+                                "estado_validacion": "insuficiente_por_purga",
+                                "es_suficiente_validacion": false,
+                                "balanced_accuracy": 0.5,
+                                "accuracy": 0.6489,
+                                "precision_positivo": 0.6489,
+                                "recall_positivo": 1.0,
+                                "f1_score_positivo": 0.7871,
+                                "macro_f1": 0.3935,
+                                "matriz_confusion": {
+                                    "TN": 0,
+                                    "FP": 5918,
+                                    "FN": 0,
+                                    "TP": 10939
+                                }
+                            }
+                        },
+                        "Regresión Logística": {
+                            "es_linea_base": false,
+                            "tipo": "Lineal regularizado balanceado",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.7414,
+                                "pr_auc": 0.8531,
+                                "brier_score": 0.1952
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.5,
+                                "estado_validacion": "insuficiente_por_purga",
+                                "es_suficiente_validacion": false,
+                                "balanced_accuracy": 0.6752,
+                                "accuracy": 0.6814,
+                                "precision_positivo": 0.7883,
+                                "recall_positivo": 0.696,
+                                "f1_score_positivo": 0.7393,
+                                "macro_f1": 0.6649,
+                                "matriz_confusion": {
+                                    "TN": 3873,
+                                    "FP": 2045,
+                                    "FN": 3325,
+                                    "TP": 7614
+                                }
+                            }
+                        },
+                        "Random Forest": {
+                            "es_linea_base": false,
+                            "tipo": "Ensamble bagging no lineal",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.7227,
+                                "pr_auc": 0.8438,
+                                "brier_score": 0.204
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.5,
+                                "estado_validacion": "insuficiente_por_purga",
+                                "es_suficiente_validacion": false,
+                                "balanced_accuracy": 0.642,
+                                "accuracy": 0.6549,
+                                "precision_positivo": 0.7594,
+                                "recall_positivo": 0.6854,
+                                "f1_score_positivo": 0.7205,
+                                "macro_f1": 0.6348,
+                                "matriz_confusion": {
+                                    "TN": 3542,
+                                    "FP": 2376,
+                                    "FN": 3441,
+                                    "TP": 7498
+                                }
+                            }
+                        },
+                        "Extra Trees": {
+                            "es_linea_base": false,
+                            "tipo": "Árboles extremadamente aleatorizados balanceados",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.7335,
+                                "pr_auc": 0.849,
+                                "brier_score": 0.2003
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.5,
+                                "estado_validacion": "insuficiente_por_purga",
+                                "es_suficiente_validacion": false,
+                                "balanced_accuracy": 0.6709,
+                                "accuracy": 0.6714,
+                                "precision_positivo": 0.7898,
+                                "recall_positivo": 0.6726,
+                                "f1_score_positivo": 0.7265,
+                                "macro_f1": 0.6575,
+                                "matriz_confusion": {
+                                    "TN": 3960,
+                                    "FP": 1958,
+                                    "FN": 3581,
+                                    "TP": 7358
+                                }
+                            }
+                        },
+                        "Gradient Boosting": {
+                            "es_linea_base": false,
+                            "tipo": "Boosting secuencial clásico",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.7121,
+                                "pr_auc": 0.8333,
+                                "brier_score": 0.2034
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.5,
+                                "estado_validacion": "insuficiente_por_purga",
+                                "es_suficiente_validacion": false,
+                                "balanced_accuracy": 0.6112,
+                                "accuracy": 0.6733,
+                                "precision_positivo": 0.7173,
+                                "recall_positivo": 0.8195,
+                                "f1_score_positivo": 0.765,
+                                "macro_f1": 0.6145,
+                                "matriz_confusion": {
+                                    "TN": 2384,
+                                    "FP": 3534,
+                                    "FN": 1974,
+                                    "TP": 8965
+                                }
+                            }
+                        },
+                        "HistGradientBoosting": {
+                            "es_linea_base": false,
+                            "tipo": "Boosting por histogramas (modelo de producción)",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.7296,
+                                "pr_auc": 0.8438,
+                                "brier_score": 0.1982
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.5,
+                                "estado_validacion": "insuficiente_por_purga",
+                                "es_suficiente_validacion": false,
+                                "balanced_accuracy": 0.6144,
+                                "accuracy": 0.6852,
+                                "precision_positivo": 0.7165,
+                                "recall_positivo": 0.8519,
+                                "f1_score_positivo": 0.7784,
+                                "macro_f1": 0.6176,
+                                "matriz_confusion": {
+                                    "TN": 2231,
+                                    "FP": 3687,
+                                    "FN": 1620,
+                                    "TP": 9319
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "corte_2_intersemestral_septiembre": {
+            "nombre": "Corte 2: Intersemestral (Semestre I -> Septiembre 2026)",
+            "periodo_temporal": "Periodo 2: Intersemestral",
+            "estrategia_entrenamiento": "Consolidado Semestre I",
+            "descripcion": "Entrenamiento en Semestre I consolidado (Mayo-Julio). El receso de agosto provee una purga natural de >30 días. Prueba en Septiembre 2026.",
+            "horizontes": {
+                "horizonte_1_dia": {
+                    "nombre": "Horizonte 1 (Siguiente Día)",
+                    "horizonte_dias": 1,
+                    "particiones_detalladas": {
+                        "full_train": {
+                            "fecha_min": "2026-05-11",
+                            "fecha_max": "2026-07-30",
+                            "fechas_calendario": 53,
+                            "fechas_con_obs": 53,
+                            "num_obs": 50930
+                        },
+                        "inner_train": {
+                            "fecha_min": "2026-05-11",
+                            "fecha_max": "2026-06-23",
+                            "fechas_calendario": 32,
+                            "fechas_con_obs": 32,
+                            "num_obs": 17972
+                        },
+                        "inner_val": {
+                            "fecha_min": "2026-06-25",
+                            "fecha_max": "2026-07-30",
+                            "fechas_calendario": 20,
+                            "fechas_con_obs": 20,
+                            "num_obs": 31755
+                        },
+                        "test_final": {
+                            "fecha_min": "2026-09-01",
+                            "fecha_max": "2026-09-30",
+                            "fechas_calendario": 22,
+                            "fechas_con_obs": 22,
+                            "num_obs": 48089
+                        },
+                        "fechas_purgadas_train": 1,
+                        "fechas_censuradas_test": 0,
+                        "estado_suficiencia_val": "suficiente"
+                    },
+                    "modelos": {
+                        "Dummy (Clase Mayoritaria)": {
+                            "es_linea_base": true,
+                            "tipo": "Línea base ingenua",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.5,
+                                "pr_auc": 0.1113,
+                                "brier_score": 0.1113
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.15,
+                                "estado_validacion": "optimizado_en_validacion",
+                                "es_suficiente_validacion": true,
+                                "balanced_accuracy": 0.5,
+                                "accuracy": 0.8887,
+                                "precision_positivo": 0.0,
+                                "recall_positivo": 0.0,
+                                "f1_score_positivo": 0.0,
+                                "macro_f1": 0.4705,
+                                "matriz_confusion": {
+                                    "TN": 42736,
+                                    "FP": 0,
+                                    "FN": 5353,
+                                    "TP": 0
+                                }
+                            }
+                        },
+                        "Regresión Logística": {
+                            "es_linea_base": false,
+                            "tipo": "Lineal regularizado balanceado",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.7701,
+                                "pr_auc": 0.3498,
+                                "brier_score": 0.1528
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.6,
+                                "estado_validacion": "optimizado_en_validacion",
+                                "es_suficiente_validacion": true,
+                                "balanced_accuracy": 0.6715,
+                                "accuracy": 0.8495,
+                                "precision_positivo": 0.3579,
+                                "recall_positivo": 0.4426,
+                                "f1_score_positivo": 0.3957,
+                                "macro_f1": 0.6549,
+                                "matriz_confusion": {
+                                    "TN": 38485,
+                                    "FP": 4251,
+                                    "FN": 2984,
+                                    "TP": 2369
+                                }
+                            }
+                        },
+                        "Random Forest": {
+                            "es_linea_base": false,
+                            "tipo": "Ensamble bagging no lineal",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.7614,
+                                "pr_auc": 0.3319,
+                                "brier_score": 0.1371
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.55,
+                                "estado_validacion": "optimizado_en_validacion",
+                                "es_suficiente_validacion": true,
+                                "balanced_accuracy": 0.6709,
+                                "accuracy": 0.8384,
+                                "precision_positivo": 0.3343,
+                                "recall_positivo": 0.4554,
+                                "f1_score_positivo": 0.3856,
+                                "macro_f1": 0.6463,
+                                "matriz_confusion": {
+                                    "TN": 37882,
+                                    "FP": 4854,
+                                    "FN": 2915,
+                                    "TP": 2438
+                                }
+                            }
+                        },
+                        "Extra Trees": {
+                            "es_linea_base": false,
+                            "tipo": "Árboles extremadamente aleatorizados balanceados",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.7624,
+                                "pr_auc": 0.3386,
+                                "brier_score": 0.1555
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.6,
+                                "estado_validacion": "optimizado_en_validacion",
+                                "es_suficiente_validacion": true,
+                                "balanced_accuracy": 0.6579,
+                                "accuracy": 0.8572,
+                                "precision_positivo": 0.3697,
+                                "recall_positivo": 0.4015,
+                                "f1_score_positivo": 0.3849,
+                                "macro_f1": 0.6521,
+                                "matriz_confusion": {
+                                    "TN": 39072,
+                                    "FP": 3664,
+                                    "FN": 3204,
+                                    "TP": 2149
+                                }
+                            }
+                        },
+                        "Gradient Boosting": {
+                            "es_linea_base": false,
+                            "tipo": "Boosting secuencial clásico",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.755,
+                                "pr_auc": 0.321,
+                                "brier_score": 0.0888
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.35,
+                                "estado_validacion": "optimizado_en_validacion",
+                                "es_suficiente_validacion": true,
+                                "balanced_accuracy": 0.6076,
+                                "accuracy": 0.8758,
+                                "precision_positivo": 0.4096,
+                                "recall_positivo": 0.2627,
+                                "f1_score_positivo": 0.3201,
+                                "macro_f1": 0.6258,
+                                "matriz_confusion": {
+                                    "TN": 40709,
+                                    "FP": 2027,
+                                    "FN": 3947,
+                                    "TP": 1406
+                                }
+                            }
+                        },
+                        "HistGradientBoosting": {
+                            "es_linea_base": false,
+                            "tipo": "Boosting por histogramas (modelo de producción)",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.7612,
+                                "pr_auc": 0.3377,
+                                "brier_score": 0.0878
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.4,
+                                "estado_validacion": "optimizado_en_validacion",
+                                "es_suficiente_validacion": true,
+                                "balanced_accuracy": 0.6028,
+                                "accuracy": 0.8837,
+                                "precision_positivo": 0.4574,
+                                "recall_positivo": 0.2415,
+                                "f1_score_positivo": 0.3161,
+                                "macro_f1": 0.6263,
+                                "matriz_confusion": {
+                                    "TN": 41202,
+                                    "FP": 1534,
+                                    "FN": 4060,
+                                    "TP": 1293
+                                }
+                            }
+                        }
+                    }
+                },
+                "horizonte_7_dias": {
+                    "nombre": "Horizonte 2 (Próximos 7 Días)",
+                    "horizonte_dias": 7,
+                    "particiones_detalladas": {
+                        "full_train": {
+                            "fecha_min": "2026-05-11",
+                            "fecha_max": "2026-07-15",
+                            "fechas_calendario": 47,
+                            "fechas_con_obs": 47,
+                            "num_obs": 39829
+                        },
+                        "inner_train": {
+                            "fecha_min": "2026-05-11",
+                            "fecha_max": "2026-06-17",
+                            "fechas_calendario": 28,
+                            "fechas_con_obs": 28,
+                            "num_obs": 13623
+                        },
+                        "inner_val": {
+                            "fecha_min": "2026-06-30",
+                            "fecha_max": "2026-07-15",
+                            "fechas_calendario": 12,
+                            "fechas_con_obs": 12,
+                            "num_obs": 18160
+                        },
+                        "test_final": {
+                            "fecha_min": "2026-09-01",
+                            "fecha_max": "2026-09-30",
+                            "fechas_calendario": 22,
+                            "fechas_con_obs": 22,
+                            "num_obs": 48089
+                        },
+                        "fechas_purgadas_train": 7,
+                        "fechas_censuradas_test": 0,
+                        "estado_suficiencia_val": "suficiente"
+                    },
+                    "modelos": {
+                        "Dummy (Clase Mayoritaria)": {
+                            "es_linea_base": true,
+                            "tipo": "Línea base ingenua",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.5,
+                                "pr_auc": 0.4136,
+                                "brier_score": 0.5864
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.15,
+                                "estado_validacion": "optimizado_en_validacion",
+                                "es_suficiente_validacion": true,
+                                "balanced_accuracy": 0.5,
+                                "accuracy": 0.4136,
+                                "precision_positivo": 0.4136,
+                                "recall_positivo": 1.0,
+                                "f1_score_positivo": 0.5851,
+                                "macro_f1": 0.2926,
+                                "matriz_confusion": {
+                                    "TN": 0,
+                                    "FP": 28201,
+                                    "FN": 0,
+                                    "TP": 19888
+                                }
+                            }
+                        },
+                        "Regresión Logística": {
+                            "es_linea_base": false,
+                            "tipo": "Lineal regularizado balanceado",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.7601,
+                                "pr_auc": 0.7108,
+                                "brier_score": 0.2023
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.4,
+                                "estado_validacion": "optimizado_en_validacion",
+                                "es_suficiente_validacion": true,
+                                "balanced_accuracy": 0.6849,
+                                "accuracy": 0.6779,
+                                "precision_positivo": 0.5899,
+                                "recall_positivo": 0.7257,
+                                "f1_score_positivo": 0.6508,
+                                "macro_f1": 0.6759,
+                                "matriz_confusion": {
+                                    "TN": 18167,
+                                    "FP": 10034,
+                                    "FN": 5456,
+                                    "TP": 14432
+                                }
+                            }
+                        },
+                        "Random Forest": {
+                            "es_linea_base": false,
+                            "tipo": "Ensamble bagging no lineal",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.742,
+                                "pr_auc": 0.7011,
+                                "brier_score": 0.2011
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.55,
+                                "estado_validacion": "optimizado_en_validacion",
+                                "es_suficiente_validacion": true,
+                                "balanced_accuracy": 0.68,
+                                "accuracy": 0.7065,
+                                "precision_positivo": 0.6904,
+                                "recall_positivo": 0.5266,
+                                "f1_score_positivo": 0.5975,
+                                "macro_f1": 0.6833,
+                                "matriz_confusion": {
+                                    "TN": 23504,
+                                    "FP": 4697,
+                                    "FN": 9415,
+                                    "TP": 10473
+                                }
+                            }
+                        },
+                        "Extra Trees": {
+                            "es_linea_base": false,
+                            "tipo": "Árboles extremadamente aleatorizados balanceados",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.7476,
+                                "pr_auc": 0.7063,
+                                "brier_score": 0.2006
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.5,
+                                "estado_validacion": "optimizado_en_validacion",
+                                "es_suficiente_validacion": true,
+                                "balanced_accuracy": 0.6892,
+                                "accuracy": 0.7013,
+                                "precision_positivo": 0.6447,
+                                "recall_positivo": 0.6188,
+                                "f1_score_positivo": 0.6315,
+                                "macro_f1": 0.6902,
+                                "matriz_confusion": {
+                                    "TN": 21419,
+                                    "FP": 6782,
+                                    "FN": 7581,
+                                    "TP": 12307
+                                }
+                            }
+                        },
+                        "Gradient Boosting": {
+                            "es_linea_base": false,
+                            "tipo": "Boosting secuencial clásico",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.7275,
+                                "pr_auc": 0.6944,
+                                "brier_score": 0.2222
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.6,
+                                "estado_validacion": "optimizado_en_validacion",
+                                "es_suficiente_validacion": true,
+                                "balanced_accuracy": 0.6793,
+                                "accuracy": 0.6963,
+                                "precision_positivo": 0.6483,
+                                "recall_positivo": 0.5806,
+                                "f1_score_positivo": 0.6126,
+                                "macro_f1": 0.6814,
+                                "matriz_confusion": {
+                                    "TN": 21938,
+                                    "FP": 6263,
+                                    "FN": 8341,
+                                    "TP": 11547
+                                }
+                            }
+                        },
+                        "HistGradientBoosting": {
+                            "es_linea_base": false,
+                            "tipo": "Boosting por histogramas (modelo de producción)",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.7335,
+                                "pr_auc": 0.6941,
+                                "brier_score": 0.2306
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.6,
+                                "estado_validacion": "optimizado_en_validacion",
+                                "es_suficiente_validacion": true,
+                                "balanced_accuracy": 0.685,
+                                "accuracy": 0.6969,
+                                "precision_positivo": 0.6385,
+                                "recall_positivo": 0.6159,
+                                "f1_score_positivo": 0.627,
+                                "macro_f1": 0.6859,
+                                "matriz_confusion": {
+                                    "TN": 21265,
+                                    "FP": 6936,
+                                    "FN": 7638,
+                                    "TP": 12250
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "corte_3a_intra_semestre_2_septiembre": {
+            "nombre": "Corte 3A: Intra-Semestre II (Septiembre solo -> Octubre 2026)",
+            "periodo_temporal": "Periodo 3: Semestre II (Octubre)",
+            "estrategia_entrenamiento": "Estrategia A: Memoria Corta Intra-Semestre (Septiembre solo)",
+            "descripcion": "Prueba de memoria corta / régimen intra-semestre: entrena únicamente con Septiembre 2026 para probar adaptación rápida al ciclo en Octubre 2026 al 20/10.",
+            "horizontes": {
+                "horizonte_1_dia": {
+                    "nombre": "Horizonte 1 (Siguiente Día)",
+                    "horizonte_dias": 1,
+                    "particiones_detalladas": {
+                        "full_train": {
+                            "fecha_min": "2026-09-01",
+                            "fecha_max": "2026-09-29",
+                            "fechas_calendario": 21,
+                            "fechas_con_obs": 21,
+                            "num_obs": 45774
+                        },
+                        "inner_train": {
+                            "fecha_min": "2026-09-01",
+                            "fecha_max": "2026-09-17",
+                            "fechas_calendario": 13,
+                            "fechas_con_obs": 13,
+                            "num_obs": 27726
+                        },
+                        "inner_val": {
+                            "fecha_min": "2026-09-21",
+                            "fecha_max": "2026-09-29",
+                            "fechas_calendario": 7,
+                            "fechas_con_obs": 7,
+                            "num_obs": 15812
+                        },
+                        "test_final": {
+                            "fecha_min": "2026-10-01",
+                            "fecha_max": "2026-10-19",
+                            "fechas_calendario": 12,
+                            "fechas_con_obs": 12,
+                            "num_obs": 28938
+                        },
+                        "fechas_purgadas_train": 1,
+                        "fechas_censuradas_test": 1,
+                        "estado_suficiencia_val": "suficiente"
+                    },
+                    "modelos": {
+                        "Dummy (Clase Mayoritaria)": {
+                            "es_linea_base": true,
+                            "tipo": "Línea base ingenua",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.5,
+                                "pr_auc": 0.1391,
+                                "brier_score": 0.1391
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.15,
+                                "estado_validacion": "optimizado_en_validacion",
+                                "es_suficiente_validacion": true,
+                                "balanced_accuracy": 0.5,
+                                "accuracy": 0.8609,
+                                "precision_positivo": 0.0,
+                                "recall_positivo": 0.0,
+                                "f1_score_positivo": 0.0,
+                                "macro_f1": 0.4626,
+                                "matriz_confusion": {
+                                    "TN": 24914,
+                                    "FP": 0,
+                                    "FN": 4024,
+                                    "TP": 0
+                                }
+                            }
+                        },
+                        "Regresión Logística": {
+                            "es_linea_base": false,
+                            "tipo": "Lineal regularizado balanceado",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.7932,
+                                "pr_auc": 0.4453,
+                                "brier_score": 0.1669
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.5,
+                                "estado_validacion": "optimizado_en_validacion",
+                                "es_suficiente_validacion": true,
+                                "balanced_accuracy": 0.7146,
+                                "accuracy": 0.7837,
+                                "precision_positivo": 0.3452,
+                                "recall_positivo": 0.6188,
+                                "f1_score_positivo": 0.4431,
+                                "macro_f1": 0.6545,
+                                "matriz_confusion": {
+                                    "TN": 20190,
+                                    "FP": 4724,
+                                    "FN": 1534,
+                                    "TP": 2490
+                                }
+                            }
+                        },
+                        "Random Forest": {
+                            "es_linea_base": false,
+                            "tipo": "Ensamble bagging no lineal",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.7901,
+                                "pr_auc": 0.431,
+                                "brier_score": 0.168
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.6,
+                                "estado_validacion": "optimizado_en_validacion",
+                                "es_suficiente_validacion": true,
+                                "balanced_accuracy": 0.6921,
+                                "accuracy": 0.8343,
+                                "precision_positivo": 0.4189,
+                                "recall_positivo": 0.4953,
+                                "f1_score_positivo": 0.4539,
+                                "macro_f1": 0.6781,
+                                "matriz_confusion": {
+                                    "TN": 22149,
+                                    "FP": 2765,
+                                    "FN": 2031,
+                                    "TP": 1993
+                                }
+                            }
+                        },
+                        "Extra Trees": {
+                            "es_linea_base": false,
+                            "tipo": "Árboles extremadamente aleatorizados balanceados",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.7924,
+                                "pr_auc": 0.4327,
+                                "brier_score": 0.1852
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.6,
+                                "estado_validacion": "optimizado_en_validacion",
+                                "es_suficiente_validacion": true,
+                                "balanced_accuracy": 0.7023,
+                                "accuracy": 0.8194,
+                                "precision_positivo": 0.3917,
+                                "recall_positivo": 0.54,
+                                "f1_score_positivo": 0.454,
+                                "macro_f1": 0.6729,
+                                "matriz_confusion": {
+                                    "TN": 21539,
+                                    "FP": 3375,
+                                    "FN": 1851,
+                                    "TP": 2173
+                                }
+                            }
+                        },
+                        "Gradient Boosting": {
+                            "es_linea_base": false,
+                            "tipo": "Boosting secuencial clásico",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.7893,
+                                "pr_auc": 0.4442,
+                                "brier_score": 0.0986
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.2,
+                                "estado_validacion": "optimizado_en_validacion",
+                                "es_suficiente_validacion": true,
+                                "balanced_accuracy": 0.6842,
+                                "accuracy": 0.839,
+                                "precision_positivo": 0.4282,
+                                "recall_positivo": 0.4697,
+                                "f1_score_positivo": 0.448,
+                                "macro_f1": 0.6769,
+                                "matriz_confusion": {
+                                    "TN": 22390,
+                                    "FP": 2524,
+                                    "FN": 2134,
+                                    "TP": 1890
+                                }
+                            }
+                        },
+                        "HistGradientBoosting": {
+                            "es_linea_base": false,
+                            "tipo": "Boosting por histogramas (modelo de producción)",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.7802,
+                                "pr_auc": 0.4412,
+                                "brier_score": 0.0988
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.2,
+                                "estado_validacion": "optimizado_en_validacion",
+                                "es_suficiente_validacion": true,
+                                "balanced_accuracy": 0.6854,
+                                "accuracy": 0.8367,
+                                "precision_positivo": 0.4225,
+                                "recall_positivo": 0.4759,
+                                "f1_score_positivo": 0.4476,
+                                "macro_f1": 0.6759,
+                                "matriz_confusion": {
+                                    "TN": 22296,
+                                    "FP": 2618,
+                                    "FN": 2109,
+                                    "TP": 1915
+                                }
+                            }
+                        }
+                    }
+                },
+                "horizonte_7_dias": {
+                    "nombre": "Horizonte 2 (Próximos 7 Días)",
+                    "horizonte_dias": 7,
+                    "particiones_detalladas": {
+                        "full_train": {
+                            "fecha_min": "2026-09-01",
+                            "fecha_max": "2026-09-21",
+                            "fechas_calendario": 15,
+                            "fechas_con_obs": 15,
+                            "num_obs": 32202
+                        },
+                        "inner_train": {
+                            "fecha_min": "2026-09-01",
+                            "fecha_max": "2026-09-11",
+                            "fechas_calendario": 9,
+                            "fechas_con_obs": 9,
+                            "num_obs": 18873
+                        },
+                        "inner_val": {
+                            "fecha_min": "N/A",
+                            "fecha_max": "N/A",
+                            "fechas_calendario": 0,
+                            "fechas_con_obs": 0,
+                            "num_obs": 0
+                        },
+                        "test_final": {
+                            "fecha_min": "2026-10-01",
+                            "fecha_max": "2026-10-09",
+                            "fechas_calendario": 6,
+                            "fechas_con_obs": 6,
+                            "num_obs": 14225
+                        },
+                        "fechas_purgadas_train": 7,
+                        "fechas_censuradas_test": 7,
+                        "estado_suficiencia_val": "insuficiente_por_purga"
+                    },
+                    "modelos": {
+                        "Dummy (Clase Mayoritaria)": {
+                            "es_linea_base": true,
+                            "tipo": "Línea base ingenua",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.5,
+                                "pr_auc": 0.4671,
+                                "brier_score": 0.4671
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.5,
+                                "estado_validacion": "insuficiente_por_purga",
+                                "es_suficiente_validacion": false,
+                                "balanced_accuracy": 0.5,
+                                "accuracy": 0.5329,
+                                "precision_positivo": 0.0,
+                                "recall_positivo": 0.0,
+                                "f1_score_positivo": 0.0,
+                                "macro_f1": 0.3477,
+                                "matriz_confusion": {
+                                    "TN": 7581,
+                                    "FP": 0,
+                                    "FN": 6644,
+                                    "TP": 0
+                                }
+                            }
+                        },
+                        "Regresión Logística": {
+                            "es_linea_base": false,
+                            "tipo": "Lineal regularizado balanceado",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.6736,
+                                "pr_auc": 0.6533,
+                                "brier_score": 0.2764
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.5,
+                                "estado_validacion": "insuficiente_por_purga",
+                                "es_suficiente_validacion": false,
+                                "balanced_accuracy": 0.5086,
+                                "accuracy": 0.5409,
+                                "precision_positivo": 0.9672,
+                                "recall_positivo": 0.0178,
+                                "f1_score_positivo": 0.0349,
+                                "macro_f1": 0.3669,
+                                "matriz_confusion": {
+                                    "TN": 7577,
+                                    "FP": 4,
+                                    "FN": 6526,
+                                    "TP": 118
+                                }
+                            }
+                        },
+                        "Random Forest": {
+                            "es_linea_base": false,
+                            "tipo": "Ensamble bagging no lineal",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.7828,
+                                "pr_auc": 0.7806,
+                                "brier_score": 0.1906
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.5,
+                                "estado_validacion": "insuficiente_por_purga",
+                                "es_suficiente_validacion": false,
+                                "balanced_accuracy": 0.7004,
+                                "accuracy": 0.7124,
+                                "precision_positivo": 0.7954,
+                                "recall_positivo": 0.5173,
+                                "f1_score_positivo": 0.6269,
+                                "macro_f1": 0.6965,
+                                "matriz_confusion": {
+                                    "TN": 6697,
+                                    "FP": 884,
+                                    "FN": 3207,
+                                    "TP": 3437
+                                }
+                            }
+                        },
+                        "Extra Trees": {
+                            "es_linea_base": false,
+                            "tipo": "Árboles extremadamente aleatorizados balanceados",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.7886,
+                                "pr_auc": 0.7884,
+                                "brier_score": 0.1866
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.5,
+                                "estado_validacion": "insuficiente_por_purga",
+                                "es_suficiente_validacion": false,
+                                "balanced_accuracy": 0.7152,
+                                "accuracy": 0.7221,
+                                "precision_positivo": 0.7484,
+                                "recall_positivo": 0.6102,
+                                "f1_score_positivo": 0.6722,
+                                "macro_f1": 0.7155,
+                                "matriz_confusion": {
+                                    "TN": 6218,
+                                    "FP": 1363,
+                                    "FN": 2590,
+                                    "TP": 4054
+                                }
+                            }
+                        },
+                        "Gradient Boosting": {
+                            "es_linea_base": false,
+                            "tipo": "Boosting secuencial clásico",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.7715,
+                                "pr_auc": 0.7723,
+                                "brier_score": 0.2107
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.5,
+                                "estado_validacion": "insuficiente_por_purga",
+                                "es_suficiente_validacion": false,
+                                "balanced_accuracy": 0.653,
+                                "accuracy": 0.6725,
+                                "precision_positivo": 0.8608,
+                                "recall_positivo": 0.3566,
+                                "f1_score_positivo": 0.5043,
+                                "macro_f1": 0.6299,
+                                "matriz_confusion": {
+                                    "TN": 7198,
+                                    "FP": 383,
+                                    "FN": 4275,
+                                    "TP": 2369
+                                }
+                            }
+                        },
+                        "HistGradientBoosting": {
+                            "es_linea_base": false,
+                            "tipo": "Boosting por histogramas (modelo de producción)",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.7584,
+                                "pr_auc": 0.7531,
+                                "brier_score": 0.218
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.5,
+                                "estado_validacion": "insuficiente_por_purga",
+                                "es_suficiente_validacion": false,
+                                "balanced_accuracy": 0.6347,
+                                "accuracy": 0.655,
+                                "precision_positivo": 0.8321,
+                                "recall_positivo": 0.3274,
+                                "f1_score_positivo": 0.4699,
+                                "macro_f1": 0.6071,
+                                "matriz_confusion": {
+                                    "TN": 7142,
+                                    "FP": 439,
+                                    "FN": 4469,
+                                    "TP": 2175
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "corte_3b_acumulado_anual_octubre": {
+            "nombre": "Corte 3B: Acumulado Anual (Mayo a Septiembre -> Octubre 2026)",
+            "periodo_temporal": "Periodo 3: Semestre II (Octubre)",
+            "estrategia_entrenamiento": "Estrategia B: Acumulación Histórica Anual (Mayo-Septiembre)",
+            "descripcion": "Prueba de régimen de producción acumulativa: entrena con todo el historial anual acumulado (Mayo-Julio + Septiembre) para predecir Octubre 2026 al 20/10.",
+            "horizontes": {
+                "horizonte_1_dia": {
+                    "nombre": "Horizonte 1 (Siguiente Día)",
+                    "horizonte_dias": 1,
+                    "particiones_detalladas": {
+                        "full_train": {
+                            "fecha_min": "2026-05-11",
+                            "fecha_max": "2026-09-29",
+                            "fechas_calendario": 75,
+                            "fechas_con_obs": 74,
+                            "num_obs": 96704
+                        },
+                        "inner_train": {
+                            "fecha_min": "2026-05-11",
+                            "fecha_max": "2026-07-15",
+                            "fechas_calendario": 47,
+                            "fechas_con_obs": 47,
+                            "num_obs": 39829
+                        },
+                        "inner_val": {
+                            "fecha_min": "2026-07-17",
+                            "fecha_max": "2026-09-29",
+                            "fechas_calendario": 27,
+                            "fechas_con_obs": 26,
+                            "num_obs": 55114
+                        },
+                        "test_final": {
+                            "fecha_min": "2026-10-01",
+                            "fecha_max": "2026-10-19",
+                            "fechas_calendario": 12,
+                            "fechas_con_obs": 12,
+                            "num_obs": 28938
+                        },
+                        "fechas_purgadas_train": 1,
+                        "fechas_censuradas_test": 1,
+                        "estado_suficiencia_val": "suficiente"
+                    },
+                    "modelos": {
+                        "Dummy (Clase Mayoritaria)": {
+                            "es_linea_base": true,
+                            "tipo": "Línea base ingenua",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.5,
+                                "pr_auc": 0.1391,
+                                "brier_score": 0.1391
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.15,
+                                "estado_validacion": "optimizado_en_validacion",
+                                "es_suficiente_validacion": true,
+                                "balanced_accuracy": 0.5,
+                                "accuracy": 0.8609,
+                                "precision_positivo": 0.0,
+                                "recall_positivo": 0.0,
+                                "f1_score_positivo": 0.0,
+                                "macro_f1": 0.4626,
+                                "matriz_confusion": {
+                                    "TN": 24914,
+                                    "FP": 0,
+                                    "FN": 4024,
+                                    "TP": 0
+                                }
+                            }
+                        },
+                        "Regresión Logística": {
+                            "es_linea_base": false,
+                            "tipo": "Lineal regularizado balanceado",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.7929,
+                                "pr_auc": 0.4484,
+                                "brier_score": 0.1422
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.65,
+                                "estado_validacion": "optimizado_en_validacion",
+                                "es_suficiente_validacion": true,
+                                "balanced_accuracy": 0.6411,
+                                "accuracy": 0.8682,
+                                "precision_positivo": 0.5436,
+                                "recall_positivo": 0.3265,
+                                "f1_score_positivo": 0.408,
+                                "macro_f1": 0.6669,
+                                "matriz_confusion": {
+                                    "TN": 23811,
+                                    "FP": 1103,
+                                    "FN": 2710,
+                                    "TP": 1314
+                                }
+                            }
+                        },
+                        "Random Forest": {
+                            "es_linea_base": false,
+                            "tipo": "Ensamble bagging no lineal",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.7936,
+                                "pr_auc": 0.4415,
+                                "brier_score": 0.1407
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.6,
+                                "estado_validacion": "optimizado_en_validacion",
+                                "es_suficiente_validacion": true,
+                                "balanced_accuracy": 0.6759,
+                                "accuracy": 0.8554,
+                                "precision_positivo": 0.4778,
+                                "recall_positivo": 0.4272,
+                                "f1_score_positivo": 0.4511,
+                                "macro_f1": 0.6839,
+                                "matriz_confusion": {
+                                    "TN": 23035,
+                                    "FP": 1879,
+                                    "FN": 2305,
+                                    "TP": 1719
+                                }
+                            }
+                        },
+                        "Extra Trees": {
+                            "es_linea_base": false,
+                            "tipo": "Árboles extremadamente aleatorizados balanceados",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.7924,
+                                "pr_auc": 0.437,
+                                "brier_score": 0.1608
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.65,
+                                "estado_validacion": "optimizado_en_validacion",
+                                "es_suficiente_validacion": true,
+                                "balanced_accuracy": 0.6655,
+                                "accuracy": 0.8581,
+                                "precision_positivo": 0.4877,
+                                "recall_positivo": 0.3986,
+                                "f1_score_positivo": 0.4387,
+                                "macro_f1": 0.6787,
+                                "matriz_confusion": {
+                                    "TN": 23229,
+                                    "FP": 1685,
+                                    "FN": 2420,
+                                    "TP": 1604
+                                }
+                            }
+                        },
+                        "Gradient Boosting": {
+                            "es_linea_base": false,
+                            "tipo": "Boosting secuencial clásico",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.7923,
+                                "pr_auc": 0.4527,
+                                "brier_score": 0.0978
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.35,
+                                "estado_validacion": "optimizado_en_validacion",
+                                "es_suficiente_validacion": true,
+                                "balanced_accuracy": 0.6239,
+                                "accuracy": 0.8741,
+                                "precision_positivo": 0.6029,
+                                "recall_positivo": 0.2773,
+                                "f1_score_positivo": 0.3799,
+                                "macro_f1": 0.6549,
+                                "matriz_confusion": {
+                                    "TN": 24179,
+                                    "FP": 735,
+                                    "FN": 2908,
+                                    "TP": 1116
+                                }
+                            }
+                        },
+                        "HistGradientBoosting": {
+                            "es_linea_base": false,
+                            "tipo": "Boosting por histogramas (modelo de producción)",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.7847,
+                                "pr_auc": 0.4483,
+                                "brier_score": 0.098
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.35,
+                                "estado_validacion": "optimizado_en_validacion",
+                                "es_suficiente_validacion": true,
+                                "balanced_accuracy": 0.6306,
+                                "accuracy": 0.8731,
+                                "precision_positivo": 0.5874,
+                                "recall_positivo": 0.2947,
+                                "f1_score_positivo": 0.3925,
+                                "macro_f1": 0.6608,
+                                "matriz_confusion": {
+                                    "TN": 24081,
+                                    "FP": 833,
+                                    "FN": 2838,
+                                    "TP": 1186
+                                }
+                            }
+                        }
+                    }
+                },
+                "horizonte_7_dias": {
+                    "nombre": "Horizonte 2 (Próximos 7 Días)",
+                    "horizonte_dias": 7,
+                    "particiones_detalladas": {
+                        "full_train": {
+                            "fecha_min": "2026-05-11",
+                            "fecha_max": "2026-09-21",
+                            "fechas_calendario": 69,
+                            "fechas_con_obs": 62,
+                            "num_obs": 72031
+                        },
+                        "inner_train": {
+                            "fecha_min": "2026-05-11",
+                            "fecha_max": "2026-07-09",
+                            "fechas_calendario": 43,
+                            "fechas_con_obs": 43,
+                            "num_obs": 33175
+                        },
+                        "inner_val": {
+                            "fecha_min": "2026-09-01",
+                            "fecha_max": "2026-09-21",
+                            "fechas_calendario": 15,
+                            "fechas_con_obs": 15,
+                            "num_obs": 32202
+                        },
+                        "test_final": {
+                            "fecha_min": "2026-10-01",
+                            "fecha_max": "2026-10-09",
+                            "fechas_calendario": 6,
+                            "fechas_con_obs": 6,
+                            "num_obs": 14225
+                        },
+                        "fechas_purgadas_train": 7,
+                        "fechas_censuradas_test": 7,
+                        "estado_suficiencia_val": "suficiente"
+                    },
+                    "modelos": {
+                        "Dummy (Clase Mayoritaria)": {
+                            "es_linea_base": true,
+                            "tipo": "Línea base ingenua",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.5,
+                                "pr_auc": 0.4671,
+                                "brier_score": 0.5329
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.15,
+                                "estado_validacion": "optimizado_en_validacion",
+                                "es_suficiente_validacion": true,
+                                "balanced_accuracy": 0.5,
+                                "accuracy": 0.4671,
+                                "precision_positivo": 0.4671,
+                                "recall_positivo": 1.0,
+                                "f1_score_positivo": 0.6367,
+                                "macro_f1": 0.3184,
+                                "matriz_confusion": {
+                                    "TN": 0,
+                                    "FP": 7581,
+                                    "FN": 0,
+                                    "TP": 6644
+                                }
+                            }
+                        },
+                        "Regresión Logística": {
+                            "es_linea_base": false,
+                            "tipo": "Lineal regularizado balanceado",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.7844,
+                                "pr_auc": 0.7866,
+                                "brier_score": 0.2024
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.55,
+                                "estado_validacion": "optimizado_en_validacion",
+                                "es_suficiente_validacion": true,
+                                "balanced_accuracy": 0.6382,
+                                "accuracy": 0.6602,
+                                "precision_positivo": 0.9088,
+                                "recall_positivo": 0.303,
+                                "f1_score_positivo": 0.4545,
+                                "macro_f1": 0.6039,
+                                "matriz_confusion": {
+                                    "TN": 7379,
+                                    "FP": 202,
+                                    "FN": 4631,
+                                    "TP": 2013
+                                }
+                            }
+                        },
+                        "Random Forest": {
+                            "es_linea_base": false,
+                            "tipo": "Ensamble bagging no lineal",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.7883,
+                                "pr_auc": 0.7889,
+                                "brier_score": 0.1998
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.6,
+                                "estado_validacion": "optimizado_en_validacion",
+                                "es_suficiente_validacion": true,
+                                "balanced_accuracy": 0.6356,
+                                "accuracy": 0.6579,
+                                "precision_positivo": 0.9085,
+                                "recall_positivo": 0.2974,
+                                "f1_score_positivo": 0.4481,
+                                "macro_f1": 0.6001,
+                                "matriz_confusion": {
+                                    "TN": 7382,
+                                    "FP": 199,
+                                    "FN": 4668,
+                                    "TP": 1976
+                                }
+                            }
+                        },
+                        "Extra Trees": {
+                            "es_linea_base": false,
+                            "tipo": "Árboles extremadamente aleatorizados balanceados",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.7855,
+                                "pr_auc": 0.785,
+                                "brier_score": 0.191
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.6,
+                                "estado_validacion": "optimizado_en_validacion",
+                                "es_suficiente_validacion": true,
+                                "balanced_accuracy": 0.6513,
+                                "accuracy": 0.6718,
+                                "precision_positivo": 0.8902,
+                                "recall_positivo": 0.3393,
+                                "f1_score_positivo": 0.4913,
+                                "macro_f1": 0.6245,
+                                "matriz_confusion": {
+                                    "TN": 7303,
+                                    "FP": 278,
+                                    "FN": 4390,
+                                    "TP": 2254
+                                }
+                            }
+                        },
+                        "Gradient Boosting": {
+                            "es_linea_base": false,
+                            "tipo": "Boosting secuencial clásico",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.7832,
+                                "pr_auc": 0.779,
+                                "brier_score": 0.212
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.7,
+                                "estado_validacion": "optimizado_en_validacion",
+                                "es_suficiente_validacion": true,
+                                "balanced_accuracy": 0.5656,
+                                "accuracy": 0.5939,
+                                "precision_positivo": 0.9587,
+                                "recall_positivo": 0.1364,
+                                "f1_score_positivo": 0.2388,
+                                "macro_f1": 0.4809,
+                                "matriz_confusion": {
+                                    "TN": 7542,
+                                    "FP": 39,
+                                    "FN": 5738,
+                                    "TP": 906
+                                }
+                            }
+                        },
+                        "HistGradientBoosting": {
+                            "es_linea_base": false,
+                            "tipo": "Boosting por histogramas (modelo de producción)",
+                            "metricas_independientes_del_umbral": {
+                                "auc_roc": 0.7697,
+                                "pr_auc": 0.761,
+                                "brier_score": 0.2224
+                            },
+                            "metricas_dependientes_del_umbral": {
+                                "umbral_evaluado": 0.65,
+                                "estado_validacion": "optimizado_en_validacion",
+                                "es_suficiente_validacion": true,
+                                "balanced_accuracy": 0.5632,
+                                "accuracy": 0.5916,
+                                "precision_positivo": 0.9542,
+                                "recall_positivo": 0.1318,
+                                "f1_score_positivo": 0.2317,
+                                "macro_f1": 0.4768,
+                                "matriz_confusion": {
+                                    "TN": 7539,
+                                    "FP": 42,
+                                    "FN": 5768,
+                                    "TP": 876
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "resumen_robustez_estrategia_a": {
+        "horizonte_1_dia": {
+            "Dummy (Clase Mayoritaria)": {
+                "auc_roc": {
+                    "media": 0.5,
+                    "std": 0.0,
+                    "min": 0.5,
+                    "max": 0.5,
+                    "valores_por_periodo": [
+                        0.5,
+                        0.5,
+                        0.5
+                    ]
+                },
+                "pr_auc": {
+                    "media": 0.1526,
+                    "std": 0.0404,
+                    "min": 0.1113,
+                    "max": 0.2074,
+                    "valores_por_periodo": [
+                        0.2074,
+                        0.1113,
+                        0.1391
+                    ]
+                },
+                "brier_score": {
+                    "media": 0.1526,
+                    "std": 0.0404,
+                    "min": 0.1113,
+                    "max": 0.2074,
+                    "valores_por_periodo": [
+                        0.2074,
+                        0.1113,
+                        0.1391
+                    ]
+                }
+            },
+            "Regresión Logística": {
+                "auc_roc": {
+                    "media": 0.769,
+                    "std": 0.0202,
+                    "min": 0.7436,
+                    "max": 0.7932,
+                    "valores_por_periodo": [
+                        0.7436,
+                        0.7701,
+                        0.7932
+                    ]
+                },
+                "pr_auc": {
+                    "media": 0.42,
+                    "std": 0.0503,
+                    "min": 0.3498,
+                    "max": 0.465,
+                    "valores_por_periodo": [
+                        0.465,
+                        0.3498,
+                        0.4453
+                    ]
+                },
+                "brier_score": {
+                    "media": 0.1925,
+                    "std": 0.0465,
+                    "min": 0.1528,
+                    "max": 0.2578,
+                    "valores_por_periodo": [
+                        0.2578,
+                        0.1528,
+                        0.1669
+                    ]
+                }
+            },
+            "Random Forest": {
+                "auc_roc": {
+                    "media": 0.7623,
+                    "std": 0.0223,
+                    "min": 0.7354,
+                    "max": 0.7901,
+                    "valores_por_periodo": [
+                        0.7354,
+                        0.7614,
+                        0.7901
+                    ]
+                },
+                "pr_auc": {
+                    "media": 0.4017,
+                    "std": 0.0496,
+                    "min": 0.3319,
+                    "max": 0.4422,
+                    "valores_por_periodo": [
+                        0.4422,
+                        0.3319,
+                        0.431
+                    ]
+                },
+                "brier_score": {
+                    "media": 0.169,
+                    "std": 0.0265,
+                    "min": 0.1371,
+                    "max": 0.202,
+                    "valores_por_periodo": [
+                        0.202,
+                        0.1371,
+                        0.168
+                    ]
+                }
+            },
+            "Extra Trees": {
+                "auc_roc": {
+                    "media": 0.7666,
+                    "std": 0.0196,
+                    "min": 0.745,
+                    "max": 0.7924,
+                    "valores_por_periodo": [
+                        0.745,
+                        0.7624,
+                        0.7924
+                    ]
+                },
+                "pr_auc": {
+                    "media": 0.4115,
+                    "std": 0.053,
+                    "min": 0.3386,
+                    "max": 0.4633,
+                    "valores_por_periodo": [
+                        0.4633,
+                        0.3386,
+                        0.4327
+                    ]
+                },
+                "brier_score": {
+                    "media": 0.184,
+                    "std": 0.0228,
+                    "min": 0.1555,
+                    "max": 0.2112,
+                    "valores_por_periodo": [
+                        0.2112,
+                        0.1555,
+                        0.1852
+                    ]
+                }
+            },
+            "Gradient Boosting": {
+                "auc_roc": {
+                    "media": 0.7583,
+                    "std": 0.0242,
+                    "min": 0.7304,
+                    "max": 0.7893,
+                    "valores_por_periodo": [
+                        0.7304,
+                        0.755,
+                        0.7893
+                    ]
+                },
+                "pr_auc": {
+                    "media": 0.3982,
+                    "std": 0.0549,
+                    "min": 0.321,
+                    "max": 0.4442,
+                    "valores_por_periodo": [
+                        0.4294,
+                        0.321,
+                        0.4442
+                    ]
+                },
+                "brier_score": {
+                    "media": 0.1111,
+                    "std": 0.0249,
+                    "min": 0.0888,
+                    "max": 0.1459,
+                    "valores_por_periodo": [
+                        0.1459,
+                        0.0888,
+                        0.0986
+                    ]
+                }
+            },
+            "HistGradientBoosting": {
+                "auc_roc": {
+                    "media": 0.7611,
+                    "std": 0.0157,
+                    "min": 0.7418,
+                    "max": 0.7802,
+                    "valores_por_periodo": [
+                        0.7418,
+                        0.7612,
+                        0.7802
+                    ]
+                },
+                "pr_auc": {
+                    "media": 0.4152,
+                    "std": 0.0558,
+                    "min": 0.3377,
+                    "max": 0.4668,
+                    "valores_por_periodo": [
+                        0.4668,
+                        0.3377,
+                        0.4412
+                    ]
+                },
+                "brier_score": {
+                    "media": 0.1092,
+                    "std": 0.0229,
+                    "min": 0.0878,
+                    "max": 0.1408,
+                    "valores_por_periodo": [
+                        0.1408,
+                        0.0878,
+                        0.0988
+                    ]
+                }
+            }
+        },
+        "horizonte_7_dias": {
+            "Dummy (Clase Mayoritaria)": {
+                "auc_roc": {
+                    "media": 0.5,
+                    "std": 0.0,
+                    "min": 0.5,
+                    "max": 0.5,
+                    "valores_por_periodo": [
+                        0.5,
+                        0.5,
+                        0.5
+                    ]
+                },
+                "pr_auc": {
+                    "media": 0.5099,
+                    "std": 0.1007,
+                    "min": 0.4136,
+                    "max": 0.6489,
+                    "valores_por_periodo": [
+                        0.6489,
+                        0.4136,
+                        0.4671
+                    ]
+                },
+                "brier_score": {
+                    "media": 0.4682,
+                    "std": 0.0961,
+                    "min": 0.3511,
+                    "max": 0.5864,
+                    "valores_por_periodo": [
+                        0.3511,
+                        0.5864,
+                        0.4671
+                    ]
+                }
+            },
+            "Regresión Logística": {
+                "auc_roc": {
+                    "media": 0.7251,
+                    "std": 0.0371,
+                    "min": 0.6736,
+                    "max": 0.7601,
+                    "valores_por_periodo": [
+                        0.7414,
+                        0.7601,
+                        0.6736
+                    ]
+                },
+                "pr_auc": {
+                    "media": 0.7391,
+                    "std": 0.084,
+                    "min": 0.6533,
+                    "max": 0.8531,
+                    "valores_por_periodo": [
+                        0.8531,
+                        0.7108,
+                        0.6533
+                    ]
+                },
+                "brier_score": {
+                    "media": 0.2246,
+                    "std": 0.0367,
+                    "min": 0.1952,
+                    "max": 0.2764,
+                    "valores_por_periodo": [
+                        0.1952,
+                        0.2023,
+                        0.2764
+                    ]
+                }
+            },
+            "Random Forest": {
+                "auc_roc": {
+                    "media": 0.7492,
+                    "std": 0.0251,
+                    "min": 0.7227,
+                    "max": 0.7828,
+                    "valores_por_periodo": [
+                        0.7227,
+                        0.742,
+                        0.7828
+                    ]
+                },
+                "pr_auc": {
+                    "media": 0.7752,
+                    "std": 0.0584,
+                    "min": 0.7011,
+                    "max": 0.8438,
+                    "valores_por_periodo": [
+                        0.8438,
+                        0.7011,
+                        0.7806
+                    ]
+                },
+                "brier_score": {
+                    "media": 0.1986,
+                    "std": 0.0058,
+                    "min": 0.1906,
+                    "max": 0.204,
+                    "valores_por_periodo": [
+                        0.204,
+                        0.2011,
+                        0.1906
+                    ]
+                }
+            },
+            "Extra Trees": {
+                "auc_roc": {
+                    "media": 0.7565,
+                    "std": 0.0234,
+                    "min": 0.7335,
+                    "max": 0.7886,
+                    "valores_por_periodo": [
+                        0.7335,
+                        0.7476,
+                        0.7886
+                    ]
+                },
+                "pr_auc": {
+                    "media": 0.7812,
+                    "std": 0.0585,
+                    "min": 0.7063,
+                    "max": 0.849,
+                    "valores_por_periodo": [
+                        0.849,
+                        0.7063,
+                        0.7884
+                    ]
+                },
+                "brier_score": {
+                    "media": 0.1958,
+                    "std": 0.0065,
+                    "min": 0.1866,
+                    "max": 0.2006,
+                    "valores_por_periodo": [
+                        0.2003,
+                        0.2006,
+                        0.1866
+                    ]
+                }
+            },
+            "Gradient Boosting": {
+                "auc_roc": {
+                    "media": 0.7371,
+                    "std": 0.0252,
+                    "min": 0.7121,
+                    "max": 0.7715,
+                    "valores_por_periodo": [
+                        0.7121,
+                        0.7275,
+                        0.7715
+                    ]
+                },
+                "pr_auc": {
+                    "media": 0.7667,
+                    "std": 0.0569,
+                    "min": 0.6944,
+                    "max": 0.8333,
+                    "valores_por_periodo": [
+                        0.8333,
+                        0.6944,
+                        0.7723
+                    ]
+                },
+                "brier_score": {
+                    "media": 0.2121,
+                    "std": 0.0078,
+                    "min": 0.2034,
+                    "max": 0.2222,
+                    "valores_por_periodo": [
+                        0.2034,
+                        0.2222,
+                        0.2107
+                    ]
+                }
+            },
+            "HistGradientBoosting": {
+                "auc_roc": {
+                    "media": 0.7405,
+                    "std": 0.0128,
+                    "min": 0.7296,
+                    "max": 0.7584,
+                    "valores_por_periodo": [
+                        0.7296,
+                        0.7335,
+                        0.7584
+                    ]
+                },
+                "pr_auc": {
+                    "media": 0.7636,
+                    "std": 0.0616,
+                    "min": 0.6941,
+                    "max": 0.8438,
+                    "valores_por_periodo": [
+                        0.8438,
+                        0.6941,
+                        0.7531
+                    ]
+                },
+                "brier_score": {
+                    "media": 0.2156,
+                    "std": 0.0133,
+                    "min": 0.1982,
+                    "max": 0.2306,
+                    "valores_por_periodo": [
+                        0.1982,
+                        0.2306,
+                        0.218
+                    ]
+                }
+            }
+        }
+    },
+    "resumen_robustez_estrategia_b": {
+        "horizonte_1_dia": {
+            "Dummy (Clase Mayoritaria)": {
+                "auc_roc": {
+                    "media": 0.5,
+                    "std": 0.0,
+                    "min": 0.5,
+                    "max": 0.5,
+                    "valores_por_periodo": [
+                        0.5,
+                        0.5,
+                        0.5
+                    ]
+                },
+                "pr_auc": {
+                    "media": 0.1526,
+                    "std": 0.0404,
+                    "min": 0.1113,
+                    "max": 0.2074,
+                    "valores_por_periodo": [
+                        0.2074,
+                        0.1113,
+                        0.1391
+                    ]
+                },
+                "brier_score": {
+                    "media": 0.1526,
+                    "std": 0.0404,
+                    "min": 0.1113,
+                    "max": 0.2074,
+                    "valores_por_periodo": [
+                        0.2074,
+                        0.1113,
+                        0.1391
+                    ]
+                }
+            },
+            "Regresión Logística": {
+                "auc_roc": {
+                    "media": 0.7689,
+                    "std": 0.0201,
+                    "min": 0.7436,
+                    "max": 0.7929,
+                    "valores_por_periodo": [
+                        0.7436,
+                        0.7701,
+                        0.7929
+                    ]
+                },
+                "pr_auc": {
+                    "media": 0.4211,
+                    "std": 0.0509,
+                    "min": 0.3498,
+                    "max": 0.465,
+                    "valores_por_periodo": [
+                        0.465,
+                        0.3498,
+                        0.4484
+                    ]
+                },
+                "brier_score": {
+                    "media": 0.1842,
+                    "std": 0.0522,
+                    "min": 0.1422,
+                    "max": 0.2578,
+                    "valores_por_periodo": [
+                        0.2578,
+                        0.1528,
+                        0.1422
+                    ]
+                }
+            },
+            "Random Forest": {
+                "auc_roc": {
+                    "media": 0.7635,
+                    "std": 0.0238,
+                    "min": 0.7354,
+                    "max": 0.7936,
+                    "valores_por_periodo": [
+                        0.7354,
+                        0.7614,
+                        0.7936
+                    ]
+                },
+                "pr_auc": {
+                    "media": 0.4052,
+                    "std": 0.0518,
+                    "min": 0.3319,
+                    "max": 0.4422,
+                    "valores_por_periodo": [
+                        0.4422,
+                        0.3319,
+                        0.4415
+                    ]
+                },
+                "brier_score": {
+                    "media": 0.16,
+                    "std": 0.0298,
+                    "min": 0.1371,
+                    "max": 0.202,
+                    "valores_por_periodo": [
+                        0.202,
+                        0.1371,
+                        0.1407
+                    ]
+                }
+            },
+            "Extra Trees": {
+                "auc_roc": {
+                    "media": 0.7666,
+                    "std": 0.0196,
+                    "min": 0.745,
+                    "max": 0.7924,
+                    "valores_por_periodo": [
+                        0.745,
+                        0.7624,
+                        0.7924
+                    ]
+                },
+                "pr_auc": {
+                    "media": 0.413,
+                    "std": 0.0536,
+                    "min": 0.3386,
+                    "max": 0.4633,
+                    "valores_por_periodo": [
+                        0.4633,
+                        0.3386,
+                        0.437
+                    ]
+                },
+                "brier_score": {
+                    "media": 0.1758,
+                    "std": 0.0251,
+                    "min": 0.1555,
+                    "max": 0.2112,
+                    "valores_por_periodo": [
+                        0.2112,
+                        0.1555,
+                        0.1608
+                    ]
+                }
+            },
+            "Gradient Boosting": {
+                "auc_roc": {
+                    "media": 0.7593,
+                    "std": 0.0254,
+                    "min": 0.7304,
+                    "max": 0.7923,
+                    "valores_por_periodo": [
+                        0.7304,
+                        0.755,
+                        0.7923
+                    ]
+                },
+                "pr_auc": {
+                    "media": 0.4011,
+                    "std": 0.0574,
+                    "min": 0.321,
+                    "max": 0.4527,
+                    "valores_por_periodo": [
+                        0.4294,
+                        0.321,
+                        0.4527
+                    ]
+                },
+                "brier_score": {
+                    "media": 0.1108,
+                    "std": 0.0251,
+                    "min": 0.0888,
+                    "max": 0.1459,
+                    "valores_por_periodo": [
+                        0.1459,
+                        0.0888,
+                        0.0978
+                    ]
+                }
+            },
+            "HistGradientBoosting": {
+                "auc_roc": {
+                    "media": 0.7626,
+                    "std": 0.0175,
+                    "min": 0.7418,
+                    "max": 0.7847,
+                    "valores_por_periodo": [
+                        0.7418,
+                        0.7612,
+                        0.7847
+                    ]
+                },
+                "pr_auc": {
+                    "media": 0.4176,
+                    "std": 0.057,
+                    "min": 0.3377,
+                    "max": 0.4668,
+                    "valores_por_periodo": [
+                        0.4668,
+                        0.3377,
+                        0.4483
+                    ]
+                },
+                "brier_score": {
+                    "media": 0.1089,
+                    "std": 0.023,
+                    "min": 0.0878,
+                    "max": 0.1408,
+                    "valores_por_periodo": [
+                        0.1408,
+                        0.0878,
+                        0.098
+                    ]
+                }
+            }
+        },
+        "horizonte_7_dias": {
+            "Dummy (Clase Mayoritaria)": {
+                "auc_roc": {
+                    "media": 0.5,
+                    "std": 0.0,
+                    "min": 0.5,
+                    "max": 0.5,
+                    "valores_por_periodo": [
+                        0.5,
+                        0.5,
+                        0.5
+                    ]
+                },
+                "pr_auc": {
+                    "media": 0.5099,
+                    "std": 0.1007,
+                    "min": 0.4136,
+                    "max": 0.6489,
+                    "valores_por_periodo": [
+                        0.6489,
+                        0.4136,
+                        0.4671
+                    ]
+                },
+                "brier_score": {
+                    "media": 0.4901,
+                    "std": 0.1007,
+                    "min": 0.3511,
+                    "max": 0.5864,
+                    "valores_por_periodo": [
+                        0.3511,
+                        0.5864,
+                        0.5329
+                    ]
+                }
+            },
+            "Regresión Logística": {
+                "auc_roc": {
+                    "media": 0.762,
+                    "std": 0.0176,
+                    "min": 0.7414,
+                    "max": 0.7844,
+                    "valores_por_periodo": [
+                        0.7414,
+                        0.7601,
+                        0.7844
+                    ]
+                },
+                "pr_auc": {
+                    "media": 0.7835,
+                    "std": 0.0581,
+                    "min": 0.7108,
+                    "max": 0.8531,
+                    "valores_por_periodo": [
+                        0.8531,
+                        0.7108,
+                        0.7866
+                    ]
+                },
+                "brier_score": {
+                    "media": 0.2,
+                    "std": 0.0033,
+                    "min": 0.1952,
+                    "max": 0.2024,
+                    "valores_por_periodo": [
+                        0.1952,
+                        0.2023,
+                        0.2024
+                    ]
+                }
+            },
+            "Random Forest": {
+                "auc_roc": {
+                    "media": 0.751,
+                    "std": 0.0275,
+                    "min": 0.7227,
+                    "max": 0.7883,
+                    "valores_por_periodo": [
+                        0.7227,
+                        0.742,
+                        0.7883
+                    ]
+                },
+                "pr_auc": {
+                    "media": 0.7779,
+                    "std": 0.0587,
+                    "min": 0.7011,
+                    "max": 0.8438,
+                    "valores_por_periodo": [
+                        0.8438,
+                        0.7011,
+                        0.7889
+                    ]
+                },
+                "brier_score": {
+                    "media": 0.2016,
+                    "std": 0.0017,
+                    "min": 0.1998,
+                    "max": 0.204,
+                    "valores_por_periodo": [
+                        0.204,
+                        0.2011,
+                        0.1998
+                    ]
+                }
+            },
+            "Extra Trees": {
+                "auc_roc": {
+                    "media": 0.7555,
+                    "std": 0.022,
+                    "min": 0.7335,
+                    "max": 0.7855,
+                    "valores_por_periodo": [
+                        0.7335,
+                        0.7476,
+                        0.7855
+                    ]
+                },
+                "pr_auc": {
+                    "media": 0.7801,
+                    "std": 0.0583,
+                    "min": 0.7063,
+                    "max": 0.849,
+                    "valores_por_periodo": [
+                        0.849,
+                        0.7063,
+                        0.785
+                    ]
+                },
+                "brier_score": {
+                    "media": 0.1973,
+                    "std": 0.0045,
+                    "min": 0.191,
+                    "max": 0.2006,
+                    "valores_por_periodo": [
+                        0.2003,
+                        0.2006,
+                        0.191
+                    ]
+                }
+            },
+            "Gradient Boosting": {
+                "auc_roc": {
+                    "media": 0.7409,
+                    "std": 0.0306,
+                    "min": 0.7121,
+                    "max": 0.7832,
+                    "valores_por_periodo": [
+                        0.7121,
+                        0.7275,
+                        0.7832
+                    ]
+                },
+                "pr_auc": {
+                    "media": 0.7689,
+                    "std": 0.0572,
+                    "min": 0.6944,
+                    "max": 0.8333,
+                    "valores_por_periodo": [
+                        0.8333,
+                        0.6944,
+                        0.779
+                    ]
+                },
+                "brier_score": {
+                    "media": 0.2125,
+                    "std": 0.0077,
+                    "min": 0.2034,
+                    "max": 0.2222,
+                    "valores_por_periodo": [
+                        0.2034,
+                        0.2222,
+                        0.212
+                    ]
+                }
+            },
+            "HistGradientBoosting": {
+                "auc_roc": {
+                    "media": 0.7443,
+                    "std": 0.018,
+                    "min": 0.7296,
+                    "max": 0.7697,
+                    "valores_por_periodo": [
+                        0.7296,
+                        0.7335,
+                        0.7697
+                    ]
+                },
+                "pr_auc": {
+                    "media": 0.7663,
+                    "std": 0.0612,
+                    "min": 0.6941,
+                    "max": 0.8438,
+                    "valores_por_periodo": [
+                        0.8438,
+                        0.6941,
+                        0.761
+                    ]
+                },
+                "brier_score": {
+                    "media": 0.2171,
+                    "std": 0.0137,
+                    "min": 0.1982,
+                    "max": 0.2306,
+                    "valores_por_periodo": [
+                        0.1982,
+                        0.2306,
+                        0.2224
+                    ]
+                }
+            }
+        }
+    },
+    "resumen_global_cuatro_cortes": {
+        "horizonte_1_dia": {
+            "Dummy (Clase Mayoritaria)": {
+                "auc_roc": {
+                    "min": 0.5,
+                    "max": 0.5,
+                    "macro_promedio_4_cortes": 0.5,
+                    "valores_por_corte": [
+                        0.5,
+                        0.5,
+                        0.5,
+                        0.5
+                    ]
+                },
+                "pr_auc": {
+                    "min": 0.1113,
+                    "max": 0.2074,
+                    "macro_promedio_4_cortes": 0.1492,
+                    "valores_por_corte": [
+                        0.2074,
+                        0.1113,
+                        0.1391,
+                        0.1391
+                    ]
+                },
+                "brier_score": {
+                    "min": 0.1113,
+                    "max": 0.2074,
+                    "macro_promedio_4_cortes": 0.1492,
+                    "valores_por_corte": [
+                        0.2074,
+                        0.1113,
+                        0.1391,
+                        0.1391
+                    ]
+                },
+                "balanced_accuracy": {
+                    "min": 0.5,
+                    "max": 0.5,
+                    "macro_promedio_4_cortes": 0.5,
+                    "valores_por_corte": [
+                        0.5,
+                        0.5,
+                        0.5,
+                        0.5
+                    ]
+                },
+                "macro_f1": {
+                    "min": 0.4421,
+                    "max": 0.4705,
+                    "macro_promedio_4_cortes": 0.4595,
+                    "valores_por_corte": [
+                        0.4421,
+                        0.4705,
+                        0.4626,
+                        0.4626
+                    ]
+                },
+                "recall_positivo": {
+                    "min": 0.0,
+                    "max": 0.0,
+                    "macro_promedio_4_cortes": 0.0,
+                    "valores_por_corte": [
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0
+                    ]
+                },
+                "precision_positivo": {
+                    "min": 0.0,
+                    "max": 0.0,
+                    "macro_promedio_4_cortes": 0.0,
+                    "valores_por_corte": [
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0
+                    ]
+                }
+            },
+            "Regresión Logística": {
+                "auc_roc": {
+                    "min": 0.7436,
+                    "max": 0.7932,
+                    "macro_promedio_4_cortes": 0.7749,
+                    "valores_por_corte": [
+                        0.7436,
+                        0.7701,
+                        0.7932,
+                        0.7929
+                    ]
+                },
+                "pr_auc": {
+                    "min": 0.3498,
+                    "max": 0.465,
+                    "macro_promedio_4_cortes": 0.4271,
+                    "valores_por_corte": [
+                        0.465,
+                        0.3498,
+                        0.4453,
+                        0.4484
+                    ]
+                },
+                "brier_score": {
+                    "min": 0.1422,
+                    "max": 0.2578,
+                    "macro_promedio_4_cortes": 0.1799,
+                    "valores_por_corte": [
+                        0.2578,
+                        0.1528,
+                        0.1669,
+                        0.1422
+                    ]
+                },
+                "balanced_accuracy": {
+                    "min": 0.6411,
+                    "max": 0.7146,
+                    "macro_promedio_4_cortes": 0.6715,
+                    "valores_por_corte": [
+                        0.6588,
+                        0.6715,
+                        0.7146,
+                        0.6411
+                    ]
+                },
+                "macro_f1": {
+                    "min": 0.6545,
+                    "max": 0.6674,
+                    "macro_promedio_4_cortes": 0.6609,
+                    "valores_por_corte": [
+                        0.6674,
+                        0.6549,
+                        0.6545,
+                        0.6669
+                    ]
+                },
+                "recall_positivo": {
+                    "min": 0.3265,
+                    "max": 0.6188,
+                    "macro_promedio_4_cortes": 0.4542,
+                    "valores_por_corte": [
+                        0.4289,
+                        0.4426,
+                        0.6188,
+                        0.3265
+                    ]
+                },
+                "precision_positivo": {
+                    "min": 0.3452,
+                    "max": 0.5436,
+                    "macro_promedio_4_cortes": 0.4372,
+                    "valores_por_corte": [
+                        0.5022,
+                        0.3579,
+                        0.3452,
+                        0.5436
+                    ]
+                }
+            },
+            "Random Forest": {
+                "auc_roc": {
+                    "min": 0.7354,
+                    "max": 0.7936,
+                    "macro_promedio_4_cortes": 0.7701,
+                    "valores_por_corte": [
+                        0.7354,
+                        0.7614,
+                        0.7901,
+                        0.7936
+                    ]
+                },
+                "pr_auc": {
+                    "min": 0.3319,
+                    "max": 0.4422,
+                    "macro_promedio_4_cortes": 0.4117,
+                    "valores_por_corte": [
+                        0.4422,
+                        0.3319,
+                        0.431,
+                        0.4415
+                    ]
+                },
+                "brier_score": {
+                    "min": 0.1371,
+                    "max": 0.202,
+                    "macro_promedio_4_cortes": 0.162,
+                    "valores_por_corte": [
+                        0.202,
+                        0.1371,
+                        0.168,
+                        0.1407
+                    ]
+                },
+                "balanced_accuracy": {
+                    "min": 0.6535,
+                    "max": 0.6921,
+                    "macro_promedio_4_cortes": 0.6731,
+                    "valores_por_corte": [
+                        0.6535,
+                        0.6709,
+                        0.6921,
+                        0.6759
+                    ]
+                },
+                "macro_f1": {
+                    "min": 0.6463,
+                    "max": 0.6839,
+                    "macro_promedio_4_cortes": 0.6655,
+                    "valores_por_corte": [
+                        0.6538,
+                        0.6463,
+                        0.6781,
+                        0.6839
+                    ]
+                },
+                "recall_positivo": {
+                    "min": 0.4272,
+                    "max": 0.4953,
+                    "macro_promedio_4_cortes": 0.4568,
+                    "valores_por_corte": [
+                        0.4494,
+                        0.4554,
+                        0.4953,
+                        0.4272
+                    ]
+                },
+                "precision_positivo": {
+                    "min": 0.3343,
+                    "max": 0.4778,
+                    "macro_promedio_4_cortes": 0.4208,
+                    "valores_por_corte": [
+                        0.4522,
+                        0.3343,
+                        0.4189,
+                        0.4778
+                    ]
+                }
+            },
+            "Extra Trees": {
+                "auc_roc": {
+                    "min": 0.745,
+                    "max": 0.7924,
+                    "macro_promedio_4_cortes": 0.773,
+                    "valores_por_corte": [
+                        0.745,
+                        0.7624,
+                        0.7924,
+                        0.7924
+                    ]
+                },
+                "pr_auc": {
+                    "min": 0.3386,
+                    "max": 0.4633,
+                    "macro_promedio_4_cortes": 0.4179,
+                    "valores_por_corte": [
+                        0.4633,
+                        0.3386,
+                        0.4327,
+                        0.437
+                    ]
+                },
+                "brier_score": {
+                    "min": 0.1555,
+                    "max": 0.2112,
+                    "macro_promedio_4_cortes": 0.1782,
+                    "valores_por_corte": [
+                        0.2112,
+                        0.1555,
+                        0.1852,
+                        0.1608
+                    ]
+                },
+                "balanced_accuracy": {
+                    "min": 0.6579,
+                    "max": 0.7023,
+                    "macro_promedio_4_cortes": 0.673,
+                    "valores_por_corte": [
+                        0.6662,
+                        0.6579,
+                        0.7023,
+                        0.6655
+                    ]
+                },
+                "macro_f1": {
+                    "min": 0.6521,
+                    "max": 0.6787,
+                    "macro_promedio_4_cortes": 0.6685,
+                    "valores_por_corte": [
+                        0.6702,
+                        0.6521,
+                        0.6729,
+                        0.6787
+                    ]
+                },
+                "recall_positivo": {
+                    "min": 0.3986,
+                    "max": 0.54,
+                    "macro_promedio_4_cortes": 0.4494,
+                    "valores_por_corte": [
+                        0.4575,
+                        0.4015,
+                        0.54,
+                        0.3986
+                    ]
+                },
+                "precision_positivo": {
+                    "min": 0.3697,
+                    "max": 0.4892,
+                    "macro_promedio_4_cortes": 0.4346,
+                    "valores_por_corte": [
+                        0.4892,
+                        0.3697,
+                        0.3917,
+                        0.4877
+                    ]
+                }
+            },
+            "Gradient Boosting": {
+                "auc_roc": {
+                    "min": 0.7304,
+                    "max": 0.7923,
+                    "macro_promedio_4_cortes": 0.7668,
+                    "valores_por_corte": [
+                        0.7304,
+                        0.755,
+                        0.7893,
+                        0.7923
+                    ]
+                },
+                "pr_auc": {
+                    "min": 0.321,
+                    "max": 0.4527,
+                    "macro_promedio_4_cortes": 0.4118,
+                    "valores_por_corte": [
+                        0.4294,
+                        0.321,
+                        0.4442,
+                        0.4527
+                    ]
+                },
+                "brier_score": {
+                    "min": 0.0888,
+                    "max": 0.1459,
+                    "macro_promedio_4_cortes": 0.1078,
+                    "valores_por_corte": [
+                        0.1459,
+                        0.0888,
+                        0.0986,
+                        0.0978
+                    ]
+                },
+                "balanced_accuracy": {
+                    "min": 0.6076,
+                    "max": 0.6842,
+                    "macro_promedio_4_cortes": 0.6447,
+                    "valores_por_corte": [
+                        0.6631,
+                        0.6076,
+                        0.6842,
+                        0.6239
+                    ]
+                },
+                "macro_f1": {
+                    "min": 0.6258,
+                    "max": 0.6769,
+                    "macro_promedio_4_cortes": 0.6503,
+                    "valores_por_corte": [
+                        0.6434,
+                        0.6258,
+                        0.6769,
+                        0.6549
+                    ]
+                },
+                "recall_positivo": {
+                    "min": 0.2627,
+                    "max": 0.5332,
+                    "macro_promedio_4_cortes": 0.3857,
+                    "valores_por_corte": [
+                        0.5332,
+                        0.2627,
+                        0.4697,
+                        0.2773
+                    ]
+                },
+                "precision_positivo": {
+                    "min": 0.4026,
+                    "max": 0.6029,
+                    "macro_promedio_4_cortes": 0.4608,
+                    "valores_por_corte": [
+                        0.4026,
+                        0.4096,
+                        0.4282,
+                        0.6029
+                    ]
+                }
+            },
+            "HistGradientBoosting": {
+                "auc_roc": {
+                    "min": 0.7418,
+                    "max": 0.7847,
+                    "macro_promedio_4_cortes": 0.767,
+                    "valores_por_corte": [
+                        0.7418,
+                        0.7612,
+                        0.7802,
+                        0.7847
+                    ]
+                },
+                "pr_auc": {
+                    "min": 0.3377,
+                    "max": 0.4668,
+                    "macro_promedio_4_cortes": 0.4235,
+                    "valores_por_corte": [
+                        0.4668,
+                        0.3377,
+                        0.4412,
+                        0.4483
+                    ]
+                },
+                "brier_score": {
+                    "min": 0.0878,
+                    "max": 0.1408,
+                    "macro_promedio_4_cortes": 0.1064,
+                    "valores_por_corte": [
+                        0.1408,
+                        0.0878,
+                        0.0988,
+                        0.098
+                    ]
+                },
+                "balanced_accuracy": {
+                    "min": 0.6028,
+                    "max": 0.6854,
+                    "macro_promedio_4_cortes": 0.6493,
+                    "valores_por_corte": [
+                        0.6782,
+                        0.6028,
+                        0.6854,
+                        0.6306
+                    ]
+                },
+                "macro_f1": {
+                    "min": 0.6263,
+                    "max": 0.6759,
+                    "macro_promedio_4_cortes": 0.6556,
+                    "valores_por_corte": [
+                        0.6594,
+                        0.6263,
+                        0.6759,
+                        0.6608
+                    ]
+                },
+                "recall_positivo": {
+                    "min": 0.2415,
+                    "max": 0.5499,
+                    "macro_promedio_4_cortes": 0.3905,
+                    "valores_por_corte": [
+                        0.5499,
+                        0.2415,
+                        0.4759,
+                        0.2947
+                    ]
+                },
+                "precision_positivo": {
+                    "min": 0.4225,
+                    "max": 0.5874,
+                    "macro_promedio_4_cortes": 0.4735,
+                    "valores_por_corte": [
+                        0.4266,
+                        0.4574,
+                        0.4225,
+                        0.5874
+                    ]
+                }
+            }
+        },
+        "horizonte_7_dias": {
+            "Dummy (Clase Mayoritaria)": {
+                "auc_roc": {
+                    "min": 0.5,
+                    "max": 0.5,
+                    "macro_promedio_4_cortes": 0.5,
+                    "valores_por_corte": [
+                        0.5,
+                        0.5,
+                        0.5,
+                        0.5
+                    ]
+                },
+                "pr_auc": {
+                    "min": 0.4136,
+                    "max": 0.6489,
+                    "macro_promedio_4_cortes": 0.4992,
+                    "valores_por_corte": [
+                        0.6489,
+                        0.4136,
+                        0.4671,
+                        0.4671
+                    ]
+                },
+                "brier_score": {
+                    "min": 0.3511,
+                    "max": 0.5864,
+                    "macro_promedio_4_cortes": 0.4844,
+                    "valores_por_corte": [
+                        0.3511,
+                        0.5864,
+                        0.4671,
+                        0.5329
+                    ]
+                },
+                "balanced_accuracy": {
+                    "min": 0.5,
+                    "max": 0.5,
+                    "macro_promedio_4_cortes": 0.5,
+                    "valores_por_corte": [
+                        0.5,
+                        0.5,
+                        0.5,
+                        0.5
+                    ]
+                },
+                "macro_f1": {
+                    "min": 0.2926,
+                    "max": 0.3935,
+                    "macro_promedio_4_cortes": 0.338,
+                    "valores_por_corte": [
+                        0.3935,
+                        0.2926,
+                        0.3477,
+                        0.3184
+                    ]
+                },
+                "recall_positivo": {
+                    "min": 0.0,
+                    "max": 1.0,
+                    "macro_promedio_4_cortes": 0.75,
+                    "valores_por_corte": [
+                        1.0,
+                        1.0,
+                        0.0,
+                        1.0
+                    ]
+                },
+                "precision_positivo": {
+                    "min": 0.0,
+                    "max": 0.6489,
+                    "macro_promedio_4_cortes": 0.3824,
+                    "valores_por_corte": [
+                        0.6489,
+                        0.4136,
+                        0.0,
+                        0.4671
+                    ]
+                }
+            },
+            "Regresión Logística": {
+                "auc_roc": {
+                    "min": 0.6736,
+                    "max": 0.7844,
+                    "macro_promedio_4_cortes": 0.7399,
+                    "valores_por_corte": [
+                        0.7414,
+                        0.7601,
+                        0.6736,
+                        0.7844
+                    ]
+                },
+                "pr_auc": {
+                    "min": 0.6533,
+                    "max": 0.8531,
+                    "macro_promedio_4_cortes": 0.751,
+                    "valores_por_corte": [
+                        0.8531,
+                        0.7108,
+                        0.6533,
+                        0.7866
+                    ]
+                },
+                "brier_score": {
+                    "min": 0.1952,
+                    "max": 0.2764,
+                    "macro_promedio_4_cortes": 0.2191,
+                    "valores_por_corte": [
+                        0.1952,
+                        0.2023,
+                        0.2764,
+                        0.2024
+                    ]
+                },
+                "balanced_accuracy": {
+                    "min": 0.5086,
+                    "max": 0.6849,
+                    "macro_promedio_4_cortes": 0.6267,
+                    "valores_por_corte": [
+                        0.6752,
+                        0.6849,
+                        0.5086,
+                        0.6382
+                    ]
+                },
+                "macro_f1": {
+                    "min": 0.3669,
+                    "max": 0.6759,
+                    "macro_promedio_4_cortes": 0.5779,
+                    "valores_por_corte": [
+                        0.6649,
+                        0.6759,
+                        0.3669,
+                        0.6039
+                    ]
+                },
+                "recall_positivo": {
+                    "min": 0.0178,
+                    "max": 0.7257,
+                    "macro_promedio_4_cortes": 0.4356,
+                    "valores_por_corte": [
+                        0.696,
+                        0.7257,
+                        0.0178,
+                        0.303
+                    ]
+                },
+                "precision_positivo": {
+                    "min": 0.5899,
+                    "max": 0.9672,
+                    "macro_promedio_4_cortes": 0.8135,
+                    "valores_por_corte": [
+                        0.7883,
+                        0.5899,
+                        0.9672,
+                        0.9088
+                    ]
+                }
+            },
+            "Random Forest": {
+                "auc_roc": {
+                    "min": 0.7227,
+                    "max": 0.7883,
+                    "macro_promedio_4_cortes": 0.759,
+                    "valores_por_corte": [
+                        0.7227,
+                        0.742,
+                        0.7828,
+                        0.7883
+                    ]
+                },
+                "pr_auc": {
+                    "min": 0.7011,
+                    "max": 0.8438,
+                    "macro_promedio_4_cortes": 0.7786,
+                    "valores_por_corte": [
+                        0.8438,
+                        0.7011,
+                        0.7806,
+                        0.7889
+                    ]
+                },
+                "brier_score": {
+                    "min": 0.1906,
+                    "max": 0.204,
+                    "macro_promedio_4_cortes": 0.1989,
+                    "valores_por_corte": [
+                        0.204,
+                        0.2011,
+                        0.1906,
+                        0.1998
+                    ]
+                },
+                "balanced_accuracy": {
+                    "min": 0.6356,
+                    "max": 0.7004,
+                    "macro_promedio_4_cortes": 0.6645,
+                    "valores_por_corte": [
+                        0.642,
+                        0.68,
+                        0.7004,
+                        0.6356
+                    ]
+                },
+                "macro_f1": {
+                    "min": 0.6001,
+                    "max": 0.6965,
+                    "macro_promedio_4_cortes": 0.6537,
+                    "valores_por_corte": [
+                        0.6348,
+                        0.6833,
+                        0.6965,
+                        0.6001
+                    ]
+                },
+                "recall_positivo": {
+                    "min": 0.2974,
+                    "max": 0.6854,
+                    "macro_promedio_4_cortes": 0.5067,
+                    "valores_por_corte": [
+                        0.6854,
+                        0.5266,
+                        0.5173,
+                        0.2974
+                    ]
+                },
+                "precision_positivo": {
+                    "min": 0.6904,
+                    "max": 0.9085,
+                    "macro_promedio_4_cortes": 0.7884,
+                    "valores_por_corte": [
+                        0.7594,
+                        0.6904,
+                        0.7954,
+                        0.9085
+                    ]
+                }
+            },
+            "Extra Trees": {
+                "auc_roc": {
+                    "min": 0.7335,
+                    "max": 0.7886,
+                    "macro_promedio_4_cortes": 0.7638,
+                    "valores_por_corte": [
+                        0.7335,
+                        0.7476,
+                        0.7886,
+                        0.7855
+                    ]
+                },
+                "pr_auc": {
+                    "min": 0.7063,
+                    "max": 0.849,
+                    "macro_promedio_4_cortes": 0.7822,
+                    "valores_por_corte": [
+                        0.849,
+                        0.7063,
+                        0.7884,
+                        0.785
+                    ]
+                },
+                "brier_score": {
+                    "min": 0.1866,
+                    "max": 0.2006,
+                    "macro_promedio_4_cortes": 0.1946,
+                    "valores_por_corte": [
+                        0.2003,
+                        0.2006,
+                        0.1866,
+                        0.191
+                    ]
+                },
+                "balanced_accuracy": {
+                    "min": 0.6513,
+                    "max": 0.7152,
+                    "macro_promedio_4_cortes": 0.6816,
+                    "valores_por_corte": [
+                        0.6709,
+                        0.6892,
+                        0.7152,
+                        0.6513
+                    ]
+                },
+                "macro_f1": {
+                    "min": 0.6245,
+                    "max": 0.7155,
+                    "macro_promedio_4_cortes": 0.6719,
+                    "valores_por_corte": [
+                        0.6575,
+                        0.6902,
+                        0.7155,
+                        0.6245
+                    ]
+                },
+                "recall_positivo": {
+                    "min": 0.3393,
+                    "max": 0.6726,
+                    "macro_promedio_4_cortes": 0.5602,
+                    "valores_por_corte": [
+                        0.6726,
+                        0.6188,
+                        0.6102,
+                        0.3393
+                    ]
+                },
+                "precision_positivo": {
+                    "min": 0.6447,
+                    "max": 0.8902,
+                    "macro_promedio_4_cortes": 0.7683,
+                    "valores_por_corte": [
+                        0.7898,
+                        0.6447,
+                        0.7484,
+                        0.8902
+                    ]
+                }
+            },
+            "Gradient Boosting": {
+                "auc_roc": {
+                    "min": 0.7121,
+                    "max": 0.7832,
+                    "macro_promedio_4_cortes": 0.7486,
+                    "valores_por_corte": [
+                        0.7121,
+                        0.7275,
+                        0.7715,
+                        0.7832
+                    ]
+                },
+                "pr_auc": {
+                    "min": 0.6944,
+                    "max": 0.8333,
+                    "macro_promedio_4_cortes": 0.7697,
+                    "valores_por_corte": [
+                        0.8333,
+                        0.6944,
+                        0.7723,
+                        0.779
+                    ]
+                },
+                "brier_score": {
+                    "min": 0.2034,
+                    "max": 0.2222,
+                    "macro_promedio_4_cortes": 0.2121,
+                    "valores_por_corte": [
+                        0.2034,
+                        0.2222,
+                        0.2107,
+                        0.212
+                    ]
+                },
+                "balanced_accuracy": {
+                    "min": 0.5656,
+                    "max": 0.6793,
+                    "macro_promedio_4_cortes": 0.6273,
+                    "valores_por_corte": [
+                        0.6112,
+                        0.6793,
+                        0.653,
+                        0.5656
+                    ]
+                },
+                "macro_f1": {
+                    "min": 0.4809,
+                    "max": 0.6814,
+                    "macro_promedio_4_cortes": 0.6017,
+                    "valores_por_corte": [
+                        0.6145,
+                        0.6814,
+                        0.6299,
+                        0.4809
+                    ]
+                },
+                "recall_positivo": {
+                    "min": 0.1364,
+                    "max": 0.8195,
+                    "macro_promedio_4_cortes": 0.4733,
+                    "valores_por_corte": [
+                        0.8195,
+                        0.5806,
+                        0.3566,
+                        0.1364
+                    ]
+                },
+                "precision_positivo": {
+                    "min": 0.6483,
+                    "max": 0.9587,
+                    "macro_promedio_4_cortes": 0.7963,
+                    "valores_por_corte": [
+                        0.7173,
+                        0.6483,
+                        0.8608,
+                        0.9587
+                    ]
+                }
+            },
+            "HistGradientBoosting": {
+                "auc_roc": {
+                    "min": 0.7296,
+                    "max": 0.7697,
+                    "macro_promedio_4_cortes": 0.7478,
+                    "valores_por_corte": [
+                        0.7296,
+                        0.7335,
+                        0.7584,
+                        0.7697
+                    ]
+                },
+                "pr_auc": {
+                    "min": 0.6941,
+                    "max": 0.8438,
+                    "macro_promedio_4_cortes": 0.763,
+                    "valores_por_corte": [
+                        0.8438,
+                        0.6941,
+                        0.7531,
+                        0.761
+                    ]
+                },
+                "brier_score": {
+                    "min": 0.1982,
+                    "max": 0.2306,
+                    "macro_promedio_4_cortes": 0.2173,
+                    "valores_por_corte": [
+                        0.1982,
+                        0.2306,
+                        0.218,
+                        0.2224
+                    ]
+                },
+                "balanced_accuracy": {
+                    "min": 0.5632,
+                    "max": 0.685,
+                    "macro_promedio_4_cortes": 0.6243,
+                    "valores_por_corte": [
+                        0.6144,
+                        0.685,
+                        0.6347,
+                        0.5632
+                    ]
+                },
+                "macro_f1": {
+                    "min": 0.4768,
+                    "max": 0.6859,
+                    "macro_promedio_4_cortes": 0.5968,
+                    "valores_por_corte": [
+                        0.6176,
+                        0.6859,
+                        0.6071,
+                        0.4768
+                    ]
+                },
+                "recall_positivo": {
+                    "min": 0.1318,
+                    "max": 0.8519,
+                    "macro_promedio_4_cortes": 0.4818,
+                    "valores_por_corte": [
+                        0.8519,
+                        0.6159,
+                        0.3274,
+                        0.1318
+                    ]
+                },
+                "precision_positivo": {
+                    "min": 0.6385,
+                    "max": 0.9542,
+                    "macro_promedio_4_cortes": 0.7853,
+                    "valores_por_corte": [
+                        0.7165,
+                        0.6385,
+                        0.8321,
+                        0.9542
+                    ]
+                }
+            }
+        }
+    },
+    "comparativa_estrategias_octubre": {
+        "horizonte_1_dia": {
+            "Dummy (Clase Mayoritaria)": {
+                "auc_roc_estrategia_a": 0.5,
+                "auc_roc_estrategia_b": 0.5,
+                "diferencia_auc_b_menos_a": 0.0,
+                "brier_estrategia_a": 0.1391,
+                "brier_estrategia_b": 0.1391
+            },
+            "Regresión Logística": {
+                "auc_roc_estrategia_a": 0.7932,
+                "auc_roc_estrategia_b": 0.7929,
+                "diferencia_auc_b_menos_a": -0.0003,
+                "brier_estrategia_a": 0.1669,
+                "brier_estrategia_b": 0.1422
+            },
+            "Random Forest": {
+                "auc_roc_estrategia_a": 0.7901,
+                "auc_roc_estrategia_b": 0.7936,
+                "diferencia_auc_b_menos_a": 0.0035,
+                "brier_estrategia_a": 0.168,
+                "brier_estrategia_b": 0.1407
+            },
+            "Extra Trees": {
+                "auc_roc_estrategia_a": 0.7924,
+                "auc_roc_estrategia_b": 0.7924,
+                "diferencia_auc_b_menos_a": 0.0,
+                "brier_estrategia_a": 0.1852,
+                "brier_estrategia_b": 0.1608
+            },
+            "Gradient Boosting": {
+                "auc_roc_estrategia_a": 0.7893,
+                "auc_roc_estrategia_b": 0.7923,
+                "diferencia_auc_b_menos_a": 0.003,
+                "brier_estrategia_a": 0.0986,
+                "brier_estrategia_b": 0.0978
+            },
+            "HistGradientBoosting": {
+                "auc_roc_estrategia_a": 0.7802,
+                "auc_roc_estrategia_b": 0.7847,
+                "diferencia_auc_b_menos_a": 0.0045,
+                "brier_estrategia_a": 0.0988,
+                "brier_estrategia_b": 0.098
+            }
+        },
+        "horizonte_7_dias": {
+            "Dummy (Clase Mayoritaria)": {
+                "auc_roc_estrategia_a": 0.5,
+                "auc_roc_estrategia_b": 0.5,
+                "diferencia_auc_b_menos_a": 0.0,
+                "brier_estrategia_a": 0.4671,
+                "brier_estrategia_b": 0.5329
+            },
+            "Regresión Logística": {
+                "auc_roc_estrategia_a": 0.6736,
+                "auc_roc_estrategia_b": 0.7844,
+                "diferencia_auc_b_menos_a": 0.1108,
+                "brier_estrategia_a": 0.2764,
+                "brier_estrategia_b": 0.2024
+            },
+            "Random Forest": {
+                "auc_roc_estrategia_a": 0.7828,
+                "auc_roc_estrategia_b": 0.7883,
+                "diferencia_auc_b_menos_a": 0.0055,
+                "brier_estrategia_a": 0.1906,
+                "brier_estrategia_b": 0.1998
+            },
+            "Extra Trees": {
+                "auc_roc_estrategia_a": 0.7886,
+                "auc_roc_estrategia_b": 0.7855,
+                "diferencia_auc_b_menos_a": -0.0031,
+                "brier_estrategia_a": 0.1866,
+                "brier_estrategia_b": 0.191
+            },
+            "Gradient Boosting": {
+                "auc_roc_estrategia_a": 0.7715,
+                "auc_roc_estrategia_b": 0.7832,
+                "diferencia_auc_b_menos_a": 0.0117,
+                "brier_estrategia_a": 0.2107,
+                "brier_estrategia_b": 0.212
+            },
+            "HistGradientBoosting": {
+                "auc_roc_estrategia_a": 0.7584,
+                "auc_roc_estrategia_b": 0.7697,
+                "diferencia_auc_b_menos_a": 0.0113,
+                "brier_estrategia_a": 0.218,
+                "brier_estrategia_b": 0.2224
+            }
+        }
+    }
+}

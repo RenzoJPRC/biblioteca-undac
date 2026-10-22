@@ -3,6 +3,10 @@ from datetime import date, datetime
 from ml.services.datos_afluencia import (
     construir_variables_afluencia,
     obtener_historial_afluencia_periodo,
+    refrescar_analisis_afluencia_memoria,
+    obtener_estado_refresco_memoria,
+    limpiar_cache_refresco_memoria,
+    obtener_analisis_descriptivo_filial,
     FERIADOS_CONFIRMADOS_2026,
     CIERRE_CONFIRMADO_27_JULIO
 )
@@ -19,7 +23,9 @@ CIERRES_ADICIONALES_2026 = {
 def predecir_afluencia_desde_bd(
     fecha,
     hora,
-    sede="Central"
+    sede="Central",
+    modelo=None,
+    permitir_descriptivo=False
 ):
     """
     Ejecuta el flujo completo:
@@ -27,7 +33,7 @@ def predecir_afluencia_desde_bd(
     1. Verifica si la fecha consultada corresponde a un día de cierre o feriado.
     2. Consulta el historial de SQL Server.
     3. Calcula las 12 variables.
-    4. Ejecuta el modelo de Machine Learning.
+    4. Ejecuta el modelo de Machine Learning (Candidato o Producción, con fallback automático).
     5. Devuelve predicción, probabilidades y contexto.
     """
     if isinstance(fecha, datetime):
@@ -81,18 +87,32 @@ def predecir_afluencia_desde_bd(
             "advertencia": "Biblioteca cerrada; no corresponde emitir un pronóstico operativo."
         }
 
+    sede_limpia = str(sede).strip() if sede else "Central"
+    if sede_limpia != "Central":
+        if permitir_descriptivo:
+            return obtener_analisis_descriptivo_filial(
+                fecha_objetivo=fecha_obj,
+                hora_objetivo=hora,
+                sede=sede_limpia
+            )
+        raise ValueError(
+            f"El modelo predictivo actual corresponde exclusivamente a la Sede Central. "
+            f"No está permitido presentar predicciones para la filial '{sede_limpia}' con el modelo de Central."
+        )
+
     variables, contexto = (
         construir_variables_afluencia(
             fecha_objetivo=fecha_obj,
             hora_objetivo=hora,
-            sede=sede
+            sede=sede_limpia
         )
     )
 
     predictor = obtener_predictor_afluencia()
 
     resultado_modelo = predictor.predecir(
-        variables
+        variables,
+        modelo=modelo
     )
 
     calidad_minima = bool(contexto.get("calidad_minima_historial", contexto.get("confiable", True)))
@@ -133,6 +153,7 @@ def predecir_afluencia_desde_bd(
         )
         advertencia_final = prefijo_parcial + advertencia_final
 
+    nombre_algoritmo = resultado_modelo.get("algoritmo", "GradientBoostingClassifier")
     return {
         "status": "success",
         "periodo": {
@@ -140,7 +161,7 @@ def predecir_afluencia_desde_bd(
             "hora": int(hora)
         },
         "sede": sede,
-        "fuente": "Registros consolidados de molinetes y modelo predictivo RandomForestClassifier",
+        "fuente": f"Registros consolidados de molinetes y modelo predictivo {nombre_algoritmo}",
         "limites_cobertura": {
             "fecha_minima_sistema": "2026-04-10",
             "fecha_maxima_sistema": contexto.get("ultima_fecha_disponible", "2026-09-28"),
@@ -159,6 +180,13 @@ def predecir_afluencia_desde_bd(
             "version_modelo": resultado_modelo[
                 "version_modelo"
             ],
+            "algoritmo": resultado_modelo.get("algoritmo"),
+            "modelo_utilizado": resultado_modelo.get("modelo_utilizado"),
+            "tipo_modelo": resultado_modelo.get("tipo_modelo"),
+            "es_candidato": resultado_modelo.get("es_candidato", False),
+            "fecha_entrenamiento": resultado_modelo.get("fecha_entrenamiento"),
+            "periodo_entrenamiento": resultado_modelo.get("periodo_entrenamiento"),
+            "fallback_activado": resultado_modelo.get("fallback_activado", False),
             "calidad_minima_historial": calidad_minima,
             "confiable": calidad_minima,
             "modo_demostracion": modo_demo,
@@ -171,9 +199,9 @@ def predecir_afluencia_desde_bd(
     }
 
 
-def obtener_informacion_modelo():
+def obtener_informacion_modelo(modelo=None):
     predictor = obtener_predictor_afluencia()
-    return predictor.obtener_informacion()
+    return predictor.obtener_informacion(modelo=modelo)
 
 
 if __name__ == "__main__":

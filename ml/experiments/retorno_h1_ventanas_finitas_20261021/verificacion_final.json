@@ -1,0 +1,13 @@
+{
+  "artefacto_serializado_verificado": true,
+  "artefacto_sha256": "cf45277814b20df6304fbeee64d46ceefa337807a4c1eed6308510aaa871ccb4",
+  "dataset_sha256": "6f8b8f69a1727a1264cc1ba2ed12c61abeb72f311fb72a5c4addbd84ec2744dd",
+  "dataset_sin_identificadores": true,
+  "h1_madura_hasta_20_octubre": true,
+  "observaciones": 32101,
+  "produccion_intacta": true,
+  "pruebas_unitarias_aprobadas": 6,
+  "tasas_con_dias_abiertos_confirmados": true,
+  "ventanas_anteriores_a_referencia_y_objetivo": true,
+  "ventanas_sin_desconocidos": true
+}

@@ -1,0 +1,92 @@
+{
+  "alumnos_compartidos_train_val": 309,
+  "alumnos_totales": 1459,
+  "bloqueos": [],
+  "calendario": "Lunes-viernes 08:00–20:45; feriados y receso 01/08–23/08 cerrados. 24/07 desconocido, nunca saltado como cierre.",
+  "cobertura": "Calendario congelado del proyecto. Histórico declarado; 29/09–21/10 confirmación operativa del responsable, no verificación técnica independiente. No se infiere continuidad a partir de MAX(FechaHora).",
+  "corte_captura_completa_confirmada": "2026-10-21",
+  "dataset_sha256": "688012c8ce25f85591014b1c793d12e42e04b609083fd75e1a8d7365033ba62b",
+  "definicion": "Al menos un ingreso válido durante los siguientes siete días operativos, estrictamente posteriores a FechaRef.",
+  "elegibilidad": ">=3 días activos válidos en 30 días anteriores. Sin requisito de visita en los últimos 7 días; insuficiencia no equivale a clase negativa.",
+  "estado": "listo_para_evaluar",
+  "fuentes_sha256": {
+    "calendario": "3550b2e827ffab523803c87315ba6076d7ca20e141ad762915c75423b8e78421",
+    "constructor": "927ee23546f664df78b85c84027ad51dd71b31b1ce53bf96db6c2f6d3386048f",
+    "reglas_calendario": "23f3705a666fa669354bee360541dd1b99ec946de026ab7b6a3d45cf7724954b"
+  },
+  "generado": "2026-10-21T23:51:07.227901-05:00",
+  "max_fecha_registro_observada": "2026-10-21",
+  "modelos_antes": {
+    "ml\\models\\metadatos_modelo_afluencia.json": "638f117b9399ed64632014527c115790bedf539b2f1c503bae7045357d8ce08e",
+    "ml\\models\\metadatos_modelo_afluencia_candidato_gb.json": "6e8352e2f55368ef184862df0ef3ee9dd203f097a58c9166fed31d08773aaf52",
+    "ml\\models\\metadatos_retorno_alumno.json": "eb4bbe73ba285845f048b4fa0129e8bfe6c49c3dc6c87326c9494bb9f4ef31c2",
+    "ml\\models\\metadatos_retorno_alumno_candidato.json": "5b48551b00fecdfda2d0b94bf89b9f5446c4efc531081493e42a5bbcd8a23009",
+    "ml\\models\\metadatos_retorno_alumno_candidato_hgb_h1.json": "7a5de89cc483219c405bc8e3b6641e785906b865c8da9eee53a80d8044c2c4f3",
+    "ml\\models\\metadatos_retorno_alumno_candidato_logreg_h1.json": "f42c70ddaeeeafd28520c1a26dcfe3a8d8f1af9d060ec9ce63dce655fe8810da",
+    "ml\\models\\modelo_afluencia_candidato_gb.joblib": "4f045df9d18697469f8a8e4a9afe10d3e8039b5f2333d9a56796bc487abe158b",
+    "ml\\models\\modelo_afluencia_undac.joblib": "40a7de445ef426bf9289829919002e2bac502402277cd6fba21644c9663d7eb8",
+    "ml\\models\\modelo_retorno_alumno.joblib": "328f1d036777e36052cbd821acc28fc528960db6e4a0237e1bf9f5b818b7eefe",
+    "ml\\models\\modelo_retorno_alumno_candidato_hgb.joblib": "a82a9dea7dc9d7c86b517bc0273a0af06024d0dce2650b5a3af9f03780be939a",
+    "ml\\models\\modelo_retorno_alumno_candidato_hgb_h1.joblib": "7c8d207582b562d96cbfae5e91fb3fd69ea12f401cf89c3d940026374c398900",
+    "ml\\models\\modelo_retorno_alumno_candidato_logreg_h1.joblib": "2af32a14fcbc37cbcecdb158d6a9e15f0ba2b36cc464b6a71a5d9e4e5a3a3252"
+  },
+  "octubre": "Retrospectivo ya examinado en el proyecto; no prueba independiente ni criterio de selección. Puede quedar vacío por cobertura histórica desconocida.",
+  "particiones": {
+    "entrenamiento": {
+      "alumnos": 1409,
+      "clases": {
+        "0": 4929,
+        "1": 14221
+      },
+      "fechas": 22,
+      "fin": "2026-07-13",
+      "fin_objetivos": "2026-07-22",
+      "inicio": "2026-06-11",
+      "observaciones": 19150
+    },
+    "octubre_retrospectivo": {
+      "alumnos": 0,
+      "clases": {},
+      "fechas": 0,
+      "fin": null,
+      "fin_objetivos": null,
+      "inicio": null,
+      "observaciones": 0
+    },
+    "solo_ajuste_final": {
+      "alumnos": 129,
+      "clases": {
+        "0": 27,
+        "1": 304
+      },
+      "fechas": 5,
+      "fin": "2026-08-31",
+      "fin_objetivos": "2026-09-09",
+      "inicio": "2026-08-25",
+      "observaciones": 331
+    },
+    "validacion_septiembre": {
+      "alumnos": 357,
+      "clases": {
+        "0": 156,
+        "1": 1263
+      },
+      "fechas": 6,
+      "fin": "2026-09-08",
+      "fin_objetivos": "2026-09-17",
+      "inicio": "2026-09-01",
+      "observaciones": 1419
+    }
+  },
+  "protocolo_alumnos": "Longitudinal temporal; pueden repetirse alumnos entre bloques. Sin IDs como variable; no mide generalización a alumnos nuevos. Conteos de solapamiento solo en memoria.",
+  "purga": "Entrenamiento anterior a septiembre y todos sus objetivos anteriores a septiembre; validación de septiembre con objetivos completos antes de octubre.",
+  "sede": "Central",
+  "seleccion": "Menor Brier de validación septiembre; desempate menor log-loss, mayor AP, nombre. Sin ConvergenceWarning. Umbral fijo 0.5 para todos.",
+  "sql_select": [
+    "SELECT MAX(FechaHora) FROM dbo.RegistroIngresos\nWHERE Sede = ? AND AlumnoID IS NOT NULL AND ISNULL(EsPrueba,0)=0 AND FechaHora <= ?\n AND CAST(FechaHora AS TIME) >= CAST('08:00:00' AS TIME)\n AND CAST(FechaHora AS TIME) <= CAST('20:45:00' AS TIME)",
+    "SELECT AlumnoID, CAST(FechaHora AS DATE), COUNT_BIG(*)\nFROM dbo.RegistroIngresos\nWHERE FechaHora >= ? AND FechaHora < ? AND FechaHora <= ? AND Sede = ?\n AND AlumnoID IS NOT NULL AND ISNULL(EsPrueba,0)=0\n AND CAST(FechaHora AS TIME) >= CAST('08:00:00' AS TIME)\n AND CAST(FechaHora AS TIME) <= CAST('20:45:00' AS TIME)\nGROUP BY AlumnoID, CAST(FechaHora AS DATE) ORDER BY CAST(FechaHora AS DATE), AlumnoID"
+  ],
+  "suficiencia": "Mínimo 3 referencias y 10 observaciones por clase en train y validación; no garantiza independencia entre etiquetas superpuestas ni robustez poblacional.",
+  "ultima_referencia_madura_calendario": "2026-10-12",
+  "variables": "Ventanas [FechaRef-W,FechaRef), 7/14/30 días calendario; solo apertura confirmada; ventanas con desconocidos excluidas."
+}

@@ -1,0 +1,23 @@
+{
+  "archivos": {
+    "calendario_aplicado.csv": "3550b2e827ffab523803c87315ba6076d7ca20e141ad762915c75423b8e78421",
+    "configuracion_modelos.json": "375ab8fcfa425731332a8061c07c24ade6091a26e8151b53eb2904231e7bd7b2",
+    "consulta.sql": "b6542f5f02be275c319f5e4e58941346e5f7c07b16f6e6ed482cf0878e8ed281",
+    "dataset_sin_identificadores.csv": "6f8b8f69a1727a1264cc1ba2ed12c61abeb72f311fb72a5c4addbd84ec2744dd",
+    "evidencia_diaria.csv": "e6aff3b8e27ca481f122bfb5fec9c91b6ec4d2a63f6028e0f6dff5aecd06dabf",
+    "informe.md": "99040f96bdf6359c0ce2e19af9897f79965c084ad2ac195dbeb625f54f58acff",
+    "inicio_evaluacion.json": "7ce439060d633eea85601dee37c36ea0ba434e27f67b2b1a24c8fb5cb3487838",
+    "metadatos_candidato.json": "de300aa7f2d12cef0b8ab615dc8a799eda2cf74d179cc847fe2ce1a3a05fde29",
+    "modelo_retorno_h1_ventanas_experimental.joblib": "cf45277814b20df6304fbeee64d46ceefa337807a4c1eed6308510aaa871ccb4",
+    "preflight.json": "6172ff4d122708915e0f9c610ba8a20fdcb756fdec85c26c8af22d88bcc22ca7",
+    "preflight_por_fecha.csv": "e0703c4d32ec8f2c8544d973c155ab4bd62e8e1e7fe87d77adcb933b394d9158",
+    "pruebas_constructor.py": "849917a867a24657508025fe5d852df6a8d6929010d4651d7b41689872204e7c",
+    "receta.py": "f2a9c9d0833099ca511ca5011ac8762ab6015bd02a24b2a386f1a4c9b75fdbc6",
+    "requirements.txt": "37066f055900b548014ddd9d7d903bc1d7f6911aeaa1bc427cd5a89e3fefefde",
+    "resultados.json": "b55b01843ee2768746ab4af6274bea8dbd9d946a689d3c38e2ec4e3bd60f506b",
+    "seleccion_septiembre.json": "4d6f2d9c3b44549942a6bf432fe6118c4816d5cd75431a2736c69ba3c176cf28",
+    "verificacion_final.json": "be7461d9bb96588120afeb7305dd42939870e08c377f7243065b20e001dd85c6"
+  },
+  "estado": "completada",
+  "produccion_y_candidatos_existentes_intactos": true
+}
