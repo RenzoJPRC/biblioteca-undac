@@ -5,6 +5,7 @@ import time
 import calendar
 import hashlib
 from pathlib import Path
+from datetime import date
 
 # Huella del código realmente cargado; no se vuelve a leer en cada petición.
 CHAT_REVISION = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()[:12]
@@ -69,12 +70,61 @@ def _preparar_resumen_visible_alumno(resultado):
         f"desde {f_ini}" if f_ini else (f"hasta {f_fin}" if f_fin else "todo el historial disponible")
     )
     sede = datos.get('sede') or resultado.get('sede_aplicada') or 'Central'
-    corte = datos.get('fecha_corte') or datos.get('cobertura_sistema', {}).get('fecha_maxima') or 'no disponible'
-    corte_legible = re.sub(r'(\d{4})-(\d{2})-(\d{2})', r'\3/\2/\1', str(corte))
-    resultado['resumen_visible'] = (
-        f"Alumno {codigo_mask}: {total} visita(s) en {dias} día(s) distintos · Periodo consultado: {rango} ({sede}) · Corte observado: {corte_legible}."
-    )
+    def fecha(valor):
+        try:
+            return date.fromisoformat(str(valor)[:10]) if valor else None
+        except (ValueError, TypeError):
+            return None
+
+    def legible(dia):
+        return dia.strftime('%d/%m/%Y')
+
+    cobertura = datos.get('cobertura_sistema') or {}
+    corte = fecha(datos.get('fecha_corte') or cobertura.get('fecha_maxima'))
+    inicio, fin = fecha(f_ini), fecha(f_fin)
+    inicio_fuente = fecha(cobertura.get('fecha_minima'))
+    desde = max(d for d in (inicio, inicio_fuente) if d) if (inicio or inicio_fuente) else None
+    hasta = min(corte, fin) if corte and fin else corte
+    parcial = bool(corte and fin and fin > corte)
+    lineas = [
+        f"Alumno {codigo_mask}: {total} visita(s) en {dias} día(s) distintos.",
+        f"Rango solicitado: {rango} ({sede}).",
+    ]
+    if corte:
+        if desde and hasta and desde <= hasta:
+            lineas.append(f"Intervalo limitado a los datos disponibles: del {legible(desde)} al {legible(hasta)}.")
+        elif desde and hasta and desde > hasta:
+            lineas.append('Sin intervalo de datos disponibles dentro del rango solicitado.')
+        else:
+            lineas.append('El inicio del intervalo disponible no está informado.')
+        if parcial:
+            lineas.append(f"Periodo parcial; datos observados hasta el {legible(corte)}.")
+        else:
+            lineas.append(f"Corte observado de la fuente: {legible(corte)}.")
+    else:
+        lineas.append('Disponibilidad no verificable: no hay un corte observado informado.')
+
+    ultima = fecha(datos.get('ultimo_ingreso'))
+    ultima_valida = (total > 0 and ultima and corte and ultima <= corte
+                     and (not inicio or ultima >= inicio) and (not fin or ultima <= fin))
+    if total == 0:
+        lineas.append('Sin visitas individuales registradas en el periodo consultado; no hay fecha de última visita.')
+    elif ultima_valida:
+        lineas.append(f"Última visita individual dentro del periodo y hasta el corte: {legible(ultima)}.")
+    else:
+        lineas.append('Fecha de última visita individual no disponible o no verificable dentro del periodo y hasta el corte.')
+    lineas.append('El corte observado no acredita captura continua ni cobertura completa de cada jornada.')
+    resultado['periodo_individual'] = {
+        'solicitado': {'inicio': f_ini, 'fin': f_fin},
+        'intervalo_hasta_corte': {'inicio': desde.isoformat(), 'fin': hasta.isoformat()}
+            if desde and hasta and desde <= hasta else None,
+        'corte_observado': corte.isoformat() if corte else None,
+        'parcial_por_corte': parcial if corte else None,
+        'ultima_visita_individual': ultima.isoformat() if ultima_valida else None,
+    }
+    resultado['resumen_visible'] = '\n'.join(lineas)
     resultado['mensaje'] = resultado['resumen_visible']
+
 
 
 def _causa_segura(categoria):
@@ -110,6 +160,11 @@ def procesar_chat(motor, pregunta, rol, sede_permitida, contexto, pregunta_perso
     if re.search(r'\b(prestamos?|prestados?|prestar|ejemplares?|titulos?|libros?|movimiento bibliografico)\b', norm):
         return _respuesta_local('La consulta de préstamos, títulos o disponibilidad de libros no está disponible en este asistente.')
     clasif = clasificar_intencion(pregunta)
+    respuesta_personal = (ctx.get('intencion') == 'conteo_ingresos_alumno'
+                          and bool(ctx.get('aclaracion_pendiente'))
+                          and bool(re.fullmatch(r'(?:los?\s+)?ingresos?', norm)))
+    if respuesta_personal:
+        clasif['intencion'] = 'conteo_ingresos_alumno'
     tema_pendiente = ctx.get('tema_pendiente') == 'afluencia_agregada'
     es_ingresos = bool(re.search(r'\b(ingresos?|resumen(?: de ingresos)?|afluencia)\b', norm))
     es_horas = bool(re.search(r'\b(horas?|picos?|mayor afluencia)\b', norm))
@@ -132,7 +187,7 @@ def procesar_chat(motor, pregunta, rol, sede_permitida, contexto, pregunta_perso
         r'\b(el\s+mismo\s+alumn[oa]|del\s+mismo\s+alumn[oa]|dich[oa]\s+alumn[oa]|este\s+alumn[oa]|esta\s+alumna|mismo\s+estudiante)\b',
         norm
     ))
-    continuar = respuesta_tema or (bool(ctx.get('intencion')) and fragmento and not saludo) or (referencia_alumno and ctx.get('intencion') in PERSONALES)
+    continuar = respuesta_personal or respuesta_tema or (bool(ctx.get('intencion')) and fragmento and not saludo) or (referencia_alumno and ctx.get('intencion') in PERSONALES)
     if intencion in PERSONALES or (referencia_alumno and ctx.get('intencion') in PERSONALES):
         if referencia_alumno:
             intencion = 'conteo_ingresos_alumno'

@@ -201,6 +201,23 @@ def extraer_fechas_texto_espanol(texto: str, fecha_referencia=None) -> Optional[
                 "tipo_periodo": "rango"
             }
 
+    # Dos meses con años explícitos, incluido «desde junio del 2026 hasta octubre del 2026».
+    rango_meses_anios = re.search(
+        r"\b(?:desde|de|del|entre)\s+([a-záéíóúñ]+)\s+(?:del?\s+)?(\d{4})"
+        r"\s+(?:hasta|a|al|y)\s+([a-záéíóúñ]+)\s+(?:del?\s+)?(\d{4})\b",
+        texto, re.IGNORECASE)
+    if rango_meses_anios:
+        m1, y1, m2, y2 = rango_meses_anios.groups()
+        m1, m2 = MESES_ESPANOL.get(normalizar_texto(m1)), MESES_ESPANOL.get(normalizar_texto(m2))
+        if m1 and m2:
+            if not (1900 <= int(y1) <= 2100 and 1900 <= int(y2) <= 2100):
+                return {"error_temporal": "fecha_invalida", "mensaje_error": "Indique años entre 1900 y 2100."}
+            f1 = date(int(y1), m1, 1)
+            f2 = date(int(y2), m2, calendar.monthrange(int(y2), m2)[1])
+            if f1 > f2 or (f2 - f1).days > 366:
+                return {"error_temporal": "rango_invalido", "mensaje_error": "Indique un rango ordenado de hasta 366 días."}
+            return {"fecha_inicio": f1.isoformat(), "fecha_fin": f2.isoformat(), "tipo_periodo": "rango"}
+
     # 4. Rango de meses completos: 'entre junio y julio de 2026', 'de junio a julio de 2026', 'desde junio hasta octubre'
     m_rango_meses_comp = re.search(
         r"\b(?:entre\s+(?:el\s+mes\s+de\s+)?|del?\s+(?:mes\s+de\s+)?|desde\s+(?:el\s+mes\s+de\s+)?)"
@@ -791,7 +808,8 @@ def clasificar_intencion(pregunta, fecha_referencia=None):
             r"\b(?:el\s+mismo\s+alumn[oa]|del\s+mismo\s+alumn[oa]|dich[oa]\s+alumn[oa]|este\s+alumn[oa]|esta\s+alumna|mismo\s+estudiante)\b",
             norm
         )) or bool(re.search(r"\b(?:alumn[oa]|estudiante)\b.*(?:\bingresos?|\bvisitas?|\baccesos?)", norm))
-        if es_referencia_alumno or re.search(r"\b(informe|reporte|historial)\b.*\balumn[oa]\b", norm):
+        ingresos_de_alumno = bool(re.search(r"\b(?:ingresos?|visitas?|accesos?)\b.*\b(?:alumn[oa]|estudiante)\b", norm))
+        if es_referencia_alumno or ingresos_de_alumno or re.search(r"\b(informe|reporte|historial)\b.*\balumn[oa]\b", norm):
             params = dict(params_extra)
             params["informe"] = bool(re.search(r"\b(informe|historial|reporte)\b", norm))
             return {

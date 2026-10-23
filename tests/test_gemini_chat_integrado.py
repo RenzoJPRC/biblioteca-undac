@@ -350,7 +350,7 @@ class TestGeminiChatIntegrado(unittest.TestCase):
             # Muestra rango realmente aplicado y corte observado por separado
             resumen_vis = p3.get('resumen_visible', '')
             self.assertIn('del 2026-06-01 al 2026-10-31', resumen_vis)
-            self.assertIn('Corte observado: 21/10/2026', resumen_vis)
+            self.assertIn('Periodo parcial; datos observados hasta el 21/10/2026', resumen_vis)
             self.assertIn('99****01', resumen_vis)
             self.assertNotIn('9900000001', resumen_vis)
 

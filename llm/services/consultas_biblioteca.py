@@ -817,13 +817,20 @@ def contar_ingresos_alumno_por_codigo(
 
     where_sql = " AND ".join(filtros)
 
+    fin_semana = "((DATEDIFF(day, '19000101', CAST(R.FechaHora AS date)) % 7 + 7) % 7) IN (5, 6)"
+    fuera_horario = "(CAST(R.FechaHora AS TIME) < CAST('08:00:00.000' AS TIME) OR CAST(R.FechaHora AS TIME) > CAST('20:45:00.000' AS TIME))"
+    # Solo clasificación: no agregar estos criterios al WHERE ni cambiar totales.
+    sql_atipicos = (f", SUM(CASE WHEN {fin_semana} THEN 1 ELSE 0 END) AS fin_semana"
+                    f", SUM(CASE WHEN {fuera_horario} THEN 1 ELSE 0 END) AS fuera_horario"
+                    f", SUM(CASE WHEN {fin_semana} OR {fuera_horario} THEN 1 ELSE 0 END) AS atipicos") if informe else ""
+
     sql_conteo = f"""
         SELECT
             COUNT(*) AS total_ingresos,
             MIN(R.FechaHora) AS primer_ingreso,
             MAX(R.FechaHora) AS ultimo_ingreso,
             COUNT(DISTINCT CAST(R.FechaHora AS DATE)) AS dias_con_visita,
-            MAX(ISNULL(A.Escuela, '')) AS escuela
+            MAX(ISNULL(A.Escuela, '')) AS escuela{sql_atipicos}
         FROM RegistroIngresos R
         INNER JOIN Alumnos A ON R.AlumnoID = A.AlumnoID
         WHERE {where_sql}
@@ -952,6 +959,25 @@ def contar_ingresos_alumno_por_codigo(
     }
     if informe:
         resultado.update(distribuciones)
+        if fila_conteo is not None and len(fila_conteo) >= 8:
+            resultado['atipicos'] = {
+                'fin_de_semana': int(fila_conteo[5] or 0),
+                'fuera_horario': int(fila_conteo[6] or 0),
+                'total_sin_duplicar': int(fila_conteo[7] or 0),
+                'criterio': 'Lunes a viernes, 08:00–20:45 inclusive; hora almacenada, sin conversión',
+                'zona_horaria_verificada': False,
+                'registros_conservados': True,
+            }
+            a = resultado['atipicos']
+            resultado['aviso_atipicos'] = (
+                f"Registros atípicos respecto al horario habitual: {a['total_sin_duplicar']} visita(s), "
+                f"sin duplicar ({a['fin_de_semana']} en fin de semana; {a['fuera_horario']} fuera de 08:00–20:45). "
+                "Se conservan en los totales y distribuciones; no se consideran inválidos automáticamente. "
+                "Se excluyen los marcados como prueba; EsPrueba vacío se trata como no marcado. "
+                "La zona horaria y el origen de esos registros no están verificados; no se corrigen horas ni fechas."
+            )
+        else:
+            resultado['aviso_atipicos'] = 'Clasificación de registros atípicos no disponible; las visitas se conservan sin cambios.'
         resultado['estado'] = 'verificado_con_ingresos' if total_ingresos else 'sin_ingresos_verificables'
         resultado['fecha_corte'] = max_global
         resultado['fuente'] = 'RegistroIngresos + Alumnos; solo accesos no marcados como prueba'
