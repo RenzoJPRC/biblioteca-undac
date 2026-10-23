@@ -10,23 +10,7 @@
             Uso del asistente
         </h2>
         <div class="flex items-center gap-2 mt-0.5">
-            {% if llm_activo %}
-            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800 border border-indigo-200">
-                <span class="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
-                Proveedor activo: {{ llm_proveedor | upper }}
-            </span>
-            <span class="text-xs text-slate-500 font-medium">
-                Modelo: {{ llm_modelo }} · Respaldo local activo
-            </span>
-            {% else %}
-            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                Modo local activo
-            </span>
-            <span class="text-xs text-slate-500 font-medium">
-                Sin consumo de API externa
-            </span>
-            {% endif %}
+            <span class="text-xs text-slate-500">Reportes auditados y actividad local</span>
         </div>
     </div>
 
@@ -39,7 +23,29 @@
 </header>
 
 <div class="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
-
+    <section id="metricas-agentes" data-asistente-ui="agentes-local-v3" class="space-y-5">
+        <div class="flex flex-wrap justify-between items-start gap-3"><div>
+            <h3 class="text-xl font-bold text-slate-800">Actividad de agentes</h3>
+            <p class="text-sm text-slate-500">Intentos del worker actual, no historial global. {{ agentes.persistencia }}.</p>
+        </div><a href="{{ url_for('admin_asistente.vista_metricas_asistente') }}" class="border rounded-lg px-4 py-2 text-sm bg-white">Actualizar indicadores</a></div>
+        <div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+        {% for clave, etiqueta, color in [('recibidas','Recibidas','slate'),('completadas','Completadas','emerald'),('pendientes','Por aclarar','sky'),('rechazadas','Rechazadas','amber'),('fallidas','Fallidas','rose')] %}
+            <article class="bg-white rounded-xl border border-slate-200 shadow-sm p-4"><p class="text-xs font-semibold uppercase text-slate-500">{{ etiqueta }}</p><p data-indicador="{{ clave }}" class="text-3xl font-bold text-slate-800 mt-2">{{ agentes.tareas[clave] }}</p></article>
+        {% endfor %}
+            <article class="bg-indigo-600 text-white rounded-xl shadow-sm p-4"><p class="text-xs font-semibold uppercase">Reportes preparados</p><p class="text-3xl font-bold mt-2">{{ agentes.reportes_generados }}</p></article>
+        </div>
+        <div class="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {% set etiquetas = {'orquestador':'Orquestador','afluencia':'Afluencia','analisis_individual':'Análisis individual','auditor':'Auditor','reportes_automatizacion':'Reportes'} %}
+        {% for nombre, dato in agentes.agentes.items() %}
+            <article data-agent="{{ nombre }}" class="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
+                <div class="flex items-center justify-between gap-2"><h4 class="font-bold text-slate-800">{{ etiquetas.get(nombre, nombre) }}</h4><span class="text-xs rounded-full px-2 py-1 bg-slate-100 text-slate-600">{{ 'Con actividad' if dato.ejecuciones else 'Sin actividad' }}</span></div>
+                <dl class="grid grid-cols-2 gap-3 mt-4 text-sm"><div><dt class="text-slate-500">Ejecuciones</dt><dd class="text-xl font-bold">{{ dato.ejecuciones }}</dd></div><div><dt class="text-slate-500">Errores</dt><dd class="text-xl font-bold">{{ dato.fallos }}</dd></div><div><dt class="text-slate-500">Tiempo total</dt><dd>{{ '%.2f'|format(dato.tiempo_ms) }} ms</dd></div><div><dt class="text-slate-500">Tiempo medio</dt><dd>{{ '%.2f'|format(dato.tiempo_ms / dato.ejecuciones if dato.ejecuciones else 0) }} ms</dd></div></dl>
+            </article>
+        {% endfor %}</div>
+        <div class="bg-slate-100 border border-slate-200 rounded-xl p-4 text-sm text-slate-600"><strong>Programación y correo no disponibles.</strong> No hay tareas activas ni próximas ejecuciones. Los reportes se preparan bajo demanda; no se envían.</div>
+    </section>
+    <details id="diagnostico-proveedor" class="bg-white border rounded-xl p-5 space-y-5">
+        <summary class="cursor-pointer font-semibold text-slate-600">Diagnóstico secundario · proveedor, consumo y registros locales</summary>
     <!-- Banner Informativo de Privacidad y Métricas -->
     <section class="bg-gradient-to-r from-slate-900 to-indigo-950 text-white rounded-xl p-5 shadow-sm border border-slate-800">
         <div class="flex items-start justify-between flex-wrap gap-4">
@@ -59,7 +65,7 @@
             <div class="bg-slate-800/80 border border-slate-700/80 rounded-xl p-3 text-right">
                 <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Persistencia Local</span>
                 <p class="text-xs font-bold text-slate-200 mt-0.5">Archivo rotativo JSON</p>
-                <span class="text-[10px] text-slate-400">BD de producción sin modificar</span>
+                <span class="text-[10px] text-slate-400">No es un historial compartido ni permanente en Render; varios workers pueden divergir o sobrescribir el JSON.</span>
             </div>
         </div>
     </section>
@@ -202,10 +208,12 @@
                 <span class="text-[10px] uppercase font-bold text-slate-400 block">Modelo</span>
                 <span class="font-mono font-bold text-slate-800 text-sm mt-0.5 block">{{ llm_modelo }}</span>
             </div>
+            {% if session.get('admin_rol') == 'SuperAdmin' %}
             <div class="p-3 bg-slate-50 border border-slate-200 rounded-lg col-span-1 sm:col-span-2">
                 <span class="text-[10px] uppercase font-bold text-slate-400 block">Endpoint Base (OpenAI Compatible)</span>
                 <span class="font-mono text-slate-700 text-xs mt-0.5 block truncate">{{ llm_api_base }}</span>
             </div>
+            {% endif %}
         </div>
     </section>
 
@@ -312,6 +320,8 @@
             </table>
         </div>
     </section>
+
+    </details>
 
 </div>
 

@@ -20,6 +20,14 @@ class TestMetricasAsistente(unittest.TestCase):
         self.gestor = GestorMetricasAsistente(archivo_persistencia=self.archivo_tmp)
         self.client = app.test_client()
 
+    def test_error_clasificado_sin_textos_arbitrarios(self):
+        r=self.gestor.registrar_interaccion('gemini','ficticio','consulta_general',12,exito=False,es_fallback=True,categoria_error='cuota',codigo_http=429)
+        self.assertEqual(r['categoria_error'],'cuota')
+        self.assertEqual(r['codigo_http'],429)
+        r=self.gestor.registrar_interaccion('gemini','ficticio','consulta_general',12,categoria_error='texto privado ficticio',codigo_http=999)
+        self.assertNotIn('categoria_error',r)
+        self.assertNotIn('codigo_http',r)
+
     def tearDown(self):
         self.tmp_dir.cleanup()
 

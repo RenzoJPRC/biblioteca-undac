@@ -78,7 +78,9 @@ class GestorMetricasAsistente:
         tiempo_ms: int,
         tokens: Optional[Dict[str, Any]] = None,
         exito: bool = True,
-        es_fallback: bool = False
+        es_fallback: bool = False,
+        categoria_error: Optional[str] = None,
+        codigo_http: Optional[int] = None
     ) -> Dict[str, Any]:
         """
         Registra una interacción exclusivamente con metadatos operativos agregados.
@@ -128,6 +130,11 @@ class GestorMetricasAsistente:
             "es_fallback": bool(es_fallback)
         }
 
+        categorias = {'configuracion', 'autenticacion', 'cuota', 'modelo', 'timeout', 'conexion', 'respuesta_invalida', 'respuesta_no_verificable', 'proveedor', 'modelo_o_endpoint', 'respuesta_api', 'servidor'}
+        if categoria_error in categorias:
+            registro['categoria_error'] = categoria_error
+        if isinstance(codigo_http, int) and 100 <= codigo_http <= 599:
+            registro['codigo_http'] = codigo_http
         with self._lock:
             self._registros.append(registro)
             if len(self._registros) > MAX_REGISTROS_HISTORIAL:

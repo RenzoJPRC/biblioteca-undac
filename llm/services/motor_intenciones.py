@@ -12,12 +12,12 @@ SEDES_VALIDAS = {
     "yanahuanca": "Yanahuanca"
 }
 
-CAMPOS_CONTEXTO_PERMITIDOS = {"intencion", "fecha_inicio", "fecha_fin", "fecha", "sede", "codigo_matricula"}
+CAMPOS_CONTEXTO_PERMITIDOS = {"intencion", "fecha_inicio", "fecha_fin", "fecha", "sede", "mes_pendiente", "mes_fin_pendiente", "dia_inicio_pendiente", "dia_fin_pendiente", "aclaracion_pendiente", "tema_pendiente"}
 INTENCIONES_VALIDAS_CONTEXTO = {"resumen_ingresos", "horas_mayor_afluencia", "prediccion_afluencia", "conteo_ingresos_alumno", "afluencia_historica"}
 CAMPOS_SENSIBLES_PROHIBIDOS = {
     "nombre", "texto_persona", "dni", "persona_id", "id", "persona",
     "candidato", "opciones", "historial", "registros", "ultimo_registro",
-    "respuesta", "mensaje", "datos"
+    "respuesta", "mensaje", "datos", "codigo", "codigo_matricula", "matricula"
 }
 
 MESES_ESPANOL = {
@@ -201,12 +201,12 @@ def extraer_fechas_texto_espanol(texto: str, fecha_referencia=None) -> Optional[
                 "tipo_periodo": "rango"
             }
 
-    # 4. Rango de meses completos: 'entre junio y julio de 2026', 'de junio a julio de 2026'
+    # 4. Rango de meses completos: 'entre junio y julio de 2026', 'de junio a julio de 2026', 'desde junio hasta octubre'
     m_rango_meses_comp = re.search(
         r"\b(?:entre\s+(?:el\s+mes\s+de\s+)?|del?\s+(?:mes\s+de\s+)?|desde\s+(?:el\s+mes\s+de\s+)?)"
         r"([a-záéíóúñ]+)"
         r"\s+(?:y\s+(?:el\s+mes\s+de\s+)?|al?\s+(?:mes\s+de\s+)?|hasta\s+(?:el\s+mes\s+de\s+)?)"
-        r"([a-záéíóúñ]+)\s+de\s+(\d{4})\b",
+        r"([a-záéíóúñ]+)(?:\s+(?:del?\s+)?(\d{4}))?\b",
         texto,
         re.IGNORECASE
     )
@@ -214,9 +214,21 @@ def extraer_fechas_texto_espanol(texto: str, fecha_referencia=None) -> Optional[
         m1_nom = normalizar_texto(m_rango_meses_comp.group(1))
         m2_nom = normalizar_texto(m_rango_meses_comp.group(2))
         if m1_nom in MESES_ESPANOL and m2_nom in MESES_ESPANOL:
-            y = int(m_rango_meses_comp.group(3))
+            anio_str = m_rango_meses_comp.group(3)
+            y = int(anio_str) if anio_str else (
+                fecha_referencia.year if hasattr(fecha_referencia, 'year') else (
+                    int(str(fecha_referencia)[:4]) if (fecha_referencia and str(fecha_referencia)[:4].isdigit()) else None
+                )
+            )
             m1 = MESES_ESPANOL[m1_nom]
             m2 = MESES_ESPANOL[m2_nom]
+            if not y:
+                return {
+                    "error_temporal": "fecha_ambigua",
+                    "mes_inicio": m1,
+                    "mes_fin": m2,
+                    "mensaje_error": f"¿A qué año corresponde el periodo de {m1_nom} a {m2_nom}? Por favor especifique el año (por ejemplo: 'de {m1_nom} a {m2_nom} de 2026')."
+                }
             _, last_day = calendar.monthrange(y, m2)
             f1 = date(y, m1, 1)
             f2 = date(y, m2, last_day)
@@ -263,14 +275,13 @@ def extraer_fechas_texto_espanol(texto: str, fecha_referencia=None) -> Optional[
                 "tipo_periodo": "fecha_fija"
             }
 
-    # 6. Mes completo: 'en junio de 2026', 'durante junio de 2026', 'en el mes de junio de 2026'
-    m_mes_comp = re.search(
-        r"\b(?:(?:en|durante|para)\s+(?:el\s+mes\s+de\s+)?|el\s+mes\s+de\s+|mes\s+de\s+)"
-        r"([a-záéíóúñ]+)\s+de\s+(\d{4})\b",
+    # 6. Mes completo: 'en junio de 2026', 'durante junio de 2026', 'en el mes de junio de 2026', 'octubre de 2026', 'de octubre de 2026'
+    for m_mes_comp in re.finditer(
+        r"\b(?:(?:en|durante|para|de|del)\s+(?:el\s+mes\s+de\s+)?|(?:el\s+)?mes\s+de\s+)?"
+        r"([a-záéíóúñ]+)\s+(?:de\s+)?(\d{4})\b",
         texto,
         re.IGNORECASE
-    )
-    if m_mes_comp:
+    ):
         m_nom = normalizar_texto(m_mes_comp.group(1))
         if m_nom in MESES_ESPANOL:
             y = int(m_mes_comp.group(2))
@@ -283,6 +294,7 @@ def extraer_fechas_texto_espanol(texto: str, fecha_referencia=None) -> Optional[
                 "fecha_fin": f2.isoformat(),
                 "tipo_periodo": "mes_completo"
             }
+
 
     # 7. Rango numérico DD/MM/YYYY o DD-MM-YYYY: 'del 01/06/2026 al 31/07/2026'
     m_rango_num = re.search(
@@ -367,6 +379,9 @@ def extraer_fechas_texto_espanol(texto: str, fecha_referencia=None) -> Optional[
         if m_nom in MESES_ESPANOL:
             return {
                 "error_temporal": "fecha_ambigua",
+                "mes_inicio": MESES_ESPANOL[m_nom],
+                "dia_inicio": int(m_rango_sin_anio.group(1)),
+                "dia_fin": int(m_rango_sin_anio.group(2)),
                 "mensaje_error": f"¿A qué año corresponde el periodo del {m_rango_sin_anio.group(1)} al {m_rango_sin_anio.group(2)} de {m_nom}? Por favor indique el año (por ejemplo: 'del {m_rango_sin_anio.group(1)} al {m_rango_sin_anio.group(2)} de {m_nom} de 2026')."
             }
 
@@ -381,6 +396,8 @@ def extraer_fechas_texto_espanol(texto: str, fecha_referencia=None) -> Optional[
         if m_nom in MESES_ESPANOL and m_nom not in ("hoy", "ayer"):
             return {
                 "error_temporal": "fecha_ambigua",
+                "mes_inicio": MESES_ESPANOL[m_nom],
+                "dia_inicio": int(m_puntual_sin_anio.group(1)),
                 "mensaje_error": f"¿A qué año corresponde la fecha {m_puntual_sin_anio.group(1)} de {m_nom}? Por favor indique el año (por ejemplo: '{m_puntual_sin_anio.group(1)} de {m_nom} de 2026')."
             }
 
@@ -388,8 +405,12 @@ def extraer_fechas_texto_espanol(texto: str, fecha_referencia=None) -> Optional[
     for m_mes in re.finditer(r"\b([a-záéíóúñ]+)\b", texto, re.IGNORECASE):
         m_nom = normalizar_texto(m_mes.group(1))
         if m_nom in MESES_ESPANOL and m_nom not in ("hoy", "ayer"):
+            resto = texto[m_mes.end():]
+            if re.match(r"^\s+(?:de\s+)?\d{4}\b", resto, re.IGNORECASE):
+                continue
             return {
                 "error_temporal": "fecha_ambigua",
+                "mes_inicio": MESES_ESPANOL[m_nom],
                 "mensaje_error": f"¿A qué año corresponde el mes de {m_nom}? Por favor especifique el año (por ejemplo: '{m_nom} de 2026')."
             }
 
@@ -579,11 +600,18 @@ def sanitizar_contexto(contexto):
     limpio = {}
     for k in CAMPOS_CONTEXTO_PERMITIDOS:
         val = contexto.get(k)
+        if k == 'tema_pendiente' and val != 'afluencia_agregada':
+            continue
+        if k in ('mes_pendiente', 'mes_fin_pendiente') and str(val) not in {str(n) for n in range(1,13)}:
+            continue
         if val is not None:
             s_val = str(val).strip()
             if s_val:
                 limpio[k] = s_val
 
+    for campo in ('dia_inicio_pendiente', 'dia_fin_pendiente'):
+        if campo in limpio and limpio[campo] not in {str(n) for n in range(1, 32)}:
+            limpio.pop(campo)
     # Si la intención no es una de las intenciones agregadas/predictivas permitidas,
     # se descarta para evitar reusar búsquedas personales sin nombre.
     intencion = limpio.get("intencion")
@@ -649,14 +677,28 @@ def extraer_codigo_matricula(pregunta_original):
     """
     if not pregunta_original:
         return ""
+    if re.fullmatch(r"\s*(?:19|20)\d{2}\s*", pregunta_original):
+        return ""
+    if re.fullmatch(r"\s*\d{6,20}\s*", pregunta_original):
+        return pregunta_original.strip()
+    natural = re.search(
+        r"\b(?:c[oó]digo(?:\s+de\s+matr[ií]cula)?|matr[ií]cula)\s*(?:del?\s+alumn[oa]\s*)?(?:es\s*|n[uú]mero\s*|n[º°.]\s*)?[:#=\-]?\s*[\[(]?([a-zA-Z0-9]{4,25})\b",
+        pregunta_original, re.IGNORECASE)
+    if natural and any(c.isdigit() for c in natural.group(1)):
+        c = natural.group(1).strip()
+        if not re.fullmatch(r"(?:19|20)\d{2}", c):
+            return c
     m = re.search(r"\bc[oó]digo(?:\s+de\s+matr[ií]cula)?\s*[:#]?\s*([0-9a-zA-Z]{4,25})\b", pregunta_original, re.IGNORECASE)
     if m:
         c = m.group(1).strip()
         if not re.match(r"^(de|del|para|por|en|un|una|el|la|los|las|alumno|alumna)$", c, re.IGNORECASE):
-            return c
+            if not re.fullmatch(r"(?:19|20)\d{2}", c):
+                return c
     m2 = re.search(r"\balumno\s+(?:con\s+c[oó]digo\s+)?([0-9]{4,20})\b", pregunta_original, re.IGNORECASE)
     if m2:
-        return m2.group(1).strip()
+        c = m2.group(1).strip()
+        if not re.fullmatch(r"(?:19|20)\d{2}", c):
+            return c
     return ""
 
 
@@ -672,6 +714,9 @@ def extraer_parametros_texto(pregunta_original, norm, fecha_referencia=None):
         if "error_temporal" in temp:
             params["error_temporal"] = temp["error_temporal"]
             params["mensaje_error_temporal"] = temp.get("mensaje_error")
+            for k in ("mes_inicio", "mes_fin", "dia_inicio", "dia_fin"):
+                if k in temp:
+                    params[k] = temp[k]
         if "fecha_inicio" in temp:
             params["fecha_inicio"] = temp["fecha_inicio"]
         if "fecha_fin" in temp:
@@ -741,10 +786,24 @@ def clasificar_intencion(pregunta, fecha_referencia=None):
     # 0. PRIORIDAD 0: CONTEO DE INGRESOS DE ALUMNO POR CÓDIGO DE MATRÍCULA
     # =========================================================================
     codigo_mat = extraer_codigo_matricula(pregunta_limpia)
+    if not codigo_mat:
+        es_referencia_alumno = bool(re.search(
+            r"\b(?:el\s+mismo\s+alumn[oa]|del\s+mismo\s+alumn[oa]|dich[oa]\s+alumn[oa]|este\s+alumn[oa]|esta\s+alumna|mismo\s+estudiante)\b",
+            norm
+        )) or bool(re.search(r"\b(?:alumn[oa]|estudiante)\b.*(?:\bingresos?|\bvisitas?|\baccesos?)", norm))
+        if es_referencia_alumno or re.search(r"\b(informe|reporte|historial)\b.*\balumn[oa]\b", norm):
+            params = dict(params_extra)
+            params["informe"] = bool(re.search(r"\b(informe|historial|reporte)\b", norm))
+            return {
+                'intencion': 'conteo_ingresos_alumno',
+                'parametros': params,
+                'origen': 'regla_local'
+            }
     if codigo_mat:
-        if re.search(r"\b(ingres[oó]|ingresos|veces|visitas?|conteo|cu[aá]ntas?|accesos?|asistencia)\b", norm):
+        if re.search(r"\b(informe|historial|reporte|codigo|matricula|ingres[oó]|ingresos|veces|visitas?|conteo|cu[aá]ntas?|accesos?|asistencia|alumn[oa]|estudiante|persona|consultar?)\b", norm) or pregunta_limpia.strip() == codigo_mat:
             params = dict(params_extra)
             params["codigo_matricula"] = codigo_mat
+            params["informe"] = bool(re.search(r"\b(informe|historial|reporte)\b", norm)) or pregunta_limpia.strip() == codigo_mat
             return {
                 "intencion": "conteo_ingresos_alumno",
                 "parametros": params,
@@ -823,7 +882,7 @@ def clasificar_intencion(pregunta, fecha_referencia=None):
         r"comportamiento.*hist[oó]rico.*afluencia",
         r"comportamiento.*hist[oó]rico",
         r"afluencia.*en\s+(?:la\s+)?sede",
-        r"afluencia.*de\s+(?:la\s+)?sede"
+        r"afluencia.*de\s+(?:(?:la|una)\s+)?sede"
     ]
     for p in patrones_afluencia_hist:
         if re.search(p, norm):

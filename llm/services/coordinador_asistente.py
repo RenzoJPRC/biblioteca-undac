@@ -53,7 +53,11 @@ def procesar_pregunta(
     sede=None,
     limite=None,
     contexto=None,
-    fecha_referencia=None
+    fecha_referencia=None,
+    permitir_proveedor=True,
+    informe_individual=False,
+    modo_chat=False,
+    pregunta_personal_pendiente=None
 ):
     """
     Coordinador local del Asistente LLM de Biblioteca.
@@ -64,6 +68,11 @@ def procesar_pregunta(
     re-valida siempre el rol y sede permitida de sesión,
     y clasifica y enruta la consulta de forma determinista y segura.
     """
+    if modo_chat:
+        from llm.services.chat_conversacional import procesar_chat
+        return procesar_chat(procesar_pregunta, pregunta, rol, sede_permitida, contexto,
+                             pregunta_personal_pendiente=pregunta_personal_pendiente, seleccion_persona=seleccion_persona, fecha_inicio=fecha_inicio,
+                             fecha_fin=fecha_fin, fecha=fecha, hora=hora, sede=sede, limite=limite)
     # 0. Sanitizar contexto conversacional recibido (mínimo, sin datos personales)
     ctx_sanitizado = sanitizar_contexto(contexto)
 
@@ -145,6 +154,10 @@ def procesar_pregunta(
         }
 
     # 3. Determinar sede_aplicada y sede_consulta_efectiva de forma segura
+    if rol_valido == "Supervisor" and str(sede_permitida or '').strip() not in SEDES_PERMITIDAS:
+        return {"status": "error", "codigo_http": 403, "categoria_error": "permiso",
+                "mensaje": "El Supervisor necesita una sede válida asignada.",
+                "datos": {}, "contexto": {}, "origen": "regla_local"}
     # En Supervisor, la sede de sesión SIEMPRE manda y no puede ser cambiada por contexto ni cliente
     if rol_valido == "Supervisor":
         sede_aplicada = str(sede_permitida).strip() if (sede_permitida and str(sede_permitida).strip() in SEDES_PERMITIDAS) else "Central"
@@ -248,6 +261,14 @@ def procesar_pregunta(
         clasificacion = clasificar_intencion(pregunta_limpia, fecha_referencia=fecha_referencia)
         intencion = clasificacion["intencion"]
         params_intencion = clasificacion.get("parametros", {})
+        if intencion == 'conteo_ingresos_alumno':
+            for k in ('fecha_inicio', 'fecha_fin', 'fecha', 'sede'):
+                if k in ctx_sanitizado and k not in params_intencion:
+                    params_intencion[k] = ctx_sanitizado[k]
+        if (intencion == 'intencion_desconocida' and ctx_sanitizado.get('intencion')
+                and any(k in params_intencion for k in ('fecha', 'fecha_inicio', 'hora', 'sede'))):
+            intencion = ctx_sanitizado['intencion']
+            params_intencion = {**ctx_sanitizado, **params_intencion}
 
         if rol_valido == "Supervisor":
             sede_aplicada = str(sede_permitida).strip() if (sede_permitida and str(sede_permitida).strip() in SEDES_PERMITIDAS) else "Central"
@@ -264,6 +285,17 @@ def procesar_pregunta(
         f_ini = fecha_inicio or params_intencion.get("fecha_inicio")
         f_fin = fecha_fin or params_intencion.get("fecha_fin")
 
+    # Resolver ambigüedades antes de consultar datos o proveedores externos.
+    temporal = extraer_parametros_texto(pregunta_limpia, normalizar_texto(pregunta_limpia), fecha_referencia)
+    if temporal.get('error_temporal'):
+        invalido = temporal['error_temporal'] == 'rango_invalido'
+        return {"status": "error" if invalido else "requires_input", "intencion": intencion,
+                "codigo_http": 400, "categoria_error": "validacion",
+                "mensaje": temporal.get('mensaje_error_temporal') or '¿Qué periodo desea consultar?',
+                "requiere_parametros": True, "parametros_faltantes": ["fecha"],
+                "datos": {}, "contexto": sanitizar_contexto({'intencion': intencion, 'sede': sede_consulta_efectiva}),
+                "origen": "regla_local"}
+
     # 3.5. Evaluación estricta de privacidad por lista blanca:
     # Solo las consultas agregadas o predictivas expresamente confirmadas pueden enviarse al LLM externo.
     # No dependemos únicamente de detectar nombres con expresiones regulares:
@@ -277,7 +309,7 @@ def procesar_pregunta(
         contexto=ctx_sanitizado
     )
 
-    if es_permitida_llm:
+    if es_permitida_llm and permitir_proveedor:
         config_llm = obtener_configuracion()
         if config_llm.esta_disponible:
             try:
@@ -317,10 +349,12 @@ def procesar_pregunta(
                 except Exception as e_met:
                     logger.warning("No se pudo registrar métrica LLM exitosa: %s", str(e_met))
 
-                res_llm["contexto"] = ctx_sanitizado
+                res_llm["contexto"] = sanitizar_contexto({
+                    'intencion': intencion, 'fecha_inicio': f_ini, 'fecha_fin': f_fin,
+                    'fecha': fecha or params_intencion.get('fecha'), 'sede': sede_consulta_efectiva})
                 return res_llm
             except (LLMTimeoutError, LLMNetworkError, LLMAPIError, LLMSafetyViolationError, LLMError, Exception) as err_llm:
-                logger.warning("Fallo o rechazo en proveedor LLM (%s). Activando fallback al motor local.", str(err_llm))
+                logger.warning("Fallo o rechazo en proveedor LLM (%s). Activando fallback al motor local.", type(err_llm).__name__)
 
                 # Registrar evento de fallback al motor local
                 try:
@@ -365,13 +399,13 @@ def procesar_pregunta(
                 "status": "requires_input",
                 "intencion": intencion,
                 "sede_aplicada": sede_aplicada,
-                "mensaje": "Para consultar el conteo de ingresos por código debe indicar el código de matrícula del alumno.",
+                "mensaje": "¿Cuál es el código de matrícula? Escríbalo en su siguiente pregunta; no conservamos identificadores entre consultas.",
                 "datos": {},
                 "requiere_aclaracion": False,
                 "requiere_parametros": True,
                 "parametros_faltantes": ["codigo_matricula"],
                 "opciones": [],
-                "contexto": ctx_sanitizado,
+                "contexto": sanitizar_contexto({**ctx_sanitizado, 'intencion': intencion, 'fecha_inicio': f_ini, 'fecha_fin': f_fin}),
                 "origen": "consulta_segura"
             }
 
@@ -384,7 +418,8 @@ def procesar_pregunta(
                 fecha_inicio=f_ini,
                 fecha_fin=f_fin,
                 rol=rol_valido,
-                sede_permitida=sede_consulta_efectiva
+                sede_permitida=sede_consulta_efectiva,
+                **({'informe': True} if params_intencion.get('informe') or informe_individual else {})
             )
             return {
                 "status": "success",
@@ -394,7 +429,7 @@ def procesar_pregunta(
                 "sede": sede_consulta_efectiva or "Central",
                 "fuente": res_conteo.get("fuente", "RegistroIngresos (registros individuales de acceso por carnet/DNI)"),
                 "limites_cobertura": res_conteo.get("cobertura_sistema"),
-                "mensaje": res_conteo["mensaje"],
+                "mensaje": res_conteo.get("mensaje", ""),
                 "datos": res_conteo,
                 "requiere_aclaracion": False,
                 "requiere_parametros": False,
@@ -404,7 +439,6 @@ def procesar_pregunta(
                     "fecha_inicio": f_ini,
                     "fecha_fin": f_fin,
                     "sede": sede_consulta_efectiva,
-                    "codigo_matricula": codigo
                 }),
                 "origen": "consulta_segura"
             }

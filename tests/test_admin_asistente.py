@@ -38,7 +38,7 @@ class TestAdminAsistente(unittest.TestCase):
         self.assertEqual(res.status_code, 200)
         contenido = res.get_data(as_text=True)
         self.assertIn("Asistente inteligente de biblioteca", contenido)
-        self.assertIn("Asistente inteligente — modo local", contenido)
+        self.assertIn("Proveedor no configurado o desactivado", contenido)
 
     # 3. Supervisor accede a vista
     def test_03_supervisor_accede_vista(self):
@@ -46,7 +46,7 @@ class TestAdminAsistente(unittest.TestCase):
         res = self.client.get("/admin/asistente")
         self.assertEqual(res.status_code, 200)
         contenido = res.get_data(as_text=True)
-        self.assertIn("Asistente inteligente — modo local", contenido)
+        self.assertIn("Proveedor no configurado o desactivado", contenido)
 
     # 4. Consultor accede a vista
     def test_04_consultor_accede_vista(self):
@@ -54,7 +54,7 @@ class TestAdminAsistente(unittest.TestCase):
         res = self.client.get("/admin/asistente")
         self.assertEqual(res.status_code, 200)
         contenido = res.get_data(as_text=True)
-        self.assertIn("Asistente inteligente — modo local", contenido)
+        self.assertIn("Proveedor no configurado o desactivado", contenido)
 
     # 5. POST sin CSRF devuelve 403 y no llama al coordinador
     @patch("routes.admin_asistente.procesar_pregunta")
@@ -484,7 +484,7 @@ class TestAdminAsistente(unittest.TestCase):
         )
         self.assertEqual(res.status_code, 200)
         datos = res.get_json()
-        self.assertEqual(datos["intencion"], "intencion_desconocida")
+        self.assertEqual(datos["intencion"], "consulta_general")
         self.assertFalse(datos.get("requiere_aclaracion", False))
         self.assertIsInstance(datos.get("opciones"), list)
         # Las opciones son strings de ejemplos, no objetos de personas
@@ -547,8 +547,8 @@ class TestAdminAsistente(unittest.TestCase):
         with open("templates/admin_asistente.html", "r", encoding="utf-8") as f:
             html = f.read()
         self.assertIn("renderizarParametrosFaltantes", html)
-        self.assertIn("Parámetros requeridos", html)
-        self.assertIn("PARÁMETROS REQUERIDOS", html)
+        self.assertIn("Continúe con una respuesta en lenguaje natural", html)
+        self.assertIn("ACLARACIÓN NECESARIA", html)
 
     # 31. J.5: horas_top se renderiza con hora_formato, total_ingresos y promedio_diario
     def test_31_horas_top_se_renderiza(self):
@@ -639,7 +639,8 @@ class TestAdminAsistente(unittest.TestCase):
             json={"pregunta": "resumen de ingresos", "fecha_inicio": "2026-03-01", "fecha_fin": "2026-03-10"}
         )
         self.assertEqual(res2.status_code, 200)
-        self.assertEqual(res2.get_json()["sede_aplicada"], "Todas las sedes")
+        self.assertEqual(res2.get_json()["status"], "requires_input")
+        self.assertIn("sede", res2.get_json()["mensaje"])
 
         # 3. Supervisor -> siempre su sede de sesion
         self._obtener_cliente_con_sesion(rol="Supervisor", sede="Tarma")
@@ -668,7 +669,8 @@ class TestAdminAsistente(unittest.TestCase):
             json={"pregunta": "resumen de ingresos", "fecha_inicio": "2026-03-01", "fecha_fin": "2026-03-10"}
         )
         self.assertEqual(res5.status_code, 200)
-        self.assertEqual(res5.get_json()["sede_aplicada"], "Todas las sedes")
+        self.assertEqual(res5.get_json()["status"], "requires_input")
+        self.assertIn("sede", res5.get_json()["parametros_faltantes"])
 
     # 36. J.10: Supervisor no puede cambiar sede_aplicada
     @patch("llm.services.coordinador_asistente.obtener_resumen_ingresos")
@@ -710,8 +712,8 @@ class TestAdminAsistente(unittest.TestCase):
             html = f.read()
 
         # Texto aclaratorio en parámetros complementarios
-        self.assertIn("Parámetros complementarios (opcional)", html)
-        self.assertIn("Complete solamente los parámetros necesarios para el tipo de consulta.", html)
+        self.assertIn("Filtros adicionales (opcional, uso secundario)", html)
+        self.assertIn("Puede indicar estos filtros directamente en su pregunta, sin completar campos.", html)
 
         # textContent y createElement en todos los renderizadores
         self.assertIn("document.createElement", html)
@@ -740,7 +742,7 @@ class TestAdminAsistente(unittest.TestCase):
         badges_requeridos = [
             "CONSULTA COMPLETADA",
             "SELECCIÓN REQUERIDA",
-            "PARÁMETROS REQUERIDOS",
+            "ACLARACIÓN NECESARIA",
             "CONSULTA NO RECONOCIDA",
             "NO SE PUDO COMPLETAR"
         ]
@@ -751,7 +753,7 @@ class TestAdminAsistente(unittest.TestCase):
     def test_40_ejemplo_prediccion_usa_cual_sera_el_nivel_de_afluencia(self):
         with open("templates/admin_asistente.html", "r", encoding="utf-8") as f:
             html = f.read()
-        self.assertIn("¿Cuál será el nivel de afluencia?", html)
+        self.assertIn("Quiero consultar la afluencia de una sede", html)
 
     # 41. Endpoint reconoce "¿Cuál será el nivel de afluencia?" como predicción y solicita parámetros faltantes
     def test_41_cual_sera_el_nivel_de_afluencia_retorna_requires_input_con_parametros_faltantes(self):
@@ -787,7 +789,7 @@ class TestAdminAsistente(unittest.TestCase):
             "/admin/api/asistente/consultar",
             headers={"X-CSRFToken": "token_csrf_de_prueba_12345"},
             json={
-                "pregunta": "Resumen de ingresos del 2026-09-01 al 2026-09-30"
+                "pregunta": "Resumen de ingresos de Central del 2026-09-01 al 2026-09-30"
             }
         )
         self.assertEqual(res1.status_code, 200)

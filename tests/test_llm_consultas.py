@@ -703,7 +703,7 @@ class TestModuloLLMConsultas(unittest.TestCase):
             )
             self.assertEqual(res["status"], "success")
             sql_conteo, params_conteo = mock_cursor.execute.call_args_list[0][0]
-            self.assertIn("ISNULL(R.Sede, 'Central') = ?", sql_conteo)
+            self.assertIn("R.Sede = ?", sql_conteo)
             self.assertIn("Central", params_conteo)
 
     def test_45_extraer_codigo_matricula_y_clasificar_intencion(self):
@@ -786,12 +786,12 @@ class TestModuloLLMConsultas(unittest.TestCase):
             self.assertEqual(res["periodo"]["fecha_inicio"], "2026-05-01")
             self.assertEqual(res["periodo"]["fecha_fin"], "2026-05-31")
             self.assertIn("AfluenciaHistoricaAgregada", res["fuente"])
-            self.assertIn("02_ingresos_reales_actual.csv", res["fuente"])
+            self.assertIn("RegistroIngresos", res["fuente"])
 
             # Límites de cobertura
             limites = res["limites_cobertura"]
             self.assertEqual(limites["sedes_con_historial_suficiente"], ["Central"])
-            self.assertIn("Tarma", limites["sedes_con_datos_insuficientes"])
+            self.assertIn("Tarma", limites["sedes_no_evaluadas"])
             self.assertIn("45 minutos", limites["franja_20h_parcial"])
 
             # Métricas calculadas

@@ -1,3 +1,4 @@
+import re
 from datetime import date, datetime
 from db import get_db_cursor
 
@@ -572,7 +573,7 @@ def consultar_afluencia_historica(
 ):
     """
     Herramienta analítica de consulta descriptiva de afluencia histórica.
-    Utiliza exclusivamente la tabla agregada analítica dbo.AfluenciaHistoricaAgregada.
+    Une AHA con franjas recientes no representadas de RegistroIngresos, mediante SELECT agregados.
 
     - Valida parámetros de fechas (YYYY-MM-DD) y sede.
     - Respeta roles (Supervisor forzado a su sede_permitida).
@@ -644,8 +645,8 @@ def consultar_afluencia_historica(
         fila_suf = cursor.fetchone()
 
         total_fechas_sede = int(fila_suf[0]) if fila_suf and fila_suf[0] is not None else 0
-        min_sistema = fila_suf[3].strftime("%Y-%m-%d") if fila_suf and fila_suf[3] else "2026-04-10"
-        max_sistema = fila_suf[4].strftime("%Y-%m-%d") if fila_suf and fila_suf[4] else "2026-09-28"
+        min_sistema = fila_suf[3].strftime("%Y-%m-%d") if fila_suf and fila_suf[3] else None
+        max_sistema = fila_suf[4].strftime("%Y-%m-%d") if fila_suf and fila_suf[4] else None
 
         # Criterio operativo mínimo: al menos 15 fechas operativas registradas
         if total_fechas_sede < 15:
@@ -658,6 +659,9 @@ def consultar_afluencia_historica(
 
         cursor.execute(sql_rango, (sede_consulta, f_inicio.isoformat(), f_fin.isoformat()))
         filas_rango = cursor.fetchall()
+        from llm.services.fuente_afluencia_asistente import unir_recientes
+        filas_rango, cobertura = unir_recientes(cursor, filas_rango, max_sistema, sede_consulta, f_inicio, f_fin)
+        max_sistema = cobertura['ultimo_dia_con_datos']
 
     total_ingresos = sum(int(r[2]) for r in filas_rango)
     franjas_observadas = len(filas_rango)
@@ -685,28 +689,34 @@ def consultar_afluencia_historica(
     )
 
     if franjas_observadas > 0:
-        aviso_20h = f" Incluye {total_franjas_20h} franja(s) a las 20:00 con {ingresos_20h} ingresos (operación parcial de 45 minutos por apagado a las 20:45)." if total_franjas_20h > 0 else ""
+        aviso_20h = f" Incluye {total_franjas_20h} franja(s) a las 20:00 con {ingresos_20h} ingresos (franja operativa parcial de 45 minutos hasta las 20:45)." if total_franjas_20h > 0 else ""
         mensaje = (
             f"Consulta descriptiva de afluencia histórica para la sede {sede_consulta} "
             f"del {f_inicio.isoformat()} al {f_fin.isoformat()}: Total de {total_ingresos} ingresos observados "
             f"en {franjas_observadas} franja(s) horaria(s) a lo largo de {dias_con_registros} día(s) con registros "
-            f"(promedio de {promedio_diario} ingresos/día operativo y {promedio_franja} ingresos/franja observada).{aviso_20h} "
-            f"Fuente: Tabla analítica AfluenciaHistoricaAgregada (archivo 02_ingresos_reales_actual.csv). "
+            f"(promedio de {promedio_diario} ingresos/día con registros y {promedio_franja} ingresos/franja observada).{aviso_20h} "
+            f"Fuente: SQL Server, AfluenciaHistoricaAgregada + RegistroIngresos (SELECT agregados, sin duplicar claves). "
             f"Límites de cobertura del sistema: Registros disponibles entre el {min_sistema} y el {max_sistema} en horario de 08:00 a 20:45. "
             f"Aviso metodológico: Las franjas horarias no observadas representan intervalos no capturados o no registrados por el sistema "
             "y NO se interpretan automáticamente como cero ingresos ni como ausencia real de visitas."
         )
     else:
         mensaje = (
-            f"No se registraron observaciones operativas para la sede {sede_consulta} en el periodo "
+            f"No se encontraron franjas en las fuentes consultadas para la sede {sede_consulta} en el periodo "
             f"del {f_inicio.isoformat()} al {f_fin.isoformat()}. "
-            f"Fuente: Tabla analítica AfluenciaHistoricaAgregada. "
+            f"Fuente: SQL Server, AfluenciaHistoricaAgregada + RegistroIngresos (SELECT agregados). Esto no demuestra ausencia de ingresos ni captura completa. "
             f"Límites de cobertura del sistema: Registros disponibles entre el {min_sistema} y el {max_sistema} "
             "(excluyendo cierres institucionales como el 27/07, vacaciones del 01/08 al 23/08 y feriados nacionales). "
             f"Aviso metodológico: Las franjas no observadas no se interpretan automáticamente como cero."
         )
 
+    if cobertura['estado'] == 'parcial':
+        mensaje = 'PERIODO PARCIAL: no se acredita captura completa de todo el periodo solicitado. ' + mensaje
+    mensaje += ' Último día observado dentro del periodo: ' + (cobertura['ultimo_dia_observado_en_periodo'] or 'sin observaciones verificables') + '.'
+    mensaje += ' Último día con datos en las fuentes: ' + (max_sistema or 'no verificable') + '. Confirmación de captura: operativa del responsable, no verificación técnica independiente.'
+
     return {
+        "cobertura": cobertura,
         "status": "success",
         "herramienta": "consulta_afluencia_historica",
         "periodo": {
@@ -715,14 +725,17 @@ def consultar_afluencia_historica(
             "dias_calendario": (f_fin - f_inicio).days + 1
         },
         "sede": sede_consulta,
-        "fuente": "Tabla analítica AfluenciaHistoricaAgregada (procedencia: 02_ingresos_reales_actual.csv)",
+        "fuente": "SQL Server: dbo.AfluenciaHistoricaAgregada + dbo.RegistroIngresos (SELECT agregados, AHA prioritaria por Fecha/Hora/Sede)",
         "limites_cobertura": {
             "fecha_minima_sistema": min_sistema,
             "fecha_maxima_sistema": max_sistema,
+            "estado": cobertura["estado"],
+            "captura_completa_confirmada": cobertura["captura_completa_confirmada"],
             "horario_operativo": "08:00 a 20:45 (lunes a viernes)",
-            "franja_20h_parcial": "20:00 a 20:45 (45 minutos por apagado del servidor)",
-            "sedes_con_historial_suficiente": ["Central"],
-            "sedes_con_datos_insuficientes": ["Tarma", "La Merced", "Oxapampa", "Paucartambo", "Yanahuanca"]
+            "franja_20h_parcial": "20:00 a 20:45 (45 minutos de horario operativo)",
+            "sedes_con_historial_suficiente": [sede_consulta],
+            "sedes_con_datos_insuficientes": [],
+            "sedes_no_evaluadas": sorted(SEDES_PERMITIDAS - {sede_consulta})
         },
         "metricas": {
             "total_ingresos": total_ingresos,
@@ -747,7 +760,8 @@ def contar_ingresos_alumno_por_codigo(
     fecha_inicio=None,
     fecha_fin=None,
     rol=None,
-    sede_permitida=None
+    sede_permitida=None,
+    informe=False
 ):
     """
     Cuenta los ingresos de un alumno específico por código de matrícula
@@ -798,7 +812,7 @@ def contar_ingresos_alumno_por_codigo(
         filtros.append("CAST(R.FechaHora AS DATE) <= ?")
         params.append(f_fin.isoformat())
     if sede_consulta:
-        filtros.append("ISNULL(R.Sede, 'Central') = ?")
+        filtros.append("R.Sede = ?")
         params.append(sede_consulta)
 
     where_sql = " AND ".join(filtros)
@@ -817,14 +831,15 @@ def contar_ingresos_alumno_por_codigo(
 
     sql_cobertura_global = """
         SELECT
-            MIN(FechaHora) AS fecha_minima,
-            MAX(FechaHora) AS fecha_maxima,
+            MIN(CASE WHEN ISNULL(EsPrueba, 0) = 0 THEN FechaHora END) AS fecha_minima,
+            MAX(CASE WHEN ISNULL(EsPrueba, 0) = 0 THEN FechaHora END) AS fecha_maxima,
             COUNT(*) AS total_registros,
             SUM(CASE WHEN ISNULL(EsPrueba, 0) = 1 THEN 1 ELSE 0 END) AS total_pruebas,
             SUM(CASE WHEN ISNULL(EsPrueba, 0) = 0 THEN 1 ELSE 0 END) AS total_reales
         FROM RegistroIngresos
     """
 
+    distribuciones = {}
     with get_db_cursor(autocommit=True) as (_, cursor):
         if cursor is None:
             raise ConnectionError("No fue posible conectarse a SQL Server.")
@@ -832,8 +847,31 @@ def contar_ingresos_alumno_por_codigo(
         cursor.execute(sql_conteo, tuple(params))
         fila_conteo = cursor.fetchone()
 
-        cursor.execute(sql_cobertura_global)
+        # Auditar pruebas de la misma sede, manteniendo el corte solo de visitas válidas.
+        # El conteo individual y sus distribuciones conservan su exclusión de pruebas.
+        params_cobertura = ()
+        if sede_consulta:
+            sql_cobertura_global += " WHERE Sede = ?"
+            params_cobertura = (sede_consulta,)
+        cursor.execute(sql_cobertura_global, params_cobertura)
         fila_cob = cursor.fetchone()
+
+        if informe:
+            # Lista cerrada de expresiones SQL; ningún texto del usuario forma SQL.
+            grupos = {
+                'mensual': "CONVERT(char(7), R.FechaHora, 120)",
+                'dias_semana': "((DATEDIFF(day, '19000101', CAST(R.FechaHora AS date)) % 7 + 7) % 7)",
+                'horarios': "DATEPART(hour, R.FechaHora)",
+                'salas': "COALESCE(NULLIF(LTRIM(RTRIM(S.NombreSala)), ''), 'Sala no identificada')",
+            }
+            for nombre, expresion in grupos.items():
+                union_sala = 'LEFT JOIN Salas S ON S.SalaID = R.SalaID AND S.Sede = R.Sede' if nombre == 'salas' else ''
+                cursor.execute(f"""SELECT {expresion} AS grupo, COUNT(*) AS visitas
+                    FROM RegistroIngresos R INNER JOIN Alumnos A ON R.AlumnoID = A.AlumnoID
+                    {union_sala} WHERE {where_sql} GROUP BY {expresion} ORDER BY grupo""", tuple(params))
+                distribuciones[nombre] = [{'grupo': f[0], 'visitas': int(f[1])} for f in cursor.fetchall()]
+                if nombre in {'salas', 'horarios'}:
+                    distribuciones[nombre].sort(key=lambda fila: (-fila['visitas'], str(fila['grupo'])))
 
     total_ingresos = int(fila_conteo[0]) if fila_conteo and fila_conteo[0] is not None else 0
     primer_ingreso = fila_conteo[1].isoformat() if fila_conteo and fila_conteo[1] else None
@@ -841,8 +879,8 @@ def contar_ingresos_alumno_por_codigo(
     dias_visita = int(fila_conteo[3]) if fila_conteo and fila_conteo[3] is not None else 0
     escuela = str(fila_conteo[4]).strip() if fila_conteo and fila_conteo[4] else ""
 
-    min_global = fila_cob[0].strftime("%Y-%m-%d") if fila_cob and fila_cob[0] else "2026-04-10"
-    max_global = fila_cob[1].strftime("%Y-%m-%d") if fila_cob and fila_cob[1] else "2026-09-28"
+    min_global = fila_cob[0].strftime("%Y-%m-%d") if fila_cob and fila_cob[0] else None
+    max_global = fila_cob[1].strftime("%Y-%m-%d") if fila_cob and fila_cob[1] else None
     total_global = int(fila_cob[2]) if fila_cob and fila_cob[2] is not None else 0
     total_pruebas = int(fila_cob[3]) if fila_cob and len(fila_cob) > 3 and fila_cob[3] is not None else 0
     total_reales = int(fila_cob[4]) if fila_cob and len(fila_cob) > 4 and fila_cob[4] is not None else (total_global - total_pruebas)
@@ -871,20 +909,25 @@ def contar_ingresos_alumno_por_codigo(
             f"Nota de cobertura: La base de datos contiene {total_reales} visitas reales registradas entre el {min_global} y el {max_global}."
         )
 
+    corte_legible = re.sub(r'(\d{4})-(\d{2})-(\d{2})', r'\3/\2/\1', str(max_global)) if max_global else 'sin datos'
+    periodo_info = f"Periodo consultado: {rango_txt}." if (f_inicio or f_fin) else "Periodo consultado: todo el historial disponible."
+    sede_etiqueta = f"Sede: {sede_consulta}." if sede_consulta else "Todas las sedes."
     if total_ingresos > 0:
         mensaje = (
             f"El alumno con código {codigo_mask} registra {total_ingresos} ingreso(s) real(es) {rango_txt} "
-            f"en {dias_visita} fecha(s) distinta(s). "
+            f"en {dias_visita} fecha(s) distinta(s). {periodo_info} {sede_etiqueta} "
             f"Primer ingreso: {primer_ingreso}. Último ingreso: {ultimo_ingreso}. "
+            f"Corte observado de la fuente: {corte_legible}. "
             f"{nota_auditoria}"
         )
     else:
         mensaje = (
             f"No se encontraron ingresos reales registrados para el alumno con código {codigo_mask} {rango_txt}. "
+            f"{periodo_info} {sede_etiqueta} Corte observado de la fuente: {corte_legible}. "
             f"{nota_auditoria}"
         )
 
-    return {
+    resultado = {
         "status": "success",
         "codigo_mascarado": codigo_mask,
         "total_ingresos": total_ingresos,
@@ -907,6 +950,31 @@ def contar_ingresos_alumno_por_codigo(
         },
         "mensaje": mensaje
     }
+    if informe:
+        resultado.update(distribuciones)
+        resultado['estado'] = 'verificado_con_ingresos' if total_ingresos else 'sin_ingresos_verificables'
+        resultado['fecha_corte'] = max_global
+        resultado['fuente'] = 'RegistroIngresos + Alumnos; solo accesos no marcados como prueba'
+        primer_legible = re.sub(r'(\d{4})-(\d{2})-(\d{2})', r'\3/\2/\1', str(primer_ingreso)) if primer_ingreso else 'sin datos'
+        ultimo_legible = re.sub(r'(\d{4})-(\d{2})-(\d{2})', r'\3/\2/\1', str(ultimo_ingreso)) if ultimo_ingreso else 'sin datos'
+        if total_ingresos:
+            resultado['mensaje'] = (
+                f"Informe local del alumno {codigo_mask}: {total_ingresos} visitas en {dias_visita} días distintos. "
+                f"{periodo_info} {sede_etiqueta} "
+                f"Primera visita en periodo: {primer_legible}. Última visita en periodo: {ultimo_legible}. "
+                f"Corte observado de la fuente autorizada: {corte_legible}. "
+                "Fuente: RegistroIngresos y Alumnos; se excluyen registros de prueba. "
+                "El corte observado no acredita captura completa. No se calcula probabilidad de retorno."
+            )
+        else:
+            resultado['mensaje'] = (
+                f"No hay ingresos verificables para la matrícula {codigo_mask} en el periodo consultado ({rango_txt}) "
+                f"{('en ' + sede_consulta) if sede_consulta else ''}. "
+                f"{periodo_info} {sede_etiqueta} "
+                f"Corte observado de la fuente autorizada: {corte_legible}. "
+                "Esto no confirma la existencia de una ficha ni constituye un informe individual validado. Revise matrícula, sede y periodo."
+            )
+    return resultado
 
 
 def consultar_analisis_descriptivo_individual(

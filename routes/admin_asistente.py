@@ -1,12 +1,24 @@
 from flask import Blueprint, render_template, request, session, jsonify
 from llm.services.coordinador_asistente import procesar_pregunta
 from llm.services.motor_intenciones import sanitizar_contexto
+from llm.services.chat_conversacional import CHAT_REVISION
 
 admin_asistente_bp = Blueprint(
     "admin_asistente",
     __name__,
     url_prefix="/admin"
 )
+
+INTERFAZ_AGENTES = 'agentes-local-v3'
+
+
+@admin_asistente_bp.after_request
+def identificar_interfaz_asistente(response):
+    # Evitar reutilizar HTML anterior; esto no recarga un proceso Python antiguo.
+    response.headers['Cache-Control'] = 'no-store'
+    response.headers['X-Asistente-UI'] = INTERFAZ_AGENTES
+    response.headers['X-Asistente-Chat'] = CHAT_REVISION
+    return response
 
 
 def respuesta_error(mensaje, codigo=400, categoria="validacion"):
@@ -21,7 +33,7 @@ def respuesta_error(mensaje, codigo=400, categoria="validacion"):
 @admin_asistente_bp.route("/asistente", methods=["GET"])
 def vista_asistente():
     """
-    Vista administrativa principal del Asistente Inteligente (Modo Local).
+    Vista del asistente con resolución local y proveedor opcional.
     Ruta protegida por sesión en app.py.
     """
     sedes = [
@@ -34,13 +46,15 @@ def vista_asistente():
     ]
 
     rol = session.get("admin_rol")
-    sede_asignada = session.get("admin_sede", "Central")
+    sede_asignada = session.get("admin_sede")
 
     from llm.services.proveedor_llm import obtener_configuracion
     config_llm = obtener_configuracion()
     llm_activo = config_llm.esta_disponible
-    llm_proveedor = config_llm.proveedor if llm_activo else "local"
-    llm_modelo = config_llm.modelo if llm_activo else "reglas_locales"
+    llm_proveedor = config_llm.proveedor
+    llm_modelo = config_llm.modelo
+    faltantes = [nombre for nombre, valor in [('LLM_API_KEY',getattr(config_llm,'api_key',None)),('LLM_MODELO',getattr(config_llm,'modelo',None))] if not valor]
+    if not getattr(config_llm,'activado',llm_activo): faltantes.append('LLM_ACTIVADO')
 
     return render_template(
         "admin_asistente.html",
@@ -48,7 +62,9 @@ def vista_asistente():
         sede_asignada=sede_asignada,
         llm_activo=llm_activo,
         llm_proveedor=llm_proveedor,
-        llm_modelo=llm_modelo
+        llm_modelo=llm_modelo,
+        chat_revision=CHAT_REVISION,
+        llm_variables_faltantes=faltantes
     )
 
 
@@ -68,14 +84,16 @@ def vista_metricas_asistente():
     config_llm = obtener_configuracion()
     gestor = obtener_gestor_metricas()
     resumen = gestor.obtener_resumen()
+    from llm.services.agentes_asistente import telemetria
 
     return render_template(
         "admin_asistente_metricas.html",
         metricas=resumen,
+        agentes=telemetria.resumen(),
         llm_activo=config_llm.esta_disponible,
         llm_proveedor=config_llm.proveedor if config_llm.esta_disponible else "local",
         llm_modelo=config_llm.modelo if config_llm.esta_disponible else "reglas_locales",
-        llm_api_base=config_llm.api_base,
+        llm_api_base=config_llm.api_base if rol == 'SuperAdmin' else None,
         llm_timeout=config_llm.timeout
     )
 
@@ -93,11 +111,60 @@ def api_metricas_asistente():
     from llm.services.metricas_asistente import obtener_gestor_metricas
     gestor = obtener_gestor_metricas()
     resumen = gestor.obtener_resumen()
+    from llm.services.agentes_asistente import telemetria
+    resumen['agentes'] = telemetria.resumen()
 
     return jsonify({
         "status": "success",
         "datos": resumen
     }), 200
+
+
+def _validar_peticion_agentes():
+    from app import validar_csrf
+    if not validar_csrf():
+        return respuesta_error('Token CSRF inválido o expirado.', 403, 'permiso')
+    from llm.services.agentes_asistente import validar_sesion
+    try:
+        validar_sesion(session.get('admin_rol'), session.get('admin_sede'))
+    except PermissionError:
+        return respuesta_error('Rol o sede de sesión no autorizados.', 403, 'permiso')
+    if not request.is_json or not isinstance(request.get_json(silent=True), dict):
+        return respuesta_error('Debe enviar un objeto JSON.', 400)
+    return None
+
+
+@admin_asistente_bp.route('/api/asistente/reportes/preparar', methods=['POST'])
+def preparar_reporte_agentes():
+    error = _validar_peticion_agentes()
+    if error is not None:
+        return error
+    pregunta = request.get_json().get('pregunta')
+    if not isinstance(pregunta, str) or not pregunta.strip() or len(pregunta) > 500:
+        return respuesta_error('Escriba una pregunta de hasta 500 caracteres.', 400)
+    from llm.services.agentes_asistente import Orquestador
+    resultado = Orquestador().ejecutar(pregunta.strip(), session['admin_rol'], session.get('admin_sede'),
+                                    contexto=session.get('asistente_reporte_contexto'))
+    session['asistente_reporte_contexto'] = sanitizar_contexto(resultado.get('contexto'))
+    return jsonify(resultado), 200 if resultado.get('status') == 'requires_input' else resultado.get('codigo_http', 200)
+
+
+@admin_asistente_bp.route('/api/asistente/tareas/borrador', methods=['POST'])
+def preparar_borrador_recurrente():
+    error = _validar_peticion_agentes()
+    if error is not None:
+        return error
+    datos = request.get_json()
+    from llm.services.agentes_asistente import AgenteReportesAutomatizacion
+    try:
+        borrador = AgenteReportesAutomatizacion().borrador(
+            datos.get('tipo'), datos.get('frecuencia'), datos.get('destinatario'),
+            session['admin_rol'], session.get('admin_sede'))
+        return jsonify(status='success', borrador=borrador)
+    except PermissionError as error_permiso:
+        return respuesta_error(str(error_permiso), 403, 'permiso')
+    except (TypeError, ValueError):
+        return respuesta_error('Revise tipo, frecuencia y destinatario.', 400)
 
 
 @admin_asistente_bp.route("/api/asistente/consultar", methods=["POST"])
@@ -187,12 +254,16 @@ def api_consultar_asistente():
             hora=hora,
             sede=sede,
             limite=limite,
-            contexto=contexto_limpio
+            contexto=contexto_limpio,
+            pregunta_personal_pendiente=datos.get("pregunta_personal_pendiente"),
+            modo_chat=True
         )
 
         # 6. Actualizar sesión con el contexto mínimo devuelto (garantizando ausencia de datos personales)
         ctx_actualizado = resultado.get("contexto")
         if isinstance(ctx_actualizado, dict):
+            if resultado.get('status') == 'requires_input':
+                ctx_actualizado = {**ctx_actualizado, 'intencion': resultado.get('intencion')}
             session["asistente_contexto"] = sanitizar_contexto(ctx_actualizado)
             session.modified = True
 

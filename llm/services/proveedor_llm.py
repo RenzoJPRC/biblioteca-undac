@@ -34,9 +34,35 @@ class LLMNetworkError(LLMError):
 
 class LLMAPIError(LLMError):
     """Error devuelto por la API del proveedor LLM (ej. 401, 429, 500)."""
-    def __init__(self, mensaje: str, status_code: int = 500):
+    def __init__(self, mensaje: str, status_code: int = 500, categoria=None):
         super().__init__(mensaje)
         self.status_code = status_code
+        self.categoria = categoria or {401:'autenticacion',403:'autenticacion',429:'cuota',404:'modelo_o_endpoint'}.get(status_code, 'respuesta_api')
+
+
+def error_api_seguro(respuesta):
+    """Inspeccionar el error sin conservar ni imprimir cuerpo, URL o credenciales."""
+    categoria = {400:'configuracion',401:'autenticacion',403:'autenticacion',429:'cuota',404:'modelo_o_endpoint'}.get(respuesta.status_code, 'servidor' if respuesta.status_code >= 500 else 'respuesta_api')
+    try:
+        error = respuesta.json().get('error', {})
+        texto = str(error.get('message', '')).lower()
+        if 'api key' in texto or 'api_key' in texto or 'unauthenticated' in texto:
+            categoria = 'autenticacion'
+        elif 'quota' in texto or 'resource_exhausted' in texto:
+            categoria = 'cuota'
+        elif 'model' in texto and ('not found' in texto or 'not supported' in texto):
+            categoria = 'modelo'
+    except Exception:
+        pass
+    return LLMAPIError(f'Proveedor no disponible: {categoria} (HTTP {respuesta.status_code}).', respuesta.status_code, categoria)
+
+
+def clasificar_error(error):
+    if isinstance(error, LLMAPIError): return error.categoria
+    if isinstance(error, (LLMTimeoutError, requests.exceptions.Timeout)): return 'timeout'
+    if isinstance(error, (LLMNetworkError, requests.exceptions.RequestException)): return 'conexion'
+    if isinstance(error, LLMSafetyViolationError): return 'respuesta_no_verificable'
+    return 'respuesta_invalida'
 
 
 class LLMSafetyViolationError(LLMError):
@@ -322,6 +348,36 @@ class ProveedorLLM:
     def __init__(self, config: Optional[ConfiguracionLLM] = None):
         self.config = config or obtener_configuracion()
 
+    def responder_chat(self, mensajes):
+        """Texto sin herramientas: no permite al proveedor consultar BD ni elegir SQL."""
+        if not self.config.esta_disponible:
+            raise LLMAPIError('Falta configuración del proveedor.', 400, 'configuracion')
+        try:
+            respuesta = requests.post(self.config.api_base + '/chat/completions',
+                headers={'Authorization': 'Bearer ' + self.config.api_key},
+                json={'model': self.config.modelo, 'messages': mensajes},
+                timeout=self.config.timeout, allow_redirects=False)
+        except requests.exceptions.Timeout:
+            raise LLMTimeoutError('Tiempo de espera agotado.') from None
+        except requests.exceptions.RequestException:
+            raise LLMNetworkError('No se pudo conectar con el proveedor.') from None
+        if respuesta.status_code != 200:
+            raise error_api_seguro(respuesta)
+        try:
+            datos = respuesta.json()
+            eleccion = datos['choices'][0]
+            if eleccion.get('finish_reason') not in (None,'stop'):
+                raise ValueError()
+            texto = eleccion['message']['content']
+            if not isinstance(texto, str) or not texto.strip():
+                raise ValueError()
+        except Exception:
+            raise LLMError('Respuesta vacía o inválida del proveedor.') from None
+        valida, texto, motivo = validar_y_sanitizar_respuesta_llm(texto)
+        if not valida:
+            raise LLMSafetyViolationError('Respuesta no verificable.')
+        return {'mensaje': texto, 'usage': datos.get('usage')}
+
     def procesar_consulta(
         self,
         pregunta: str,
@@ -371,13 +427,10 @@ class ProveedorLLM:
         except requests.exceptions.Timeout as e:
             raise LLMTimeoutError(f"Tiempo de espera agotado ({self.config.timeout}s) al conectar con el LLM.") from e
         except requests.exceptions.RequestException as e:
-            raise LLMNetworkError(f"Error de red al comunicarse con el proveedor LLM: {str(e)}") from e
+            raise LLMNetworkError('No se pudo conectar con el proveedor.') from None
 
         if resp.status_code != 200:
-            raise LLMAPIError(
-                f"Error HTTP {resp.status_code} desde la API del LLM: {resp.text[:200]}",
-                status_code=resp.status_code
-            )
+            raise error_api_seguro(resp)
 
         try:
             datos_resp = resp.json()

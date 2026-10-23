@@ -1,28 +1,53 @@
 {% extends "layout_admin.html" %}
 
 {% block content %}
+<meta name="asistente-chat-revision" content="{{ chat_revision }}">
+<style>
+    body > main { min-width: 0; }
+    #asistente-cabecera { height: auto; min-height: 4rem; flex-wrap: wrap; gap: .75rem; padding-top: .75rem; padding-bottom: .75rem; }
+    #asistente-cabecera > div { min-width: 0; }
+    #asistente-cabecera > div:first-child > div { flex-wrap: wrap; }
+    #asistente-contenido { min-width: 0; container-type: inline-size; }
+    .asistente-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.5rem; }
+    .asistente-grid > section, #conversacion-chat { min-width: 0; overflow-wrap: anywhere; }
+    .asistente-grid form { min-width: 0; justify-content: flex-start; }
+    .asistente-grid button { min-width: 0; white-space: normal; overflow-wrap: break-word; }
+    .asistente-grid form > div:last-child > div { grid-template-columns: minmax(0, 1fr); }
+    @container (min-width: 1040px) {
+        .asistente-grid { grid-template-columns: minmax(320px, 1fr) minmax(0, 2fr); }
+    }
+    @media (max-width: 480px) {
+        #asistente-contenido { padding: .75rem; }
+        .asistente-grid form, .asistente-grid > section > div { padding: 1rem; }
+        #asistente-cabecera { padding-left: .75rem; padding-right: .75rem; }
+    }
+</style>
 
-<header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-8 shrink-0">
+<header id="asistente-cabecera" class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-8 shrink-0">
     <div>
-        <h2 class="text-lg font-bold text-slate-700">
-            Asistente inteligente de biblioteca
+        <h2 class="text-lg font-bold text-slate-700 flex items-center gap-2">
+            <span>Asistente inteligente de biblioteca</span>
+            <span id="badge-revision-chat" class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono font-normal bg-slate-100 text-slate-600 border border-slate-200" title="Revisión activa del código del chat">
+                <i class="ph ph-git-commit text-xs"></i>
+                <span>rev: {{ chat_revision }}</span>
+            </span>
         </h2>
         <div class="flex items-center gap-2 mt-0.5">
             {% if llm_activo %}
             <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800 border border-indigo-300">
                 <span class="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
-                Proveedor LLM activo ({{ llm_proveedor }})
+                Proveedor LLM configurado ({{ llm_proveedor }})
             </span>
             <span class="text-xs text-slate-500 font-medium">
-                Modelo: {{ llm_modelo }} · Respaldo local activo
+                Modelo: {{ llm_modelo }} · Configuración cargada; la disponibilidad se verifica en cada solicitud
             </span>
             {% else %}
             <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300">
                 <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                Modo local — sin proveedor externo
+                Proveedor no configurado o desactivado
             </span>
             <span class="text-xs text-slate-500 font-medium">
-                Asistente inteligente — modo local
+                {% if llm_variables_faltantes %}Revisar: {{ llm_variables_faltantes|join(', ') }}{% endif %}
             </span>
             {% endif %}
         </div>
@@ -42,7 +67,7 @@
     </div>
 </header>
 
-<div class="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
+<div id="asistente-contenido" class="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
 
     <!-- Descripción / Banner -->
     <section class="bg-gradient-to-r from-indigo-50 to-sky-50 border border-indigo-200 rounded-xl p-5">
@@ -52,10 +77,10 @@
             </div>
             <div>
                 <h3 class="font-bold text-indigo-950">
-                    Asistente Inteligente de Biblioteca — Modo Local
+                    Pregunte al Asistente Inteligente de Biblioteca
                 </h3>
                 <p class="text-sm text-indigo-800 mt-1">
-                    Realice consultas sobre afluencia, totales de ingresos e historial de accesos. El sistema procesa su pregunta localmente sin enviar datos a servidores externos.
+                    Escriba su pregunta con el periodo y la sede que necesite. Los informes personales se resuelven exclusivamente en el backend local. Las consultas generales pueden usar el proveedor configurado; cada respuesta indica su origen.
                 </p>
                 <div class="mt-2 flex items-center gap-2 text-xs text-amber-800 bg-amber-50/80 border border-amber-200 rounded-lg px-3 py-1.5 w-fit">
                     <i class="ph ph-clock text-base text-amber-600 shrink-0"></i>
@@ -65,10 +90,10 @@
         </div>
     </section>
 
-    <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+    <div class="asistente-grid">
 
         <!-- Formulario de Consulta -->
-        <section class="xl:col-span-1 bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col">
+        <section class="bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col">
             <div class="p-5 border-b border-slate-100">
                 <h3 class="font-bold text-slate-700 flex items-center gap-2">
                     <i class="ph ph-chat-circle-dots text-indigo-500 text-xl"></i>
@@ -93,15 +118,15 @@
                     </div>
 
                     <!-- Parámetros complementarios opcionales -->
-                    <div class="border border-slate-200 rounded-lg overflow-hidden bg-slate-50/50">
+                    <div class="hidden border border-slate-200 rounded-lg overflow-hidden bg-slate-50/50">
                         <button type="button" id="btn-toggle-complementario" class="w-full px-4 py-2.5 text-left text-xs font-bold text-slate-600 flex items-center justify-between hover:bg-slate-100 transition-colors">
                             <div class="flex flex-col text-left">
                                 <span class="flex items-center gap-2 uppercase">
                                     <i class="ph ph-sliders text-indigo-500 text-base"></i>
-                                    Parámetros complementarios (opcional)
+                                    Filtros adicionales (opcional, uso secundario)
                                 </span>
                                 <span class="text-[11px] text-slate-400 font-normal mt-0.5 normal-case">
-                                    Complete solamente los parámetros necesarios para el tipo de consulta.
+                                    Puede indicar estos filtros directamente en su pregunta, sin completar campos.
                                 </span>
                             </div>
                             <i id="icono-toggle-complementario" class="ph ph-caret-down text-slate-400 shrink-0"></i>
@@ -148,12 +173,22 @@
                     </div>
                 </div>
 
-                <div class="pt-4 space-y-3">
+                <div class="pt-4 space-y-3" data-asistente-ui="agentes-local-v3">
+                    <p class="text-xs font-semibold text-indigo-700">Escriba su pregunta; puede aclarar datos en el siguiente mensaje.</p>
+                    <div class="grid sm:grid-cols-2 xl:grid-cols-1 gap-2">
                     <button type="submit" id="btn-consultar" class="w-full flex justify-center items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed shadow-sm">
                         <i class="ph ph-paper-plane-tilt text-xl"></i>
                         <span>Consultar</span>
                     </button>
 
+                    {% if session.get('admin_rol') in ['SuperAdmin', 'Supervisor'] %}
+                    <button type="button" id="btn-reporte-auditado" aria-controls="reporte-auditado" data-endpoint="{{ url_for('admin_asistente.preparar_reporte_agentes') }}" class="w-full flex items-center justify-center gap-2 bg-sky-700 hover:bg-sky-600 text-white font-bold rounded-lg px-3 py-3 disabled:opacity-60">Preparar reporte con agentes y auditoría</button>
+                    {% else %}
+                    <p class="text-xs text-slate-500">Los reportes con agentes requieren sesión de SuperAdmin o Supervisor.</p>
+                    {% endif %}
+                    </div>
+
+                    <a href="{{ url_for('admin_asistente.vista_metricas_asistente') }}" class="text-sm text-indigo-700 underline">Ver ejecuciones y métricas de agentes</a>
                     <button type="button" id="btn-nueva-consulta" class="w-full flex justify-center items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2 rounded-lg transition-colors text-xs">
                         <i class="ph ph-arrow-counter-clockwise text-base"></i>
                         <span>Nueva consulta</span>
@@ -163,7 +198,7 @@
         </section>
 
         <!-- Resultados y Respuestas -->
-        <section class="xl:col-span-2 bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col">
+        <section class="bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col">
             <div class="p-5 border-b border-slate-100 flex justify-between items-center">
                 <h3 class="font-bold text-slate-700 flex items-center gap-2">
                     <i class="ph ph-desktop text-indigo-500 text-xl"></i>
@@ -175,6 +210,20 @@
             </div>
 
             <div class="p-5 flex-1 flex flex-col justify-between space-y-6">
+                <section id="conversacion-chat" aria-label="Conversación con el asistente" aria-live="polite" class="space-y-3 max-h-[65vh] overflow-y-auto"></section>
+                <section id="reporte-auditado" class="hidden rounded-xl border border-sky-200 bg-sky-50 p-5 space-y-4" aria-live="polite">
+                    <div class="flex flex-wrap justify-between gap-2"><h4 class="font-bold text-lg text-slate-800">Reporte auditado</h4><span id="reporte-estado" class="text-xs font-bold rounded-full bg-white px-3 py-1">Pendiente</span></div>
+                    <p id="reporte-mensaje" class="text-sm text-slate-700"></p>
+                    <div id="reporte-ficha" class="hidden space-y-4">
+                        <div class="grid sm:grid-cols-2 gap-3"><div class="bg-white rounded-lg border p-4"><p class="text-xs text-slate-500">Visitas observadas</p><p id="reporte-total" class="text-3xl font-bold text-indigo-700"></p></div>
+                        <dl class="grid grid-cols-2 gap-3 text-sm"><div><dt class="text-slate-500">Sede</dt><dd id="reporte-sede" class="font-semibold"></dd></div><div><dt class="text-slate-500">Periodo analizado</dt><dd id="reporte-periodo" class="font-semibold"></dd></div><div class="col-span-2"><dt class="text-slate-500">Corte observado</dt><dd id="reporte-corte"></dd></div></dl></div>
+                        <p class="text-xs text-slate-600">Fuente: <span id="reporte-fuente"></span></p>
+                        <div id="reporte-distribuciones" class="grid md:grid-cols-2 gap-3 text-sm"></div>
+                        <p id="reporte-limites" class="text-xs text-slate-500"></p>
+                    </div>
+                    <details id="reporte-auditoria" class="border-t border-sky-200 pt-3"><summary class="cursor-pointer text-sm font-semibold text-sky-800">Auditoría y recorrido de agentes</summary><p id="reporte-auditoria-estado" class="text-sm mt-3"></p><ol id="reporte-agentes" class="flex flex-wrap gap-2 mt-3 text-xs"></ol></details>
+                </section>
+
 
                 <!-- Estado Inicial Vacío -->
                 <div id="zona-vacia" class="my-auto flex flex-col justify-center items-center text-center p-8">
@@ -195,7 +244,7 @@
                         <i class="ph ph-spinner animate-spin text-3xl text-indigo-600"></i>
                     </div>
                     <h4 class="font-bold text-indigo-900">
-                        Procesando su consulta localmente...
+                        Consultando las fuentes autorizadas...
                     </h4>
                     <p class="text-xs text-indigo-600 mt-1">
                         Analizando intención y ejecutando consulta segura
@@ -235,7 +284,7 @@
                             <i class="ph ph-sliders text-2xl text-sky-600 shrink-0"></i>
                             <div>
                                 <h4 class="font-bold text-sky-900 text-sm">
-                                    Parámetros requeridos
+                                    Continúe con una respuesta en lenguaje natural
                                 </h4>
                                 <p class="text-xs text-sky-800 mt-1">
                                     Para completar la consulta es necesario indicar los siguientes parámetros en el formulario complementario:
@@ -327,63 +376,16 @@
 
     </div>
 
-    <!-- Ejemplos de Preguntas Admitidas -->
-    <section class="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
-        <h3 class="font-bold text-slate-700 flex items-center gap-2 mb-4">
-            <i class="ph ph-lightbulb text-amber-500 text-xl"></i>
-            Ejemplos de preguntas admitidas
-        </h3>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            <button type="button" class="btn-ejemplo text-left bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 p-3.5 rounded-xl transition-all group">
-                <div class="flex items-center justify-between mb-1">
-                    <span class="text-[10px] font-bold uppercase text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded">Resumen Rango</span>
-                    <i class="ph ph-arrow-right text-slate-400 group-hover:text-indigo-600 transition-colors"></i>
-                </div>
-                <p class="text-xs font-semibold text-slate-700">Resumen de ingresos del 2026-03-01 al 2026-03-15</p>
-            </button>
-
-            <button type="button" class="btn-ejemplo text-left bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 p-3.5 rounded-xl transition-all group">
-                <div class="flex items-center justify-between mb-1">
-                    <span class="text-[10px] font-bold uppercase text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded">Horas Top</span>
-                    <i class="ph ph-arrow-right text-slate-400 group-hover:text-indigo-600 transition-colors"></i>
-                </div>
-                <p class="text-xs font-semibold text-slate-700">¿Cuáles fueron las horas de mayor afluencia?</p>
-            </button>
-
-            <button type="button" class="btn-ejemplo text-left bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 p-3.5 rounded-xl transition-all group">
-                <div class="flex items-center justify-between mb-1">
-                    <span class="text-[10px] font-bold uppercase text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded">Predicción ML</span>
-                    <i class="ph ph-arrow-right text-slate-400 group-hover:text-indigo-600 transition-colors"></i>
-                </div>
-                <p class="text-xs font-semibold text-slate-700">¿Cuál será el nivel de afluencia?</p>
-            </button>
-
-            {% if session.get('admin_rol') != 'Consultor' %}
-            <button type="button" class="btn-ejemplo text-left bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 p-3.5 rounded-xl transition-all group">
-                <div class="flex items-center justify-between mb-1">
-                    <span class="text-[10px] font-bold uppercase text-sky-600 bg-sky-100 px-2 py-0.5 rounded">Historial Personal</span>
-                    <i class="ph ph-arrow-right text-slate-400 group-hover:text-indigo-600 transition-colors"></i>
-                </div>
-                <p class="text-xs font-semibold text-slate-700">Historial de accesos de Juan Perez</p>
-            </button>
-            {% endif %}
-
-            <button type="button" class="btn-ejemplo text-left bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 p-3.5 rounded-xl transition-all group">
-                <div class="flex items-center justify-between mb-1">
-                    <span class="text-[10px] font-bold uppercase text-amber-600 bg-amber-100 px-2 py-0.5 rounded">Desambiguación</span>
-                    <i class="ph ph-arrow-right text-slate-400 group-hover:text-indigo-600 transition-colors"></i>
-                </div>
-                <p class="text-xs font-semibold text-slate-700">Buscar a Quispe</p>
-            </button>
-
-            <button type="button" class="btn-ejemplo text-left bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 p-3.5 rounded-xl transition-all group">
-                <div class="flex items-center justify-between mb-1">
-                    <span class="text-[10px] font-bold uppercase text-slate-600 bg-slate-200 px-2 py-0.5 rounded">Ayuda</span>
-                    <i class="ph ph-arrow-right text-slate-400 group-hover:text-indigo-600 transition-colors"></i>
-                </div>
-                <p class="text-xs font-semibold text-slate-700">Hola, ¿qué puedes hacer?</p>
-            </button>
+    <section class="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
+        <h2 class="font-bold mb-3">Ideas para empezar la conversación</h2>
+        <p class="text-sm text-slate-500 mb-3">Elija una idea o escriba su propia pregunta. Puede completar los datos conversando.</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {% for ejemplo in ['Quiero consultar la afluencia de una sede', '¿Qué horas tuvieron más ingresos?', '¿Qué consultas puedes resolver?'] %}
+            <button type="button" class="btn-ejemplo text-left rounded-xl border border-slate-200 p-4 hover:bg-indigo-50"><p>{{ ejemplo }}</p></button>
+        {% endfor %}
+        {% if session.get('admin_rol') in ['SuperAdmin', 'Supervisor'] %}
+            <button type="button" class="btn-ejemplo text-left rounded-xl border border-slate-200 p-4 hover:bg-indigo-50"><p>Quiero consultar el historial de visitas de un alumno</p></button>
+        {% endif %}
         </div>
     </section>
 
@@ -396,11 +398,35 @@
     // Variables en memoria JavaScript
     let preguntaEnMemoria = "";
     let consultaEnCurso = false;
+    let reiniciarChat = false;
+    let preguntaPersonalPendiente = ""; // Solo memoria de esta pestaña; nunca almacenamiento persistente.
 
     document.addEventListener("DOMContentLoaded", function () {
         const textareaPregunta = document.getElementById("pregunta");
         const contadorChar = document.getElementById("contador-caracteres");
         const formAsistente = document.getElementById("form-asistente");
+        document.getElementById('btn-reporte-auditado')?.addEventListener('click', async function () {
+            const salida = document.getElementById('reporte-auditado');
+            const pregunta = textareaPregunta.value.trim();
+            if (!pregunta || consultaEnCurso) return;
+            this.disabled = true;
+            consultaEnCurso = true;
+            salida.classList.remove('hidden');
+            mostrarReporteAgentes({status: 'procesando', mensaje: 'Coordinando herramientas y auditoría; no se enviará correo.'});
+            try {
+                const respuesta = await fetch(this.dataset.endpoint, {
+                    method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.content || ''},
+                    body: JSON.stringify({pregunta})
+                });
+                if (!(respuesta.headers.get('content-type') || '').includes('application/json')) {
+                    throw new Error('La respuesta no corresponde al endpoint de agentes. Reinicie el servidor local y recargue la página.');
+                }
+                const datos = await respuesta.json();
+                mostrarReporteAgentes(datos);
+            } catch (error) {
+                mostrarReporteAgentes({status: 'error', mensaje: error.message || 'No se pudo preparar el reporte.'});
+            } finally { this.disabled = false; consultaEnCurso = false; }
+        });
         const btnNuevaConsulta = document.getElementById("btn-nueva-consulta");
         const btnToggleComplementario = document.getElementById("btn-toggle-complementario");
         const seccionComplementaria = document.getElementById("seccion-complementaria");
@@ -438,6 +464,10 @@
             textareaPregunta.value = "";
             contadorChar.textContent = "0 / 500";
             preguntaEnMemoria = "";
+            reiniciarChat = true;
+            preguntaPersonalPendiente = "";
+            ["param-sede","param-fecha","param-hora","param-fecha-inicio","param-fecha-fin","param-limite"].forEach(id => { const campo = document.getElementById(id); if (campo && !campo.disabled) campo.value = ""; });
+            document.getElementById("conversacion-chat").replaceChildren();
             limpiarResultadoAnterior();
             mostrarEstadoVacio();
             textareaPregunta.focus();
@@ -445,6 +475,7 @@
     });
 
     function limpiarResultadoAnterior() {
+        document.getElementById('reporte-auditado').classList.add('hidden');
         // Vaciar contenedores dinámicos de forma segura
         const idsContenedores = [
             "contenedor-candidatos",
@@ -513,12 +544,21 @@
         const btnConsultar = document.getElementById("btn-consultar");
 
         const textoPregunta = textareaPregunta.value.trim();
+        if (/^nueva consulta$/i.test(textoPregunta)) {
+            reiniciarChat = true;
+            preguntaPersonalPendiente = '';
+            preguntaEnMemoria = '';
+            document.getElementById('conversacion-chat').replaceChildren();
+            ['param-sede','param-fecha','param-hora','param-fecha-inicio','param-fecha-fin','param-limite'].forEach(id => { const campo = document.getElementById(id); if (campo && !campo.disabled) campo.value = ''; });
+        }
         if (!textoPregunta && !opcionSeleccionada) return;
 
         if (textoPregunta) {
             preguntaEnMemoria = textoPregunta;
         }
 
+        if (!opcionSeleccionada) agregarMensajeChat('usuario', textoPregunta, 'Usted');
+        const burbujaPendiente = agregarMensajeChat('asistente', 'Consultando…', 'Procesando');
         // Limpiar estado anterior antes de enviar
         limpiarResultadoAnterior();
 
@@ -530,6 +570,8 @@
             pregunta: preguntaEnMemoria
         };
 
+        if (preguntaPersonalPendiente && !reiniciarChat) payload.pregunta_personal_pendiente = preguntaPersonalPendiente;
+        if (reiniciarChat) { preguntaPersonalPendiente = ""; payload.reset_contexto = true; reiniciarChat = false; }
         if (opcionSeleccionada) {
             payload.seleccion_persona = opcionSeleccionada;
         }
@@ -552,7 +594,8 @@
             const respuesta = await fetch("/admin/api/asistente/consultar", {
                 method: "POST",
                 headers: {
-                    "Content-Type": "application/json"
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": document.querySelector('meta[name="csrf-token"]')?.content || ""
                 },
                 body: JSON.stringify(payload)
             });
@@ -563,12 +606,94 @@
                 throw new Error(datos.mensaje || "Ocurrió un error al procesar la consulta.");
             }
 
-            procesarRespuestaExitoso(datos);
+            burbujaPendiente.remove();
+            const motivosProveedor = {autenticacion:'acceso no autorizado',cuota:'límite de uso',modelo:'modelo no disponible',modelo_o_endpoint:'modelo o ruta no disponibles',timeout:'tiempo de espera agotado',conexion:'sin conexión',respuesta_invalida:'respuesta vacía o inválida',respuesta_no_verificable:'explicación no verificable',configuracion:'proveedor desactivado o configuración incompleta',servidor:'error del proveedor'};
+            const origen = etiquetaOrigenChat(datos);
+            agregarMensajeChat('asistente', (datos.resumen_visible || datos.mensaje || 'No se obtuvo una respuesta verificable.') + (datos.explicacion_llm ? '\n\n' + datos.explicacion_llm : ''), origen, datos.datos, datos);
+            if (datos.status === 'requires_input' && ['conteo_ingresos_alumno','historial_persona','ultimo_ingreso_persona'].includes(datos.intencion)) {
+                if (!preguntaPersonalPendiente || /\d{6,20}/.test(textoPregunta)) preguntaPersonalPendiente = textoPregunta;
+            } else preguntaPersonalPendiente = '';
+            if (!datos.chat) procesarRespuestaExitoso(datos);
+            else document.getElementById('zona-respuesta').classList.add('hidden');
+            textareaPregunta.value = '';
+            document.getElementById('contador-caracteres').textContent = '0 / 500';
+            textareaPregunta.focus();
         } catch (err) {
-            mostrarEstadoError(err.message || "Error de conexión o respuesta del servidor.");
+            burbujaPendiente.remove();
+            agregarMensajeChat('asistente', err.message || 'No se pudo completar la consulta. Intente nuevamente.', 'Error de consulta');
+            document.getElementById('zona-respuesta').classList.add('hidden');
         } finally {
+            ocultarEstadosDeCarga();
+            const badge = document.getElementById('badge-estado');
+            if (badge) { badge.textContent = 'Conversación'; badge.className = 'text-xs text-slate-500'; }
             consultaEnCurso = false;
             bloquearBoton(btnConsultar, false);
+        }
+    }
+
+    function etiquetaOrigenChat(datos) {
+        if (datos.consulta_confidencial || ['conteo_ingresos_alumno','historial_persona','ultimo_ingreso_persona'].includes(datos.intencion)) {
+            return 'Consulta confidencial procesada en el servidor; no se envía a Gemini';
+        }
+        if (datos.error_proveedor) return 'Respuesta de respaldo; Gemini no respondió';
+        if (datos.origen === 'llm_externo' && datos.proveedor === 'gemini') {
+            if (datos.origen_detalle === 'biblioteca_explicada' && datos.explicacion_llm) {
+                return datos.datos_simulados ? 'Datos ficticios · Explicación redactada por Gemini' : (datos.consulta_sql_realizada ? 'Datos consultados en SQL Server · Explicación redactada por Gemini' : 'Datos del servidor · Explicación redactada por Gemini');
+            }
+            return 'Saludo redactado por Gemini · Ayuda verificada en el servidor';
+        }
+        if (datos.origen === 'llm_externo') return 'Respuesta del proveedor ' + (datos.proveedor || 'externo');
+        if (datos.intencion === 'consulta_general') return 'Ayuda del asistente';
+        if (datos.status === 'requires_input') return 'Aclaración del asistente';
+        if (datos.status === 'error') return 'Consulta no completada';
+        return datos.datos_simulados ? 'Datos ficticios de prueba' : 'Respuesta del servidor';
+    }
+
+    function agregarMensajeChat(tipo, texto, origen, datos, presentacion) {
+        const conversacion = document.getElementById('conversacion-chat');
+        const mensaje = document.createElement('article');
+        mensaje.className = tipo === 'usuario' ? 'ml-2 sm:ml-8 rounded-xl bg-indigo-600 text-white p-4 shadow-sm' : 'mr-1 sm:mr-4 rounded-xl border border-slate-200 bg-slate-50 p-4';
+        const cuerpo = document.createElement('div'); cuerpo.className = 'text-sm whitespace-pre-wrap break-words'; renderizarTextoConFormatoSeguro(cuerpo, texto.replace(/(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?/g, '$1 $2').replace(/(\d{4})-(\d{2})-(\d{2})/g, '$3/$2/$1').replace(/^#{1,6}\s+/gm, '').replace(/^[-*]\s+/gm, '• '));
+        if (tipo === 'asistente' && datos) renderizarDatosChat(cuerpo, datos);
+        const etiqueta = document.createElement('p'); etiqueta.className = 'text-xs opacity-75 mt-2'; etiqueta.textContent = origen;
+        mensaje.appendChild(cuerpo); mensaje.appendChild(etiqueta);
+        if (presentacion?.causa_proveedor_visible) {
+            const causa=document.createElement('p'); causa.className='text-xs text-slate-600 mt-2'; causa.textContent=presentacion.causa_proveedor_visible; mensaje.appendChild(causa);
+        }
+        if (presentacion?.metodologia_visible) {
+            const detalle=document.createElement('details'); detalle.className='mt-3 text-sm text-slate-600';
+            const titulo=document.createElement('summary'); titulo.textContent='Fuente y metodología'; detalle.appendChild(titulo);
+            const contenido=document.createElement('p'); contenido.className='mt-2'; contenido.textContent=presentacion.metodologia_visible; detalle.appendChild(contenido); mensaje.appendChild(detalle);
+        }
+        conversacion.appendChild(mensaje);
+        while (conversacion.children.length > 20) conversacion.firstElementChild.remove();
+        mensaje.scrollIntoView({block:'nearest'});
+        return mensaje;
+    }
+
+    function renderizarDatosChat(contenedor, datos) {
+        const dias = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
+        const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+        if (Array.isArray(datos.horas_top)) {
+            datos.horas_top.forEach(fila => {
+                const linea = document.createElement('p'); linea.className = 'mt-2 rounded-lg bg-white p-2';
+                linea.textContent = (fila.hora_formato || String(fila.hora).padStart(2,'0') + ':00') + ': ' + fila.total_ingresos + ' ingresos';
+                contenedor.appendChild(linea);
+            });
+        }
+        for (const [clave, titulo] of Object.entries({mensual:'Visitas por mes', dias_semana:'Días de asistencia', horarios:'Horarios frecuentes', salas:'Salas más visitadas'})) {
+            if (!Array.isArray(datos[clave]) || !datos[clave].length) continue;
+            const bloque = document.createElement('section'); bloque.className = 'mt-3 border-t border-slate-200 pt-2';
+            const encabezado = document.createElement('strong'); encabezado.textContent = titulo; bloque.appendChild(encabezado);
+            datos[clave].forEach(fila => {
+                let etiqueta = String(fila.grupo);
+                if (clave === 'dias_semana') etiqueta = dias[Number(fila.grupo)] || 'Día no identificado';
+                if (clave === 'horarios') etiqueta = String(fila.grupo).padStart(2,'0') + ':00';
+                if (clave === 'mensual' && /^\d{4}-\d{2}$/.test(etiqueta)) etiqueta = meses[Number(etiqueta.slice(5))-1] + ' de ' + etiqueta.slice(0,4);
+                if (clave === 'salas' && typeof fila.grupo === 'number') etiqueta = 'Sala sin nombre disponible';
+                const linea = document.createElement('p'); linea.textContent = etiqueta + ': ' + fila.visitas + ' visitas'; bloque.appendChild(linea);
+            });
+            contenedor.appendChild(bloque);
         }
     }
 
@@ -625,7 +750,7 @@
                 metaOrigen.textContent = `LLM (${datos.proveedor || "externo"})`;
                 metaOrigen.className = "text-xs font-bold text-indigo-700 mt-0.5";
             } else {
-                metaOrigen.textContent = "Motor local / Reglas";
+                metaOrigen.textContent = etiquetaOrigenChat(datos);
                 metaOrigen.className = "text-xs font-bold text-slate-700 mt-0.5";
             }
         }
@@ -645,7 +770,7 @@
             // Intención no reconocida: solo mensaje de orientación, sin candidatos
         } else if (datos.requiere_aclaracion === true && Array.isArray(datos.opciones) && esListaDeCandidatosValida(datos.opciones)) {
             renderizarCandidatos(datos.opciones);
-        } else if (datos.requiere_parametros === true) {
+        } else if (datos.requiere_parametros === true && !datos.chat) {
             renderizarParametrosFaltantes(datos);
         } else if (datos.status === "success") {
             const datosPayload = datos.datos || {};
@@ -657,6 +782,8 @@
                 renderizarPrediccion(datosPayload);
             } else if (datos.intencion === "historial_persona" || datos.intencion === "ultimo_ingreso_persona") {
                 renderizarHistorialPersona(datosPayload);
+            } else if (datos.intencion === "conteo_ingresos_alumno") {
+                renderizarInformeAlumno(datosPayload);
             }
         }
     }
@@ -682,7 +809,7 @@
             badge.textContent = "SELECCIÓN REQUERIDA";
             badge.className = "text-[10px] font-bold uppercase bg-amber-100 text-amber-800 px-3 py-1 rounded-full border border-amber-300";
         } else if (datos.requiere_parametros === true) {
-            badge.textContent = "PARÁMETROS REQUERIDOS";
+            badge.textContent = "ACLARACIÓN NECESARIA";
             badge.className = "text-[10px] font-bold uppercase bg-sky-100 text-sky-800 px-3 py-1 rounded-full border border-sky-300";
         } else if (datos.status === "success") {
             badge.textContent = "CONSULTA COMPLETADA";
@@ -777,6 +904,64 @@
         });
 
         panel.classList.remove("hidden");
+    }
+
+    function mostrarReporteAgentes(datos) {
+        document.getElementById('reporte-auditado').classList.remove('hidden');
+        document.getElementById('zona-vacia').classList.add('hidden');
+        document.getElementById('zona-respuesta').classList.add('hidden');
+        const estados = {success: 'Preparado', requires_input: 'Aclaración necesaria', error: 'No preparado', procesando: 'Procesando'};
+        document.getElementById('reporte-estado').textContent = estados[datos.status] || 'No preparado';
+        document.getElementById('reporte-mensaje').textContent = datos.reporte ? 'Reporte preparado bajo demanda. No se ha enviado por correo.' : (datos.mensaje || 'No se pudo preparar el reporte.');
+        const ficha = document.getElementById('reporte-ficha');
+        const distribuciones = document.getElementById('reporte-distribuciones');
+        distribuciones.replaceChildren();
+        ficha.classList.add('hidden');
+        document.getElementById('reporte-auditoria-estado').textContent = 'Auditoría: ' + ({aprobado:'aprobado',rechazado:'rechazado',no_ejecutada:'no ejecutada'}[datos.auditoria] || 'no ejecutada');
+        const recorrido = document.getElementById('reporte-agentes');
+        recorrido.replaceChildren();
+        (datos.agentes || []).forEach(nombre => {
+            const item = document.createElement('li');
+            item.className = 'bg-white border border-sky-200 rounded-full px-3 py-1';
+            item.textContent = nombre;
+            recorrido.appendChild(item);
+        });
+        if (!datos.reporte) return;
+        const reporte = datos.reporte, contenido = reporte.datos || {};
+        ficha.classList.remove('hidden');
+        document.getElementById('reporte-total').textContent = contenido.total_ingresos ?? contenido.metricas?.total_ingresos ?? 'No aplica';
+        document.getElementById('reporte-sede').textContent = reporte.sede || 'No informada';
+        document.getElementById('reporte-periodo').textContent = `${reporte.periodo?.inicio || contenido.primer_ingreso || 'Inicio no informado'} — ${reporte.periodo?.fin || contenido.ultimo_ingreso || 'Fin no informado'}`;
+        document.getElementById('reporte-corte').textContent = reporte.corte || 'La herramienta no acredita un corte de captura completo';
+        document.getElementById('reporte-fuente').textContent = reporte.fuente || 'No informada';
+        document.getElementById('reporte-limites').textContent = reporte.limitaciones || '';
+        const grupos = {ingresos_por_sede:'Por sede', ingresos_por_tipo_persona:'Tipo de usuario', mensual:'Distribución mensual',dias_semana:'Días de semana (0=lunes)',horarios:'Horarios frecuentes',salas:'Salas (ID)'};
+        for (const [clave,titulo] of Object.entries(grupos)) {
+            const filas = contenido[clave]; if (!filas) continue;
+            const tarjeta = document.createElement('div'); tarjeta.className = 'bg-white rounded-lg border p-3';
+            const encabezado = document.createElement('h5'); encabezado.className = 'font-semibold mb-2'; encabezado.textContent = titulo;
+            tarjeta.appendChild(encabezado);
+            const lista = document.createElement('ul');
+            const pares = Array.isArray(filas) ? filas.map(f => [f.grupo ?? 'No registrado', f.visitas]) : Object.entries(filas);
+            pares.forEach(([clave,valor]) => {const item=document.createElement('li');item.textContent=`${clave}: ${valor}`;lista.appendChild(item);});
+            tarjeta.appendChild(lista); distribuciones.appendChild(tarjeta);
+        }
+    }
+
+    function renderizarInformeAlumno(datos) {
+        const destino = document.getElementById("texto-respuesta");
+        if (!destino) return;
+        const dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+        const titulos = {mensual: 'Distribución mensual', dias_semana: 'Días de la semana', horarios: 'Horarios frecuentes', salas: 'Salas más visitadas (ID)'};
+        for (const [clave, titulo] of Object.entries(titulos)) {
+            if (!Array.isArray(datos[clave])) continue;
+            const bloque = document.createElement('p');
+            bloque.textContent = titulo + ': ' + (datos[clave].map(fila => {
+                const etiqueta = clave === 'dias_semana' ? dias[Number(fila.grupo)] : (fila.grupo ?? 'sin sala registrada');
+                return `${etiqueta}: ${fila.visitas}`;
+            }).join('; ') || 'sin datos');
+            destino.appendChild(bloque);
+        }
     }
 
     function renderizarHorasAfluencia(datos) {
@@ -1094,6 +1279,14 @@
         const contenedor = document.getElementById("contenedor-historial-persona");
         contenedor.replaceChildren();
 
+        if (!datos.persona || !datos.persona.tipo_persona) {
+            panel.classList.remove('hidden');
+            const aviso = document.createElement('p');
+            aviso.className = 'rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm';
+            aviso.textContent = 'No se identificó una persona con los datos indicados. No se presenta una ficha ni un conteo individual.';
+            contenedor.appendChild(aviso);
+            return;
+        }
         const persona = datos.persona || {};
         const historial = datos.historial || {};
         const registros = historial.registros || (datos.ultimo_registro ? [datos.ultimo_registro] : []);
@@ -1131,7 +1324,7 @@
         tCod.textContent = "Código Enmascarado";
         const vCod = document.createElement("p");
         vCod.className = "text-sm font-mono font-bold text-slate-800 mt-0.5";
-        vCod.textContent = persona.codigo_mascarado || "Sin código";
+        vCod.textContent = persona.codigo_mascarado || "Matrícula no disponible en esta fuente";
         cCod.appendChild(tCod);
         cCod.appendChild(vCod);
 
