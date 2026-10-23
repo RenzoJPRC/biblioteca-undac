@@ -33,5 +33,6 @@ COPY . /app/
 # Exponer el puerto predeterminado
 EXPOSE 5000
 
-# Comando de arranque WSGI de producción
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "app:app"]
+# Un solo proceso evita duplicar imports científicos y modelos en el plan de 512 MB.
+# Cuatro hilos mantienen capacidad para solicitudes concurrentes de las terminales.
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--worker-class", "gthread", "--threads", "4", "app:app"]
