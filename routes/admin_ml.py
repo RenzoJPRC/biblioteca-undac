@@ -1,4 +1,6 @@
 import inspect
+import logging
+import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -14,10 +16,11 @@ from ml.services.analisis_individual import (
     obtener_analisis_descriptivo_ingresos,
     obtener_estado_cache_descriptivo,
     predecir_retorno_alumno,
-    PredictorRetornoAlumno
+    PredictorRetornoAlumno, enmascarar_codigo
 )
 from ml.services.retorno_h1_experimental import (
     predecir_candidato as predecir_retorno_experimental,
+    predecir_h1_actual, informacion_h1_actual,
     informacion_candidato as informacion_retorno_experimental,
     CandidatoNoDisponible,
     CoberturaNoConfirmada,
@@ -70,13 +73,7 @@ def vista_machine_learning():
         "mensaje_permiso": "El rol Consultor no tiene autorización para visualizar rankings individuales de alumnos." if rol == "Consultor" else None
     }
 
-    try:
-        predictor_retorno = PredictorRetornoAlumno.obtener_instancia()
-        metadatos_retorno = dict(predictor_retorno.metadatos)
-        metadatos_retorno["fecha_creacion_artefacto"] = predictor_retorno.fecha_creacion_artefacto if isinstance(predictor_retorno.fecha_creacion_artefacto, str) else None
-    except Exception as error:
-        print(f"Error cargando metadatos de retorno en vista ML: {error}")
-        metadatos_retorno = {}
+    h1_info = informacion_h1_actual()
 
     try:
         info_afluencia = obtener_informacion_modelo()
@@ -90,8 +87,7 @@ def vista_machine_learning():
         sede_asignada=sede_asignada,
         fecha_hoy=datetime.now(ZoneInfo("America/Lima")).date().isoformat(),
         analisis_descriptivo=analisis_descriptivo,
-        metadatos_retorno=metadatos_retorno,
-        candidato_retorno_info=informacion_retorno_experimental(),
+        retorno_h1_info=h1_info,
         info_afluencia=info_afluencia
     )
 
@@ -106,6 +102,15 @@ def api_analisis_individual():
     - Administrador / SuperAdmin: acceso completo.
     Soporta refresco manual mediante query param forzar=1.
     """
+    inicio = time.perf_counter()
+    def finalizar(respuesta):
+        from flask import make_response
+        respuesta = make_response(respuesta)
+        duracion = round((time.perf_counter() - inicio) * 1000, 2)
+        respuesta.headers['Server-Timing'] = f'individual;dur={duracion}'
+        logging.getLogger(__name__).info('ml_individual estado_http=%s duracion_ms=%.2f', respuesta.status_code, duracion)
+        return respuesta
+
     rol = session.get("admin_rol")
     sede_administrador = str(session.get("admin_sede", "")).strip()
     sede_solicitada = str(request.args.get("sede", "Central")).strip()
@@ -174,18 +179,14 @@ def api_analisis_individual():
             if clave not in respuesta:
                 respuesta[clave] = valor
 
-        return jsonify(respuesta)
+        return finalizar(jsonify(respuesta))
     except ValueError as error:
-        return respuesta_error(str(error), 400)
-    except ConnectionError as error:
-        print(f"Error de conexión en análisis individual ML: {error}")
-        return respuesta_error("No se pudo conectar con la base de datos.", 503)
-    except Exception as error:
-        print(f"Error inesperado en análisis individual ML: {error}")
-        return respuesta_error(
-            f"No fue posible obtener el análisis descriptivo individual: {error}",
-            500
-        )
+        return finalizar(respuesta_error(str(error), 400))
+    except ConnectionError:
+        return finalizar(respuesta_error("No se pudo conectar con la base de datos. Puede reintentar.", 503))
+    except Exception:
+        # No registrar parámetros, excepciones del driver ni respuestas personales.
+        return finalizar(respuesta_error("No fue posible cargar las estadísticas. Puede reintentar.", 503))
 
 
 @admin_ml_bp.route("/api/ml/informacion", methods=["GET"])
@@ -364,67 +365,39 @@ def api_predecir_afluencia():
 
 @admin_ml_bp.route("/api/ml/predecir-retorno", methods=["POST"])
 def api_predecir_retorno():
-    """
-    Predice la probabilidad de que un alumno retorne al siguiente día hábil operativo:
-    Recibe:
-    {
-        "codigo_matricula": "2020123456",
-        "fecha_referencia": "2026-07-31" (opcional)
-    }
-    """
+    """Único H1 del dashboard: referencia automática y sin fallback al modelo anterior."""
     rol = session.get("admin_rol")
-    if rol == "Consultor":
-        return respuesta_error(
-            "Acceso denegado. El rol Consultor no tiene autorización para consultas individuales por alumno.",
-            403
-        )
-
+    if rol not in {"SuperAdmin", "Administrador", "Supervisor"}:
+        return respuesta_error("No tiene autorización para consultas individuales.", 403)
+    if rol == "Supervisor" and session.get("admin_sede") != "Central":
+        return respuesta_error("El H1 disponible solo corresponde a Central.", 403)
     datos = request.get_json(silent=True)
-    if not isinstance(datos, dict) or not datos:
-        return respuesta_error("Debe enviar los datos en formato JSON.", 400)
-
-    modelo = datos.get("modelo", "actual")
-    if modelo not in ("actual", SELECTOR_RETORNO_EXPERIMENTAL):
-        return respuesta_error("Seleccione el modelo actual o el candidato experimental H1.", 400)
-    if modelo == SELECTOR_RETORNO_EXPERIMENTAL and rol == "Supervisor" and session.get("admin_sede") != "Central":
-        return respuesta_error("El candidato experimental H1 está limitado a la sede Central.", 403)
-
-    codigo_matricula = str(datos.get("codigo_matricula", "")).strip()
-    alumno_id = datos.get("alumno_id")
-    fecha_referencia = datos.get("fecha_referencia")
-    if isinstance(fecha_referencia, str):
-        fecha_referencia = fecha_referencia.strip() or None
-
-    if not codigo_matricula and not alumno_id:
-        return respuesta_error("Debe indicar el código de matrícula o el identificador del alumno.", 400)
-
+    if not isinstance(datos, dict):
+        return respuesta_error("Debe enviar el código en formato JSON.", 400)
+    if set(datos) - {"codigo_matricula"}:
+        return respuesta_error("El modelo y la referencia se determinan en el servidor; envíe solo el código.", 400)
+    codigo = str(datos.get("codigo_matricula") or "").strip()
+    if not codigo or len(codigo) > 50:
+        return respuesta_error("Indique un código de matrícula válido.", 400)
     try:
-        # La rama predeterminada conserva exactamente el servicio y su respuesta.
-        predictor = predecir_retorno_experimental if modelo == SELECTOR_RETORNO_EXPERIMENTAL else predecir_retorno_alumno
-        resultado = predictor(
-            codigo_matricula=codigo_matricula if codigo_matricula else None,
-            alumno_id=alumno_id if alumno_id else None,
-            fecha_referencia=fecha_referencia
-        )
-        return jsonify(resultado)
+        resultado = predecir_h1_actual(codigo_matricula=codigo)
     except CoberturaNoConfirmada as error:
-        return jsonify(error.respuesta), 400
-    except CandidatoNoDisponible as error:
-        return respuesta_error(str(error), 503)
-    except ValueError as error:
-        return respuesta_error(str(error), 400)
-    except ConnectionError as error:
-        if modelo == SELECTOR_RETORNO_EXPERIMENTAL:
-            print("Error de conexión en predicción experimental de retorno.")
-        else:
-            print(f"Error de conexión en predicción de retorno: {error}")
-        return respuesta_error("No se pudo conectar con la base de datos.", 503)
-    except Exception as error:
-        if modelo == SELECTOR_RETORNO_EXPERIMENTAL:
-            print("Error inesperado en predicción experimental de retorno.")
-        else:
-            print(f"Error inesperado en predicción de retorno: {error}")
-        return respuesta_error("No fue posible procesar la predicción de retorno.", 500)
+        resultado = {**error.respuesta, "status":"no_calculable", "probabilidad_h1":None}
+    except CandidatoNoDisponible:
+        resultado = {"status":"no_calculable", "probabilidad_h1":None,
+                     "mensaje":"No calculable: no se pudo verificar o cargar el artefacto H1 elegido."}
+    except ConnectionError:
+        resultado = {"status":"no_calculable", "probabilidad_h1":None,
+                     "mensaje":"No calculable: no se pudo leer el historial. Puede reintentar."}
+    except ValueError:
+        resultado = {"status":"no_calculable", "probabilidad_h1":None,
+                     "mensaje":"No calculable: el historial no cumple las reglas temporales o de cobertura."}
+    except Exception:
+        resultado = {"status":"no_calculable", "probabilidad_h1":None,
+                     "mensaje":"No calculable: no fue posible verificar el resultado H1. Puede reintentar."}
+    # Mismos límites de privacidad del dashboard: el Supervisor no recibe el código completo.
+    resultado["codigo_consultado"] = codigo if rol in {"Administrador", "SuperAdmin"} else enmascarar_codigo(codigo)
+    return jsonify(resultado)
 
 
 @admin_ml_bp.route("/api/ml/retorno-7-operativos", methods=["POST"])
@@ -454,18 +427,8 @@ def api_retorno_siete_operativos():
 
 @admin_ml_bp.route("/api/ml/retorno-informacion", methods=["GET"])
 def api_informacion_modelo_retorno():
-    """
-    Devuelve metadatos, métricas de validación cronológica y limitaciones del modelo de retorno.
-    """
-    try:
-        predictor = PredictorRetornoAlumno.obtener_instancia()
-        return jsonify({
-            "status": "success",
-            "metadatos": predictor.metadatos
-        })
-    except Exception as error:
-        print(f"Error obteniendo metadatos del modelo de retorno: {error}")
-        return respuesta_error("No se pudo obtener los metadatos del modelo de retorno.", 500)
+    """Metadatos reales del único artefacto H1 elegido, sin cargar el modelo antiguo."""
+    return jsonify({"status":"success", "metadatos":informacion_h1_actual()})
 
 
 ROLES_AUTORIZADOS_VISTA_PREVIA = {"SuperAdmin", "Administrador", "Supervisor"}

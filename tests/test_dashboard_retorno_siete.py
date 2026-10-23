@@ -162,14 +162,17 @@ class TestDashboardSieteOperativos(unittest.TestCase):
     real_loader=staticmethod(service._profile)
 
     def test_consulta_nueva_preserva_respuesta_modelo_actual(self):
-        original={'status':'success','probabilidad_retorno':.25,'campos_originales':[1,2]}
-        with patch.object(routes,'predecir_retorno_alumno',return_value=original), \
+        # El endpoint H7 aislado no altera el único H1 del dashboard.
+        original={'status':'no_calculable','probabilidad_h1':None,'mensaje':'Historial insuficiente'}
+        with patch.object(routes,'predecir_h1_actual',return_value=original), \
+             patch.object(routes,'predecir_retorno_alumno',side_effect=AssertionError('Sin fallback antiguo')), \
              patch('app.get_db_connection',return_value=None):
             def current():
                 return self.client.post('/admin/api/ml/predecir-retorno',json={'codigo_matricula':'CODIGO-PRUEBA'},headers={'X-CSRFToken':'csrf-prueba'}).get_json()
-            self.assertEqual(current(),original)
+            expected={**original,'codigo_consultado':'CODIGO-PRUEBA'}
+            self.assertEqual(current(),expected)
             self.assertEqual(self.post().get_json()['probabilidad'],.75)
-            self.assertEqual(current(),original)
+            self.assertEqual(current(),expected)
 
     def test_pantalla_y_javascript_sin_clasificacion_binaria(self):
         getter=MagicMock(); getter.metadatos={}
@@ -180,7 +183,8 @@ class TestDashboardSieteOperativos(unittest.TestCase):
         self.assertNotIn('form-retorno-siete',html)
         self.assertNotIn('consultarRetornoSiete',html)
         self.assertNotIn('/admin/api/ml/retorno-7-operativos',html)
-        self.assertIn('<option value="actual" selected>',html)
+        self.assertNotIn('id="retorno-modelo"',html)
+        self.assertIn('Calcular retorno',html)
         scripts='\n'.join(re.findall(r'<script\b[^>]*>(.*?)</script>',html,re.S))
         node=shutil.which('node'); self.assertIsNotNone(node)
         checked=subprocess.run([node,'--check'],input=scripts,text=True,capture_output=True)

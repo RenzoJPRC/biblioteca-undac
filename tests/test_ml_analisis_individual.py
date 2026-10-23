@@ -428,21 +428,17 @@ class TestAnalisisIndividualML(unittest.TestCase):
         self.assertEqual(data["total_visitas"], 18168)
 
     def test_18_endpoint_predecir_retorno(self):
-        """POST /admin/api/ml/predecir-retorno con sesión responde 200 OK."""
+        """HTTP 200 también comunica el estado esperado No calculable del único H1."""
         with self.client.session_transaction() as sesion:
-            sesion["admin_user"] = "admin_test"
-            sesion["admin_rol"] = "SuperAdmin"
-            sesion["csrf_token"] = "token_abc"
-
-        respuesta = self.client.post(
-            "/admin/api/ml/predecir-retorno",
-            json={"codigo_matricula": "2341304357"},
-            headers={"X-CSRFToken": "token_abc"}
-        )
-        self.assertEqual(respuesta.status_code, 200)
-        data = respuesta.get_json()
-        self.assertEqual(data["status"], "success")
-        self.assertIn("probabilidad_retorno", data)
+            sesion.update(admin_user='admin_test',admin_rol='SuperAdmin',csrf_token='token_abc')
+        expected={'status':'no_calculable','probabilidad_h1':None,'mensaje':'Historial insuficiente'}
+        with patch('routes.admin_ml.predecir_h1_actual',return_value=expected) as h1, \
+             patch('routes.admin_ml.predecir_retorno_alumno',side_effect=AssertionError('No usar modelo antiguo')):
+            respuesta=self.client.post('/admin/api/ml/predecir-retorno',
+                json={'codigo_matricula':'FICTICIO-TEST'},headers={'X-CSRFToken':'token_abc'})
+        self.assertEqual(respuesta.status_code,200)
+        self.assertEqual(respuesta.get_json(),{**expected,'codigo_consultado':'FICTICIO-TEST'})
+        h1.assert_called_once_with(codigo_matricula='FICTICIO-TEST')
 
     def test_19_consultor_bloqueado_en_prediccion(self):
         """El rol Consultor no debe tener acceso a la predicción individual de retorno."""

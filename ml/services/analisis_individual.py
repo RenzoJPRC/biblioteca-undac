@@ -195,6 +195,11 @@ def obtener_estado_cache_descriptivo(fecha_inicio=None, fecha_fin=None, sede="Ce
     }
 
 
+def _cantidad_grupo(fila):
+    """Peso del grupo SQL; acepta fixtures históricos de una visita sin peso."""
+    return int(fila[9]) if len(fila) > 9 else 1
+
+
 def obtener_analisis_descriptivo_ingresos(fecha_inicio=None, fecha_fin=None, sede="Central", forzar_refresco=False, mostrar_codigo_completo=False):
     """
     Genera el análisis descriptivo integral de ingresos reales por alumno:
@@ -234,30 +239,43 @@ def obtener_analisis_descriptivo_ingresos(fecha_inicio=None, fecha_fin=None, sed
 
     sql = f"""
         SELECT
-            R.RegistroID,
+            NULL AS RegistroID,
             R.AlumnoID,
             ISNULL(A.Escuela, 'Sin Escuela') AS Escuela,
             ISNULL(S.NombreSala, 'Sin Sala') AS NombreSala,
             ISNULL(S.Piso, R.Piso) AS Piso,
-            R.FechaHora,
+            MIN(R.FechaHora) AS FechaHora,
             DATEPART(HOUR, R.FechaHora) AS Hora,
             CONVERT(VARCHAR(7), R.FechaHora, 120) AS Mes,
-            ISNULL(A.CodigoMatricula, 'N/D') AS CodigoMatricula
+            ISNULL(A.CodigoMatricula, 'N/D') AS CodigoMatricula,
+            COUNT_BIG(*) AS CantidadIngresos
         FROM dbo.RegistroIngresos R
         INNER JOIN dbo.Alumnos A ON R.AlumnoID = A.AlumnoID
         LEFT JOIN dbo.Salas S ON R.SalaID = S.SalaID
         WHERE {where_sql}
-        ORDER BY R.FechaHora ASC
+        GROUP BY R.AlumnoID, ISNULL(A.Escuela, 'Sin Escuela'),
+            ISNULL(S.NombreSala, 'Sin Sala'), ISNULL(S.Piso, R.Piso),
+            CAST(R.FechaHora AS DATE), DATEPART(HOUR, R.FechaHora),
+            CONVERT(VARCHAR(7), R.FechaHora, 120), ISNULL(A.CodigoMatricula, 'N/D'),
+            CASE WHEN CAST(R.FechaHora AS TIME) BETWEEN CAST('08:00:00' AS TIME)
+                 AND CAST('20:45:00.000' AS TIME) THEN 1 ELSE 0 END
+        ORDER BY MIN(R.FechaHora) ASC
     """
 
-    with get_db_cursor(autocommit=True) as (_, cursor):
+    consulta_inicio = time.perf_counter()
+    with get_db_cursor(autocommit=True) as (conexion, cursor):
         if cursor is None:
             raise ConnectionError("No fue posible conectarse a SQL Server.")
+        if conexion is not None and hasattr(conexion, "timeout"):
+            conexion.timeout = 25  # Timeout de consulta ODBC, no del cursor.
         cursor.execute(sql, tuple(params))
         filas = cursor.fetchall()
 
+    duracion_sql_ms = round((time.perf_counter() - consulta_inicio) * 1000, 2)
+
     ultima_fecha = max((r[5].date() for r in filas), default=None)
     metadatos = {
+        "rendimiento": {"consulta_ms": duracion_sql_ms, "grupos_transferidos": len(filas)},
         "sede": sede,
         "tipo_analisis": "estadisticas_descriptivas",
         "actualizado_en": _ahora_descriptivo().isoformat(timespec="seconds"),
@@ -297,14 +315,14 @@ def obtener_analisis_descriptivo_ingresos(fecha_inicio=None, fecha_fin=None, sed
         }
         return copy.deepcopy(res_vacio)
 
-    total_visitas = len(filas)
+    total_visitas = sum(_cantidad_grupo(r) for r in filas)
 
     # 1. Visitas por Mes
     conteo_mes = {}
     alumnos_mes = {}
     for r in filas:
         mes = r[7]
-        conteo_mes[mes] = conteo_mes.get(mes, 0) + 1
+        conteo_mes[mes] = conteo_mes.get(mes, 0) + _cantidad_grupo(r)
         if mes not in alumnos_mes:
             alumnos_mes[mes] = set()
         alumnos_mes[mes].add(r[1])
@@ -324,7 +342,7 @@ def obtener_analisis_descriptivo_ingresos(fecha_inicio=None, fecha_fin=None, sed
     alumnos_escuela = {}
     for r in filas:
         esc = r[2]
-        conteo_escuela[esc] = conteo_escuela.get(esc, 0) + 1
+        conteo_escuela[esc] = conteo_escuela.get(esc, 0) + _cantidad_grupo(r)
         if esc not in alumnos_escuela:
             alumnos_escuela[esc] = set()
         alumnos_escuela[esc].add(r[1])
@@ -350,13 +368,13 @@ def obtener_analisis_descriptivo_ingresos(fecha_inicio=None, fecha_fin=None, sed
     alumnos_piso = {}
     for r in filas:
         clave_sala = (r[3], r[4])
-        conteo_sala[clave_sala] = conteo_sala.get(clave_sala, 0) + 1
+        conteo_sala[clave_sala] = conteo_sala.get(clave_sala, 0) + _cantidad_grupo(r)
         if clave_sala not in alumnos_sala:
             alumnos_sala[clave_sala] = set()
         alumnos_sala[clave_sala].add(r[1])
 
         piso = r[4]
-        conteo_piso[piso] = conteo_piso.get(piso, 0) + 1
+        conteo_piso[piso] = conteo_piso.get(piso, 0) + _cantidad_grupo(r)
         if piso not in alumnos_piso:
             alumnos_piso[piso] = set()
         alumnos_piso[piso].add(r[1])
@@ -404,9 +422,9 @@ def obtener_analisis_descriptivo_ingresos(fecha_inicio=None, fecha_fin=None, sed
         # Comparar la hora completa, incluidos segundos y fracciones, sin eliminar visitas.
         hora_real = r[5].time()
         if datetime.min.replace(hour=8).time() <= hora_real <= datetime.min.replace(hour=20, minute=45).time():
-            conteo_hora[h] = conteo_hora.get(h, 0) + 1
+            conteo_hora[h] = conteo_hora.get(h, 0) + _cantidad_grupo(r)
         else:
-            conteo_hora_atipica[h] = conteo_hora_atipica.get(h, 0) + 1
+            conteo_hora_atipica[h] = conteo_hora_atipica.get(h, 0) + _cantidad_grupo(r)
 
     visitas_por_hora = [
         {
@@ -440,7 +458,7 @@ def obtener_analisis_descriptivo_ingresos(fecha_inicio=None, fecha_fin=None, sed
     for r in filas:
         al_id = r[1]
         f_dia = r[5].date()
-        alumno_visitas[al_id] = alumno_visitas.get(al_id, 0) + 1
+        alumno_visitas[al_id] = alumno_visitas.get(al_id, 0) + _cantidad_grupo(r)
         if al_id not in alumno_dias:
             alumno_dias[al_id] = set()
         alumno_dias[al_id].add(f_dia)
@@ -728,7 +746,7 @@ class PredictorRetornoAlumno:
                         f"Faltan {dias_faltantes} día(s) intermedio(s) sin cobertura confirmada."
                     ),
                     "explicacion": (
-                        f"La base de datos cuenta con registros confirmados únicamente hasta el {ultima_fecha_bd.strftime('%d/%m/%Y')}. "
+                        f"La base de datos cuenta con registros observados únicamente hasta el {ultima_fecha_bd.strftime('%d/%m/%Y')}. "
                         "No se puede calcular una predicción para una fecha posterior porque faltan registros de ingresos intermedios."
                     ),
                     "desfase_temporal": {

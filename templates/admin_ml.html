@@ -532,6 +532,7 @@
             </div>
         </div>
 
+        <p id="error-individual" role="alert" class="hidden text-sm text-red-700">No se pudo cargar. Use Actualizar análisis individual para reintentar.</p>
         <!-- Indicador de Carga Inicial / Spinner -->
         <div id="cargando-individual" class="hidden min-h-[140px] flex flex-col justify-center items-center text-center p-6 bg-slate-50 border border-slate-200 rounded-xl">
             <i class="ph ph-spinner animate-spin text-3xl text-emerald-600 mb-2"></i>
@@ -839,95 +840,48 @@
     <!-- ================================================================= -->
     <!-- SECCIÓN 3: PREDICCIÓN DE RETORNO DE ALUMNOS (EXPERIMENTAL)        -->
     <!-- ================================================================= -->
-    <div id="seccion-retorno" class="seccion-contenido hidden space-y-6">
-
-        <!-- Banner Experimental y Definición Operativa en Lenguaje Sencillo -->
-        <section class="bg-white border border-slate-200 rounded-xl p-5">
-            <div class="flex items-start gap-4">
-                <div class="bg-indigo-600 text-white p-3 rounded-xl shrink-0">
-                    <i class="ph ph-test-tube text-2xl"></i>
+    <div id="seccion-retorno" class="seccion-contenido hidden space-y-5">
+        {% set h1 = retorno_h1_info|default({}) %}
+        <section class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+            <header class="p-5 sm:p-6 border-b border-slate-100">
+                <div class="flex flex-wrap items-center gap-2">
+                    <h3 class="font-bold text-slate-800 text-lg">Retorno · Próximo día operativo (H1)</h3>
+                    <span class="text-[10px] text-slate-600 bg-slate-100 rounded-full px-2.5 py-1">Experimental · pendiente de validación prospectiva</span>
                 </div>
-                <div>
-                    <div class="flex flex-wrap items-center gap-2">
-                        <h3 class="font-bold text-slate-800 text-base">
-                            Predicción de retorno individual
-                        </h3>
-                        <span class="text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200">
-                            H1 · Un día operativo
-                        </span>
+                <p class="text-sm text-slate-600 mt-2">Probabilidad estimada de al menos un ingreso en Central el siguiente día operativo. No indica una certeza ni cuántos días faltan para regresar.</p>
+                <p class="text-xs text-slate-500 mt-2">La referencia se obtiene automáticamente de la última jornada completa con captura confirmada. El modelo usa sus ventanas previas de 7, 14 y 30 días; sin cobertura o historial suficiente no calcula.</p>
+            </header>
+            <div class="p-5 sm:p-6">
+                <form id="form-predecir-retorno" class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-end">
+                    <div class="flex-1 min-w-0">
+                        <label for="retorno-codigo" class="block text-xs font-bold text-slate-600 mb-2">Código de matrícula</label>
+                        <input type="text" id="retorno-codigo" maxlength="50" autocomplete="off" required placeholder="Ingresa el código de matrícula"
+                            aria-describedby="retorno-privacidad" class="w-full min-w-0 border border-slate-300 rounded-xl px-3 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
                     </div>
-
-                    <p class="text-xs text-slate-600 mt-1.5 leading-relaxed">
-                        <strong>¿Qué predice este modelo?</strong> Estima la probabilidad referencial de que un alumno frecuente vuelva a estudiar en la biblioteca en su <strong>siguiente día hábil de atención</strong> (horizonte de un día operativo). Su propósito es orientar la estimación de concurrencia y no sustituir el criterio del personal bibliotecario.
-                    </p>
-
-                    <div class="mt-2.5 pt-2 border-t border-slate-100 text-[11px] text-slate-500 space-y-1">
-                        <p><strong>¿Qué significa "Siguiente día hábil de atención"?</strong></p>
-                        <ul class="list-disc list-inside space-y-0.5 text-slate-600 ml-1">
-                            <li>De lunes a jueves, evalúa el día calendario siguiente.</li>
-                            <li>Si se consulta en viernes, evalúa automáticamente el <strong>lunes siguiente</strong> (la biblioteca atiende de lunes a viernes).</li>
-                            <li>Si el día siguiente es feriado o periodo vacacional, el modelo salta hasta el <strong>primer día en que la biblioteca reabre sus puertas</strong>.</li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- Herramienta Interactiva de Consulta de Retorno de Alumno -->
-        <section class="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
-            <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2 mb-2">
-                <i class="ph ph-magnifying-glass text-indigo-500 text-lg"></i>
-                Consulta Interactiva de Retorno por Alumno
-            </h3>
-            <p class="text-xs text-slate-500 mb-4">
-                Ingrese el código de matrícula para evaluar la probabilidad inferencial de retorno. La consulta aplica validación cronológica y jamás expone ni utiliza el DNI.
-            </p>
-
-            <p id="retorno-base-metadatos" class="mb-4 text-xs text-slate-500">Modelo base · HistGradientBoostingClassifier · Creado: {{ metadatos_retorno.get('fecha_creacion_artefacto') or 'No documentado' }} · Periodo de datos: {{ metadatos_retorno.get('periodo_disponible', {}).get('fecha_inicio', 'No documentado') }} a {{ metadatos_retorno.get('periodo_disponible', {}).get('fecha_fin', 'No documentado') }}. Ambos selectores estiman un solo día operativo.</p>
-            {% set candidato_info = candidato_retorno_info|default({}) %}
-            <form id="form-predecir-retorno" class="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
-                <div>
-                    <label for="retorno-modelo" class="block text-xs font-bold text-slate-500 uppercase mb-2">Modelo para esta consulta</label>
-                    <select id="retorno-modelo" onchange="cambiarModeloRetorno()"
-                        class="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm">
-                        <option value="actual" selected>HistGradientBoostingClassifier · Próximo día</option>
-                        <option value="experimental_h1_ventanas" {% if not candidato_info.get('disponible') %}disabled{% endif %}>HistGradientBoostingClassifier · Próximos</option>
-                    </select>
-                    <p id="retorno-aviso-experimental" class="text-[10px] text-slate-500 mt-1 {% if not candidato_info.get('disponible') %}hidden{% endif %}">Experimental · pendiente de validación prospectiva</p>
-                </div>
-                <div>
-                    <label for="retorno-codigo" class="block text-xs font-bold text-slate-500 uppercase mb-2">
-                        Código de Matrícula
-                    </label>
-                    <input type="text" id="retorno-codigo" placeholder="Ej: 2341304357" required
-                        class="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
-                </div>
-
-                <div>
-                    <label for="retorno-fecha-ref" class="block text-xs font-bold text-slate-500 uppercase mb-2">
-                        Fecha de Referencia (Opcional)
-                    </label>
-                    <input type="date" id="retorno-fecha-ref"
-                        class="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
-                    <p id="retorno-ayuda-fecha" class="text-[10px] text-slate-400 mt-1">Por defecto: última fecha registrada en base de datos.</p>
-                </div>
-
-                <div>
-                    <button type="submit" id="btn-evaluar-retorno"
-                        class="w-full flex justify-center items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded-lg transition-colors">
-                        <i class="ph ph-sparkle text-lg"></i>
-                        <span>Evaluar Retorno</span>
+                    <button type="submit" id="btn-evaluar-retorno" class="shrink-0 inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-indigo-600 text-white font-bold text-sm hover:bg-indigo-700 disabled:opacity-50">
+                        <i class="ph ph-sparkle" aria-hidden="true"></i><span>Calcular retorno</span>
                     </button>
+                </form>
+                <p id="retorno-privacidad" class="text-xs text-slate-500 mt-2">Consulta confidencial en el servidor. El código se enmascara para los roles que no tienen permiso para verlo completo.</p>
+                <div id="resultado-retorno-box" class="hidden mt-5 border border-slate-200 rounded-xl bg-slate-50 p-4 sm:p-5" role="status" aria-live="polite" aria-atomic="true" aria-busy="false">
+                    <div id="retorno-contenido" class="min-w-0 break-words"></div>
                 </div>
-            </form>
-
-            <!-- Resultado de la consulta interactiva de retorno -->
-            <div id="resultado-retorno-box" class="hidden mt-5 p-4 rounded-xl border transition-all">
-                <div id="retorno-contenido"></div>
+                <details id="retorno-detalles-tecnicos" class="mt-5 text-xs text-slate-600 border-t border-slate-100 pt-4">
+                    <summary class="cursor-pointer font-semibold focus:outline-indigo-600">Modelo y corte real de entrenamiento</summary>
+                    <dl class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                        <div><dt>Algoritmo</dt><dd>{{ h1.get('algoritmo') or 'No disponible' }}</dd></div>
+                        <div><dt>Versión</dt><dd class="break-all">{{ h1.get('version') or 'No disponible' }}</dd></div>
+                        <div><dt>Fecha de entrenamiento declarada</dt><dd>{{ h1.get('fecha_entrenamiento') or 'No disponible' }}</dd></div>
+                        <div><dt>Corte de datos del ajuste</dt><dd>{{ h1.get('corte_entrenamiento') or 'No disponible' }}</dd></div>
+                        <div><dt>Última referencia utilizada al entrenar</dt><dd>{{ h1.get('ultima_referencia_entrenamiento') or 'No disponible' }}</dd></div>
+                        <div><dt>Último objetivo utilizado al entrenar</dt><dd>{{ h1.get('ultimo_objetivo_entrenamiento') or 'No disponible' }}</dd></div>
+                        <div class="sm:col-span-2"><dt>SHA-256 del artefacto</dt><dd class="font-mono break-all">{{ h1.get('artefacto_sha256') or 'No verificable' }}</dd></div>
+                    </dl>
+                    <p class="mt-3">Estos datos describen el ajuste guardado, no se actualizan al consultar. La consulta interactiva no registra ni sustituye predicciones prospectivas.</p>
+                </details>
+                {% if not h1.get('disponible') %}<p class="mt-3 text-sm text-slate-700" role="alert">No calculable: el artefacto H1 elegido no pudo verificarse o cargarse. No se utilizará otro modelo.</p>{% endif %}
             </div>
         </section>
-
-
     </div>
 
 </div>
@@ -988,6 +942,13 @@
 
     async function cargarAnalisisIndividual(forzar = false) {
         const btn = document.getElementById("btn-actualizar-individual");
+        if (btn?.disabled) return;
+        const aviso = document.getElementById("error-individual");
+        if (aviso) aviso.classList.add("hidden");
+        const badge = document.getElementById("badge-estado-individual-cache");
+        if (badge) badge.textContent = "Cargando estadísticas…";
+        const controlador = new AbortController();
+        const temporizador = setTimeout(() => controlador.abort(), 30000);
         const icono = document.getElementById("icono-refresco-individual");
         const loader = document.getElementById("cargando-individual");
         const elSede = document.getElementById("sede");
@@ -1004,7 +965,7 @@
 
         try {
             const url = `/admin/api/ml/analisis-individual?sede=${encodeURIComponent(sede)}${forzar ? "&forzar=1" : ""}`;
-            const respuesta = await fetch(url);
+            const respuesta = await fetch(url, { signal: controlador.signal });
             const datos = await respuesta.json();
 
             if (!respuesta.ok || datos.status !== "success") {
@@ -1047,11 +1008,14 @@
                 mostrarNotificacion("Análisis descriptivo individual actualizado con éxito.", "success");
             }
         } catch (error) {
-            console.error("Error al cargar análisis individual:", error);
+            const mensaje = error.name === "AbortError" ? "La consulta superó 30 segundos. Puede reintentar." : "No se pudieron cargar las estadísticas. Puede reintentar con Actualizar análisis individual.";
+            if (aviso) { aviso.textContent = mensaje; aviso.classList.remove("hidden"); }
+            if (badge) badge.textContent = "Carga incompleta · reintentar";
             if (typeof mostrarNotificacion === "function") {
-                mostrarNotificacion(error.message, "error");
+                mostrarNotificacion(mensaje, "error");
             }
         } finally {
+            clearTimeout(temporizador);
             if (btn) {
                 btn.disabled = false;
                 btn.classList.remove("opacity-50");
@@ -1828,235 +1792,65 @@
         });
     }
 
-    function cambiarModeloRetorno() {
-        const experimental = document.getElementById("retorno-modelo")?.value === "experimental_h1_ventanas";
-        document.getElementById("resultado-retorno-box")?.classList.add("hidden");
-        const ayuda = document.getElementById("retorno-ayuda-fecha");
-        if (ayuda) ayuda.textContent = experimental
-            ? "Por defecto: corte confirmado del candidato. Las ventanas excluyen la referencia; si falta cobertura, no se calcula."
-            : "Por defecto: última fecha registrada en base de datos.";
-    }
-
-    function mostrarRetornoExperimental(datos, box, cont) {
-        const calculable = datos.status === "success" && Number.isFinite(datos.probabilidad_h1) && datos.probabilidad_h1 >= 0 && datos.probabilidad_h1 <= 1;
-        const diagnostico = datos.diagnostico;
-        const motivos = {historial_reciente_insuficiente: "Historial reciente insuficiente", cobertura_desconocida: "Cobertura diaria desconocida", posterior_al_corte: "Cobertura posterior al corte confirmado"};
-        box.className = "mt-5 p-5 rounded-xl border border-slate-200 bg-white shadow-sm text-slate-800";
-        const detalle = diagnostico ? `<div class="mt-3 text-xs text-slate-600 space-y-1">
-            <p>${escaparHTML(motivos[diagnostico.motivo] || "Historial o cobertura insuficiente")}</p>
-            <p>Días activos válidos: ${[7,14,30].map(w => `${w} días: ${escaparHTML(diagnostico.dias_activos_validos?.[String(w)] ?? "no calculable sin cobertura")}`).join("; ")}.</p>
-            ${diagnostico.fechas_cobertura_faltante?.length ? `<p>Fechas sin cobertura confirmada: ${escaparHTML(diagnostico.fechas_cobertura_faltante.join(", "))}.</p>` : ""}
-        </div>` : "";
+    function mostrarRetornoH1(datos) {
+        const cont = document.getElementById("retorno-contenido");
+        const box = document.getElementById("resultado-retorno-box");
+        box.classList.remove("hidden");
+        const prob = datos.probabilidad_h1;
+        const calculable = datos.status === "success" && typeof prob === "number" && Number.isFinite(prob) && prob >= 0 && prob <= 1;
+        const fecha = valor => valor ? escaparHTML(String(valor).split("-").reverse().join("/")) : "No disponible";
+        const porcentaje = calculable ? (prob * 100).toFixed(1) : null;
         cont.innerHTML = `
-            <div class="flex flex-wrap items-center gap-2"><h4 class="text-sm font-bold">H1 · Candidato de retorno</h4>
-                <span class="text-[10px] text-slate-600 bg-slate-100 rounded px-2 py-1">Experimental · pendiente de validación prospectiva</span></div>
-            ${calculable ? `<p class="text-5xl font-black tracking-tight text-indigo-700 my-4">${escaparHTML(datos.probabilidad_porcentaje || (datos.probabilidad_h1 * 100).toFixed(1) + "%")}</p>
-                <p class="text-sm">Probabilidad de al menos un ingreso en el siguiente día operativo.</p>`
-                : `<h5 class="text-xl font-bold mt-3">No calculable</h5><p class="mt-2 text-sm text-slate-700">${escaparHTML(datos.mensaje || "No hay historial o cobertura suficiente para estimar la probabilidad.")}</p>`}
-            <dl class="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-xs text-slate-600">
-                <div><dt>Referencia</dt><dd class="font-semibold">${escaparHTML(datos.fecha_referencia || "No disponible")}</dd></div>
-                <div><dt>Fecha objetivo</dt><dd class="font-semibold">${escaparHTML(datos.fecha_objetivo || "No disponible")}</dd></div>
-                <div><dt>Horizonte</dt><dd class="font-semibold">Un día operativo (H1)</dd></div>
-                <div><dt>Último día utilizado en variables</dt><dd class="font-semibold">${escaparHTML(datos.corte_variables || "No disponible")}</dd></div>
-            </dl>${detalle}
-            ${datos.consulta_retrospectiva_con_modelo_reajustado ? '<p class="mt-3 text-xs text-slate-500">Consulta retrospectiva; no es una prueba independiente.</p>' : ''}`;
+            <p class="text-xs text-slate-500">Código consultado: <strong class="text-slate-700">${escaparHTML(datos.codigo_consultado || "No disponible")}</strong></p>
+            ${calculable ? `<p class="mt-3 text-5xl sm:text-6xl font-black text-indigo-700 tracking-tight">${porcentaje}<span class="text-2xl">%</span></p>
+                <p class="mt-2 text-sm text-slate-700">Probabilidad estimada de al menos un ingreso el <strong>${fecha(datos.fecha_objetivo)}</strong>.</p>
+                <div role="progressbar" aria-label="Probabilidad estimada de retorno" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${porcentaje}" aria-valuetext="${porcentaje}%" class="h-2.5 rounded-full bg-slate-200 mt-4 overflow-hidden"><div class="h-full bg-indigo-600 rounded-full" style="width:${porcentaje}%"></div></div>
+                <p class="text-xs text-slate-500 mt-2">Es una estimación, no una garantía de asistencia.</p>`
+                : `<h4 class="text-xl font-bold text-slate-800 mt-3">No calculable</h4><p class="text-sm text-slate-600 mt-2">${escaparHTML(datos.mensaje || "No se pudo verificar una probabilidad con el historial y la cobertura disponibles.")}</p>`}
+            <dl class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-5 text-xs text-slate-600">
+                <div><dt>Referencia del historial</dt><dd class="font-semibold">${fecha(datos.fecha_referencia)}</dd></div>
+                <div><dt>Siguiente día operativo objetivo</dt><dd class="font-semibold">${fecha(datos.fecha_objetivo)}</dd></div>
+                <div><dt>Último día usado en variables</dt><dd class="font-semibold">${fecha(datos.corte_variables)}</dd></div>
+            </dl>
+            ${datos.diagnostico ? `<div class="text-xs text-slate-600 mt-4 space-y-1"><p>Días activos válidos en ventanas de 7 / 14 / 30 días: ${[7,14,30].map(w => escaparHTML(datos.diagnostico.dias_activos_validos?.[String(w)] ?? "sin cobertura")).join(" / ")}.</p>
+                ${datos.diagnostico.fechas_cobertura_faltante?.length ? `<p>Fechas sin cobertura confirmada: ${datos.diagnostico.fechas_cobertura_faltante.map(fecha).join(", ")}.</p>` : ""}
+                ${datos.detalle_historial ? `<p>${escaparHTML(datos.detalle_historial.criterio)} Mínimo: ${escaparHTML(datos.detalle_historial.minimo_dias_activos_30)} días activos.</p>` : ""}</div>` : ""}`;
     }
 
-    // Predicción interactiva de retorno
     async function ejecutarPrediccionRetorno(evento) {
         evento.preventDefault();
         const boton = document.getElementById("btn-evaluar-retorno");
+        if (boton.disabled) return;
         const codigo = document.getElementById("retorno-codigo").value.trim();
-        const inputFecha = document.getElementById("retorno-fecha-ref");
-        const fechaRaw = inputFecha ? inputFecha.value.trim() : "";
-        let fechaRef = fechaRaw || null;
-        const modeloSolicitado = document.getElementById("retorno-modelo")?.value || "actual";
-
-        if (fechaRef) {
-            const matchDdmmyyyy = fechaRef.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-            if (matchDdmmyyyy) {
-                const dia = matchDdmmyyyy[1].padStart(2, "0");
-                const mes = matchDdmmyyyy[2].padStart(2, "0");
-                const anio = matchDdmmyyyy[3];
-                fechaRef = `${anio}-${mes}-${dia}`;
-            }
-        }
-
+        if (!codigo) return;
         const box = document.getElementById("resultado-retorno-box");
         const cont = document.getElementById("retorno-contenido");
-        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || "";
-
-        if (!codigo) return;
-
+        const controlador = new AbortController();
+        const temporizador = setTimeout(() => controlador.abort(), 30000);
         boton.disabled = true;
-        boton.innerHTML = `<i class="ph ph-spinner animate-spin text-lg"></i><span>Evaluando...</span>`;
-
+        boton.innerHTML = '<i class="ph ph-spinner animate-spin" aria-hidden="true"></i><span>Calculando…</span>';
+        box.classList.remove("hidden");
+        box.setAttribute("aria-busy", "true");
+        cont.textContent = "Verificando cobertura e historial para calcular H1…";
         try {
+            const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute("content") || "";
             const respuesta = await fetch("/admin/api/ml/predecir-retorno", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "X-CSRFToken": csrfToken
-                },
-                body: JSON.stringify({
-                    codigo_matricula: codigo,
-                    fecha_referencia: fechaRef,
-                    modelo: modeloSolicitado
-                })
+                method:"POST", headers:{"Content-Type":"application/json", "X-CSRFToken":csrf},
+                signal:controlador.signal, body:JSON.stringify({codigo_matricula:codigo})
             });
-
             const datos = await respuesta.json();
-
-            if ((document.getElementById("retorno-modelo")?.value || "actual") !== modeloSolicitado) {
-                return; // No mostrar una respuesta pendiente de otro selector.
-            }
-
-            box.classList.remove("hidden");
-
-            if (datos.modelo_selector === "experimental_h1_ventanas") {
-                mostrarRetornoExperimental(datos, box, cont);
-                return;
-            }
-
-            if (!respuesta.ok || datos.status === "error") {
-                box.className = "mt-5 p-4 rounded-xl border border-rose-200 bg-rose-50 text-rose-800 text-xs";
-                cont.innerHTML = `<strong>No calculable:</strong> ${escaparHTML(datos.mensaje || "No fue posible evaluar al alumno.")}`;
-                return;
-            }
-
-            if (datos.status === "no_calculable" || (datos.status === "success" && !Number.isFinite(datos.probabilidad_retorno)) || (datos.ultima_fecha_bd && datos.fecha_referencia && datos.fecha_referencia > datos.ultima_fecha_bd)) {
-                box.className = "mt-5 p-5 rounded-xl border border-slate-200 bg-white shadow-sm text-slate-800 text-xs";
-                cont.innerHTML = `
-                    <div class="flex flex-wrap items-center gap-2">
-                        <h4 class="text-sm font-bold">H1 · Resultado del modelo</h4>
-                        <span class="text-[10px] text-slate-600 bg-slate-100 rounded px-2 py-1">Sin estimación numérica</span>
-                    </div>
-                    <h5 class="text-xl font-bold mt-3">No calculable</h5>
-                    <p class="mt-2 text-sm text-slate-700">${escaparHTML(datos.mensaje || datos.explicacion || "La fecha de referencia es posterior al último registro en la base de datos. Faltan fechas intermedias con cobertura confirmada.")}</p>
-                    <dl class="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-xs text-slate-600">
-                        <div><dt>Referencia consultada</dt><dd class="font-semibold">${escaparHTML(datos.fecha_referencia || "No disponible")}</dd></div>
-                        <div><dt>Últimos datos en BD</dt><dd class="font-semibold">${escaparHTML(datos.ultima_fecha_bd || "No disponible")}</dd></div>
-                        <div><dt>Motivo</dt><dd class="font-semibold">Cobertura intermedia no confirmada</dd></div>
-                    </dl>
-                `;
-                return;
-            }
-
-            if (datos.status === "sin_datos_en_bd") {
-                box.className = "mt-5 p-5 rounded-xl border border-slate-200 bg-white text-slate-800 text-xs";
-                cont.innerHTML = `
-                    <div class="flex items-start gap-3">
-                        <i class="ph ph-warning-circle text-slate-500 text-xl shrink-0 mt-0.5"></i>
-                        <div>
-                            <h4 class="font-bold text-slate-900 text-sm">No calculable · Sin registros disponibles</h4>
-                            <p class="mt-1 text-slate-700 leading-relaxed">${escaparHTML(datos.mensaje || "No se encontraron ingresos en la base de datos para determinar la fecha por defecto.")}</p>
-                            <p class="mt-1.5 text-[11px] text-slate-500">Seleccione manualmente una fecha de referencia en el formulario para efectuar una consulta retrospectiva.</p>
-                        </div>
-                    </div>
-                `;
-                return;
-            }
-
-            if (datos.status === "historial_insuficiente") {
-                box.className = "mt-5 p-5 rounded-xl border border-slate-200 bg-white text-slate-800 text-xs";
-                cont.innerHTML = `
-                    <div class="flex items-start gap-3">
-                        <i class="ph ph-warning-circle text-slate-500 text-xl shrink-0 mt-0.5"></i>
-                        <div>
-                            <h4 class="font-bold text-slate-900 text-sm">No calculable · Historial insuficiente</h4>
-                            <p class="mt-1">${escaparHTML(datos.explicacion)}</p>
-                            <div class="mt-2 text-[11px] text-slate-600 flex gap-4">
-                                <span>Código: <strong>${escaparHTML(datos.codigo_mascarado || "N/D")}</strong></span>
-                                <span>Días activos previos: <strong>${datos.dias_activos_historicos || 0} día(s)</strong></span>
-                                <span>Visitas totales: <strong>${datos.total_visitas_historicas || 0}</strong></span>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            } else if (datos.status === "success") {
-                const m = datos.metricas_historial || {};
-                const desfase = datos.desfase_temporal || {};
-                const esDesfaseSevero = desfase.desfase_severo || (desfase.dias_desfase_corte > 60) || (!datos.vigente);
-                const fechaConsultada = datos.fecha_referencia || "Fecha no especificada";
-                const ultimaFechaBD = datos.ultima_fecha_bd || "Sin datos en BD";
-                const fechaEntrenamiento = datos.fecha_entrenamiento_artefacto || "2026-07-31";
-                const proximoDia = datos.proximo_dia_operativo || "";
-                const esOrigenBD = datos.origen_fecha_referencia === "predeterminada_ultima_bd";
-                const esExperimental = Boolean(datos.es_experimental);
-
-                if (esDesfaseSevero) {
-                    box.className = "mt-5 p-5 rounded-xl border border-slate-200 bg-white text-slate-800 text-xs";
-                    cont.innerHTML = `
-                        <div class="flex items-start gap-3">
-                            <i class="ph ph-warning-diamond text-slate-500 text-2xl shrink-0 mt-0.5"></i>
-                            <div class="flex-1 space-y-2">
-                                <div class="flex flex-wrap items-center justify-between gap-2">
-                                    <h4 class="font-bold text-slate-900 text-sm flex items-center gap-2">
-                                        <span>No calculable · Fecha sin representatividad</span>
-                                    </h4>
-                                    <span class="text-[10px] font-bold uppercase bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded border border-slate-200">
-                                        No Vigente (&gt;60 días de desfase)
-                                    </span>
-                                </div>
-                                <p class="text-slate-700 leading-relaxed">
-                                    La base de datos contiene registros únicamente hasta el <strong>${escaparHTML(ultimaFechaBD)}</strong>.
-                                    Para la fecha consultada (<strong>${escaparHTML(fechaConsultada)}</strong>) existe un desfase temporal de <strong>${desfase.dias_desfase_corte || desfase.dias_desfase_bd} días</strong> sin nuevos ingresos registrados en el sistema.
-                                </p>
-                                <p class="text-slate-600 leading-relaxed text-[11px]">
-                                    Por política de calidad y rigor metodológico, <strong>el sistema no emite una probabilidad activa para fechas desactualizadas</strong>, ya que la inactividad temporal artificiosa deprime la estimación a valores basales que no representan el hábito del estudiante.
-                                </p>
-                                <div class="pt-2 flex flex-wrap items-center gap-3">
-                                    <button type="button" onclick="evaluarConFecha('${escaparHTML(codigo)}', '2026-07-31')"
-                                        class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-xs shadow-xs transition-colors cursor-pointer">
-                                        <i class="ph ph-clock-counter-clockwise text-base"></i>
-                                        <span>Consultar resultado histórico al corte (31/07/2026)</span>
-                                    </button>
-                                    <span class="text-[11px] text-slate-500">Muestra la propensión calculada en su periodo activo con corte institucional.</span>
-                                </div>
-                                <div class="pt-2 border-t border-slate-200 text-[10px] text-slate-500 flex gap-4">
-                                    <span>Alumno: <strong>${escaparHTML(datos.codigo_mascarado || "")}</strong> (${escaparHTML(datos.escuela || "")})</span>
-                                    <span>Días activos: <strong>${m.dias_activos || 0}</strong></span>
-                                    <span>Visitas: <strong>${m.total_visitas || 0}</strong></span>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                } else {
-                    box.className = "mt-5 p-5 rounded-xl border border-slate-200 bg-white text-slate-900 text-xs shadow-sm";
-
-                    cont.innerHTML = `
-                        <div class="flex flex-wrap items-center gap-2"><h4 class="text-sm font-bold">H1 · Resultado del modelo anterior</h4>
-                            ${esExperimental ? '<span class="text-[10px] text-slate-600 bg-slate-100 rounded px-2 py-1">Experimental · pendiente de validación prospectiva</span>' : ''}</div>
-                        <p class="text-5xl font-black tracking-tight text-indigo-700 my-4">${escaparHTML(datos.probabilidad_porcentaje || (datos.probabilidad_retorno * 100).toFixed(1) + "%")}</p>
-                        <p class="text-sm text-slate-700">Probabilidad de al menos un ingreso en el siguiente día operativo.</p>
-                        <dl class="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-xs text-slate-600">
-                            <div><dt>Referencia</dt><dd class="font-semibold">${escaparHTML(fechaConsultada)}</dd></div>
-                            <div><dt>Fecha objetivo</dt><dd class="font-semibold">${escaparHTML(proximoDia || "No disponible")}</dd></div>
-                            <div><dt>Horizonte</dt><dd class="font-semibold">Un día operativo (H1)</dd></div>
-                            <div><dt>Último día de datos consultado</dt><dd class="font-semibold">${escaparHTML(datos.fecha_referencia && datos.ultima_fecha_bd ? (datos.fecha_referencia < datos.ultima_fecha_bd ? datos.fecha_referencia : datos.ultima_fecha_bd) : "No disponible")}</dd></div>
-                            <div><dt>Entrenamiento modelo base</dt><dd class="font-semibold">${escaparHTML(fechaEntrenamiento)} (Corte histórico 31/07/2026)</dd></div>
-                        </dl>`;
-                }
+            if (!respuesta.ok) {
+                mostrarRetornoH1({status:"no_calculable", mensaje:datos.mensaje || "La consulta no fue autorizada o no pudo completarse."});
+            } else {
+                mostrarRetornoH1(datos);
             }
         } catch (error) {
-            box.classList.remove("hidden");
-            box.className = "mt-5 p-4 rounded-xl border border-rose-200 bg-rose-50 text-rose-800 text-xs";
-            cont.innerHTML = `<strong>Error de conexión:</strong> No fue posible procesar la consulta para los datos ingresados.`;
-            console.error("Error en evaluación de retorno:", error);
+            mostrarRetornoH1({status:"no_calculable", mensaje:error.name === "AbortError" ? "La consulta superó el tiempo de espera. Puede reintentar." : "No fue posible completar la consulta. Puede reintentar."});
         } finally {
+            clearTimeout(temporizador);
+            box.setAttribute("aria-busy", "false");
             boton.disabled = false;
-            boton.innerHTML = `<i class="ph ph-sparkle text-lg"></i><span>Evaluar Retorno</span>`;
-        }
-    }
-
-    function evaluarConFecha(codigo, fecha) {
-        const inputCodigo = document.getElementById("retorno-codigo");
-        const inputFecha = document.getElementById("retorno-fecha-ref");
-        if (inputCodigo) inputCodigo.value = codigo;
-        if (inputFecha) inputFecha.value = fecha;
-        const formRetorno = document.getElementById("form-predecir-retorno");
-        if (formRetorno) {
-            formRetorno.dispatchEvent(new Event("submit", { cancelable: true }));
+            boton.innerHTML = '<i class="ph ph-sparkle" aria-hidden="true"></i><span>Calcular retorno</span>';
         }
     }
 

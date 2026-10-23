@@ -1,0 +1,13 @@
+{
+  "sede": "Central",
+  "jornadas": [
+    {
+      "fecha": "2026-10-22",
+      "hora_inicio": "08:00:00",
+      "hora_fin": "20:45:00",
+      "tipo_evidencia": "confirmacion_operativa_del_responsable",
+      "certificacion_tecnica_independiente": false,
+      "origen": "Confirmación explícita del responsable del proyecto en esta conversación: captura completa de Central durante la jornada indicada."
+    }
+  ]
+}

@@ -16,6 +16,7 @@ from db import get_db_connection
 
 ROOT=Path(__file__).resolve().parents[2]
 DIRECTORY=ROOT/"ml/experiments/retorno_h1_ventanas_finitas_20261021"
+COBERTURA_INFERENCIA=ROOT/"ml/config/cobertura_inferencia_h1.json"
 SELECTOR="experimental_h1_ventanas"
 LABEL="Experimental, pendiente de validación prospectiva"
 
@@ -128,7 +129,7 @@ def _dates(profile,requested,now):
         raise ValueError("Fecha de referencia inválida.")
     # Nunca inferir captura nueva a partir de la existencia de ingresos en BD.
     completed=now.date() if now.time()>time(20,45) else now.date()-timedelta(days=1)
-    cut=min(profile["cut"],completed)
+    cut=min(profile.get("inference_cut",profile["cut"]),completed)
     if ref-timedelta(days=1)>cut:
         missing=[(ref-timedelta(days=i)) for i in range(30,0,-1)
                  if ref-timedelta(days=i)>cut]
@@ -166,9 +167,100 @@ def _dates(profile,requested,now):
     return ref,target,cut
 
 
+def _metadatos_publicos(p):
+    return {"disponible":True,"algoritmo":type(p["model"]).__name__,
+            "version":p["metadata"]["version"],"fecha_entrenamiento":p["trained_date"].isoformat(),
+            "corte_entrenamiento":p["cut"].isoformat(),
+            "ultima_referencia_entrenamiento":p["metadata"]["max_fecha_referencia"],
+            "ultimo_objetivo_entrenamiento":p["metadata"]["max_fecha_objetivo"],
+            "artefacto_sha256":p["metadata"]["artefacto_sha256"],"etiqueta":LABEL}
+
+
+def informacion_h1_actual():
+    """Carga real e íntegra del único H1 elegido; nunca carga un modelo anterior."""
+    try:
+        return _metadatos_publicos(_profile())
+    except CandidatoNoDisponible:
+        return {"disponible":False,"etiqueta":LABEL,
+                "mensaje":"No calculable: no se pudo verificar o cargar el artefacto H1 elegido."}
+
+
+def _perfil_inferencia(p):
+    """Añade jornadas explícitas, sin modificar el calendario ni el corte del ajuste.
+
+    La ausencia de esta fuente no confirma ningún día adicional. Una fuente
+    inválida bloquea el cálculo; no se usa el último ingreso como evidencia.
+    """
+    states = dict(p["states"])
+    confirmed = set(p["confirmed"])
+    evidence = []
+    try:
+        if COBERTURA_INFERENCIA.exists():
+            source = json.loads(COBERTURA_INFERENCIA.read_text(encoding="utf-8"))
+            if source["sede"] != "Central" or not isinstance(source["jornadas"],list):
+                raise ValueError("Fuente inválida")
+            seen = set()
+            for row in source["jornadas"]:
+                day = date.fromisoformat(row["fecha"])
+                if (day in seen or row["hora_inicio"] != "08:00:00" or row["hora_fin"] != "20:45:00"
+                        or row["tipo_evidencia"] != "confirmacion_operativa_del_responsable"
+                        or row["certificacion_tecnica_independiente"] is not False
+                        or not isinstance(row["origen"],str) or not row["origen"].strip()
+                        or p["recipe"].calendar(day) != "atencion_segun_calendario"):
+                    raise ValueError("Jornada no confirmable")
+                seen.add(day)
+                states[day] = "atencion_segun_calendario"
+                confirmed.add(day)
+                evidence.append(dict(row))
+    except Exception:
+        raise CoberturaNoConfirmada("No calculable: no se pudo validar la fuente de cobertura de inferencia.",
+                                   "cobertura_desconocida",[],p,p["cut"]) from None
+    return {**p,"states":states,"confirmed":confirmed,
+            "inference_cut":max([p["cut"]]+[date.fromisoformat(r["fecha"]) for r in evidence]),
+            "evidencia_inferencia":evidence}
+
+
+def _referencia_automatica(p, now):
+    # Un ingreso no demuestra cobertura. Usar exclusivamente el calendario verificado.
+    terminado = now.date() if now.time() > time(20,45) else now.date()-timedelta(days=1)
+    if terminado.year != 2026:
+        raise CoberturaNoConfirmada("No calculable: falta calendario confirmado para la fecha actual.",
+                                   "cobertura_desconocida",[terminado],p,p["cut"])
+    ref = terminado
+    while p["recipe"].calendar(ref) != "atencion_segun_calendario":
+        if p["recipe"].calendar(ref).startswith("desconocido"):
+            raise CoberturaNoConfirmada("No calculable: la última jornada tiene cobertura desconocida.",
+                                       "cobertura_desconocida",[ref],p,p["cut"])
+        ref -= timedelta(days=1)
+        if ref < p["recipe"].SOURCE_START:
+            raise CoberturaNoConfirmada("No calculable: no hay una jornada completa confirmada.",
+                                       "cobertura_desconocida",[ref],p,p["cut"])
+    if ref not in p["confirmed"] or ref > p.get("inference_cut",p["cut"]):
+        raise CoberturaNoConfirmada("No calculable: falta confirmar la captura de la última jornada terminada; no se usa una referencia antigua como actual.",
+                                   "posterior_al_corte",[ref],p,p.get("inference_cut",p["cut"]))
+    return ref
+
+
+def predecir_h1_actual(codigo_matricula=None, alumno_id=None):
+    """Flujo automático del dashboard. No acepta fecha o modelo del cliente."""
+    p = _perfil_inferencia(_profile())  # Paquete del ajuste íntegro + cobertura operativa separada.
+    now = _now()
+    ref = _referencia_automatica(p, now)
+    result = _predecir_con_perfil(p, now, codigo_matricula, alumno_id, ref)
+    result["metadatos_modelo"] = _metadatos_publicos(p)
+    result["evidencia_cobertura_inferencia"] = p["evidencia_inferencia"]
+    if result.get("status") != "success":
+        result["estado_calculo"] = result.get("status")
+        result["status"] = "no_calculable"
+    return result
+
+
 def predecir_candidato(codigo_matricula=None,alumno_id=None,fecha_referencia=None):
-    p=_profile()
-    now=_now()
+    # API interna histórica para pruebas de ventanas; el dashboard no admite fecha manual.
+    return _predecir_con_perfil(_profile(), _now(), codigo_matricula, alumno_id, fecha_referencia)
+
+
+def _predecir_con_perfil(p, now, codigo_matricula=None, alumno_id=None, fecha_referencia=None):
     ref,target,cut=_dates(p,fecha_referencia,now)
     base={"modelo_selector":SELECTOR,"es_experimental":True,"estado_validacion":LABEL,
         "version_modelo":p["metadata"]["version"],"algoritmo":p["metadata"]["algoritmo"],
@@ -225,15 +317,19 @@ GROUP BY CAST(FechaHora AS DATE) ORDER BY Fecha""",
     if features is None:
         active={str(w):sum(visits.get(d,0)>0 for d in p["recipe"].window_days(ref,w,p["confirmed"])) for w in (7,14,30)}
         return {**base,"status":"historial_insuficiente",
-                "mensaje":"Historial reciente insuficiente: se requieren tres días activos en los 30 días anteriores, con ventanas confirmadas.",
+                "mensaje":f"No calculable: {active['30']} día(s) activo(s) válido(s) en los 30 días anteriores; se requieren al menos tres. Solo Central, ingresos no marcados como prueba y horario 08:00–20:45; se excluyen la referencia, cierres y días desconocidos.",
                 "diagnostico":{"motivo":"historial_reciente_insuficiente",
-                    "dias_activos_validos":active,"fechas_cobertura_faltante":[]}}
+                    "dias_activos_validos":active,"fechas_cobertura_faltante":[]},
+                "detalle_historial":{"minimo_dias_activos_30":3,
+                    "ventana_desde":(ref-timedelta(days=30)).isoformat(),
+                    "ventana_hasta":(ref-timedelta(days=1)).isoformat(),
+                    "criterio":"Solo Central, 08:00–20:45, sin pruebas; días distintos con captura confirmada. La fecha de referencia queda fuera de las variables del candidato."}}
     # Mismos bytes/precisión que la evaluación guardada; nunca añade datos de ref/target.
     raw=pd.DataFrame([features],columns=p["recipe"].FEATURES).to_csv(index=False,float_format="%.12g")
     frame=pd.read_csv(io.StringIO(raw))[p["recipe"].FEATURES]
     probs=p["model"].predict_proba(frame)[0]
     mapping={int(c):float(v) for c,v in zip(p["model"].classes_,probs)}
-    if set(mapping)!={0,1} or not all(np.isfinite(list(mapping.values()))) or abs(sum(mapping.values())-1)>1e-10:
+    if set(mapping)!={0,1} or not all(np.isfinite(list(mapping.values()))) or any(v < 0 or v > 1 for v in mapping.values()) or abs(sum(mapping.values())-1)>1e-10:
         raise CandidatoNoDisponible("El candidato produjo probabilidades inválidas.")
     prob=mapping[1]
     return {**base,"status":"success","probabilidad_h1":round(prob,6),"probabilidad_retorno":round(prob,6),

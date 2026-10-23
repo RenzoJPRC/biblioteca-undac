@@ -80,16 +80,20 @@ class TestDiagnosticoAfluencia(unittest.TestCase):
             self.assertIn('AfluenciaHistoricaAgregada',cursor.execute.call_args.args[0])
 
     def test_opcion_h1_disabled_depende_de_disponible(self):
+        # H1 ya no es un selector: la tarjeta comunica indisponibilidad explícita.
         client=app.test_client()
-        with client.session_transaction() as s:
-            s.update(admin_user='revision-local',admin_rol='SuperAdmin',admin_sede='Central')
-        getter=MagicMock(); getter.metadatos={}
-        with patch('app.get_db_connection',side_effect=AssertionError('BD bloqueada')),patch('pyodbc.connect',side_effect=AssertionError('BD bloqueada')),patch('pymssql.connect',side_effect=AssertionError('BD bloqueada')),patch.object(routes.PredictorRetornoAlumno,'obtener_instancia',return_value=getter),patch.object(routes,'obtener_informacion_modelo',return_value={}):
+        with client.session_transaction() as sesion:
+            sesion.update(admin_user='revision-local',admin_rol='SuperAdmin',admin_sede='Central')
+        with patch('app.get_db_connection',side_effect=AssertionError('BD bloqueada')),patch('pyodbc.connect',side_effect=AssertionError('BD bloqueada')),patch('pymssql.connect',side_effect=AssertionError('BD bloqueada')),patch.object(routes.PredictorRetornoAlumno,'obtener_instancia',side_effect=AssertionError('No cargar el modelo antiguo')),patch.object(routes,'obtener_informacion_modelo',return_value={}):
             for available in [False,True]:
-                with patch.object(routes,'informacion_retorno_experimental',return_value={'disponible':available}):
-                    html=client.get('/admin/ml').get_data(as_text=True)
-                option=re.search(r'<option value="experimental_h1_ventanas"([^>]*)>',html).group(1)
-                self.assertEqual('disabled' in option,not available)
+                with patch.object(routes,'informacion_h1_actual',return_value={'disponible':available}):
+                    response=client.get('/admin/ml')
+                self.assertEqual(response.status_code,200)
+                html=response.get_data(as_text=True)
+                self.assertNotIn('id="retorno-modelo"',html)
+                self.assertIn('Calcular retorno',html)
+                aviso='No calculable: el artefacto H1 elegido no pudo verificarse o cargarse.'
+                self.assertEqual(aviso in html,not available)
 
     def test_prediccion_es_identica_con_worker_refrescado_o_sin_cache(self):
         cursor=MagicMock()

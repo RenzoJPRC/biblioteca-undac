@@ -1,16 +1,17 @@
-"""Dashboard H1: BD sustituida, reloj fijo y ningún servicio externo."""
-import unittest
-import io
+"""Único H1 del dashboard: sin fecha/modelo del cliente, BD y proveedores bloqueados."""
+import hashlib
+import json
 import re
 import shutil
 import subprocess
-from contextlib import redirect_stdout
+import tempfile
+import unittest
+from pathlib import Path
 from datetime import date, datetime
 from unittest.mock import MagicMock, patch
 from zoneinfo import ZoneInfo
 
 import numpy as np
-
 from app import app
 from routes import admin_ml as routes
 from ml.services import retorno_h1_experimental as candidate
@@ -19,326 +20,289 @@ from ml.services import retorno_h1_experimental as candidate
 class TestDashboardRetornoExperimental(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        # Solo lee el artefacto local y el constructor congelado, sin BD.
-        cls.profile=candidate._profile()
+        cls.profile = candidate._profile()  # Verificación y carga real, sin BD.
 
     def setUp(self):
-        self.client=app.test_client()
-        with self.client.session_transaction() as s:
-            s['admin_user']='operador-prueba'
-            s['admin_rol']='SuperAdmin'
-            s['admin_sede']='Central'
-            s['csrf_token']='csrf-prueba'
-        self.clock=patch.object(candidate,'_now',return_value=datetime(2026,10,21,22,30,tzinfo=ZoneInfo('America/Lima')))
+        self.client = app.test_client()
+        self.session('SuperAdmin')
+        for name in ('pyodbc.connect', 'pymssql.connect', 'requests.sessions.Session.request'):
+            p = patch(name, side_effect=AssertionError('Servicio real bloqueado'))
+            p.start(); self.addCleanup(p.stop)
+        p = patch('app.get_db_connection', return_value=None)
+        p.start(); self.addCleanup(p.stop)
+        self.clock = patch.object(candidate, '_now', return_value=datetime(2026,10,22,10,tzinfo=ZoneInfo('America/Lima')))
         self.clock.start(); self.addCleanup(self.clock.stop)
-        # Todo acceso real a BD es un fallo de prueba.
-        blocked=patch('db.get_db_connection',side_effect=AssertionError('BD real bloqueada'))
-        blocked.start(); self.addCleanup(blocked.stop)
-        # app.py captura su propio alias y audita POST en after_request.
-        # Anularlo explícitamente: ningún INSERT de auditoría durante las pruebas.
-        audit=patch('app.get_db_connection',return_value=None)
-        audit.start(); self.addCleanup(audit.stop)
-        for target in ['pyodbc.connect','pymssql.connect']:
-            driver=patch(target,side_effect=AssertionError('Conector real bloqueado'))
-            driver.start(); self.addCleanup(driver.stop)
-        self.conn=MagicMock()
-        self.cursor=self.conn.cursor.return_value
-        self.cursor.fetchone.return_value=(123,)
-        self.rows=[(date(2026,10,14),2),(date(2026,10,15),3),(date(2026,10,16),4),(date(2026,10,20),5)]
-        self.cursor.fetchall.return_value=self.rows
-        dbpatch=patch.object(candidate,'get_db_connection',return_value=self.conn)
-        dbpatch.start(); self.addCleanup(dbpatch.stop)
-        self.model=MagicMock()
-        self.model.classes_=np.array([0,1])
-        self.model.predict_proba.return_value=np.array([[.3,.7]])
-        profile=dict(self.profile)
-        profile['model']=self.model
-        loader=patch.object(candidate,'_profile',return_value=profile)
-        loader.start(); self.addCleanup(loader.stop)
+        self.conn = MagicMock()
+        self.cursor = self.conn.cursor.return_value
+        self.cursor.fetchone.return_value = (123,)
+        self.rows = [(date(2026,10,d),2) for d in (14,15,16,20)]
+        self.cursor.fetchall.return_value = self.rows
+        p = patch.object(candidate, 'get_db_connection', return_value=self.conn)
+        self.db = p.start(); self.addCleanup(p.stop)
+        self.model = MagicMock()
+        self.model.classes_ = np.array([0,1])
+        self.model.predict_proba.return_value = np.array([[.3,.7]])
+        profile = dict(self.profile); profile['model'] = self.model
+        p = patch.object(candidate, '_profile', return_value=profile)
+        self.loader = p.start(); self.addCleanup(p.stop)
+        p = patch.object(routes, 'predecir_retorno_alumno', side_effect=AssertionError('No usar el modelo anterior'))
+        self.old = p.start(); self.addCleanup(p.stop)
+        p = patch.object(routes.PredictorRetornoAlumno, 'obtener_instancia', side_effect=AssertionError('No cargar el modelo anterior'))
+        self.old_loader = p.start(); self.addCleanup(p.stop)
 
-    def post(self,model=None,fecha=None,csrf=True):
-        payload={'codigo_matricula':'PRUEBA1234'}
-        if model is not None:
-            payload['modelo']=model
-        if fecha is not None:
-            payload['fecha_referencia']=fecha
-        return self.client.post('/admin/api/ml/predecir-retorno',json=payload,
-            headers={'X-CSRFToken':'csrf-prueba'} if csrf else {})
+    def session(self, role, sede='Central'):
+        with self.client.session_transaction() as s:
+            s.update(admin_user='operador-ficticio', admin_rol=role, admin_sede=sede, csrf_token='csrf-ficticio')
 
-    def test_actual_implicito_explicito_y_tras_candidato_son_identicos(self):
-        expected={'status':'success','probabilidad_retorno':.25,'es_experimental':False,'extra_original':{'valor':[1,2]}}
-        with patch.object(routes,'predecir_retorno_alumno',return_value=expected) as current:
-            self.assertEqual(self.post().get_json(),expected)
-            self.assertEqual(self.post('actual').get_json(),expected)
-            result=self.post(candidate.SELECTOR)
-            self.assertEqual(result.status_code,200)
-            self.assertEqual(result.get_json()['probabilidad_h1'],.7)
-            self.assertEqual(self.post('actual').get_json(),expected)
-            self.assertEqual(current.call_count,3)
-            for call in current.call_args_list:
-                self.assertEqual(call.kwargs,{'codigo_matricula':'PRUEBA1234','alumno_id':None,'fecha_referencia':None})
+    def post(self, payload=None, csrf=True):
+        return self.client.post('/admin/api/ml/predecir-retorno', json=payload if payload is not None else {'codigo_matricula':'FICTICIO1234'},
+                                headers={'X-CSRFToken':'csrf-ficticio'} if csrf else {})
 
-    def test_constructor_exacto_corte_y_privacidad(self):
-        response=self.post(candidate.SELECTOR,'2026-10-21')
+    def html(self):
+        with patch.object(candidate, '_profile', return_value=self.profile), patch.object(routes, 'obtener_informacion_modelo', return_value={}):
+            response = self.client.get('/admin/ml')
         self.assertEqual(response.status_code,200)
-        data=response.get_json()
-        self.assertEqual(data['corte_variables'],'2026-10-20')
-        self.assertEqual(data['corte_entrenamiento'],'2026-10-21')
-        self.assertEqual(data['fecha_entrenamiento'],'2026-10-21')
+        self.old_loader.assert_not_called()
+        return response.get_data(as_text=True)
+
+    def test_unico_h1_automatico_constructor_exacto(self):
+        result = self.post()
+        self.assertEqual(result.status_code,200)
+        data = result.get_json()
+        self.assertEqual(data['status'],'success')
+        self.assertEqual(data['codigo_consultado'],'FICTICIO1234')
+        self.assertEqual(data['fecha_referencia'],'2026-10-21')
         self.assertEqual(data['fecha_objetivo'],'2026-10-22')
-        self.assertEqual(data['estado_validacion'],candidate.LABEL)
-        self.assertTrue(data['es_experimental'])
-        self.assertNotIn('AlumnoID',data)
-        self.assertNotIn('PRUEBA1234',str(data))
-        sql,params=self.cursor.execute.call_args.args
-        self.assertTrue(sql.startswith('SELECT'))
-        self.assertIn('FechaHora < ?',sql)
-        self.assertIn('ISNULL(EsPrueba, 0) = 0',sql)
-        self.assertEqual(params[1:4],('Central','2026-09-21','2026-10-21'))
-        self.assertEqual(len(self.cursor.execute.call_args_list),2)
-        expected=self.profile['recipe'].feature_row(dict(self.rows),date(2026,10,21),date(2026,10,22),self.profile['confirmed'])
-        passed=self.model.predict_proba.call_args.args[0]
-        self.assertEqual(list(passed.columns),self.profile['recipe'].FEATURES)
+        self.assertEqual(data['corte_variables'],'2026-10-20')
+        self.assertEqual(data['probabilidad_h1'],.7)
+        self.model.predict_proba.assert_called_once()
+        expected = self.profile['recipe'].feature_row(dict(self.rows),date(2026,10,21),date(2026,10,22),self.profile['confirmed'])
+        frame = self.model.predict_proba.call_args.args[0]
+        self.assertEqual(list(frame), self.profile['recipe'].FEATURES)
         for key,value in expected.items():
-            self.assertAlmostEqual(passed.iloc[0][key],value,places=10)
+            self.assertAlmostEqual(frame.iloc[0][key],value,places=10)
+        self.old.assert_not_called()
         self.conn.commit.assert_not_called()
         self.conn.close.assert_called_once()
 
-    def test_no_usa_fecha_referencia_objetivo_ni_futuras(self):
-        for forbidden in [date(2026,10,21),date(2026,10,22),date(2026,10,23)]:
-            with self.subTest(day=forbidden):
-                self.cursor.fetchall.return_value=self.rows+[(forbidden,999999)]
-                self.model.predict_proba.reset_mock()
-                self.assertEqual(self.post(candidate.SELECTOR).status_code,400)
-                self.model.predict_proba.assert_not_called()
+    def test_fechas_y_modelos_cliente_rechazados_sin_bd(self):
+        for extra in ({'fecha_referencia':'2026-10-23'},{'modelo':'actual'},{'modelo':candidate.SELECTOR},{'alumno_id':123},{'rol':'SuperAdmin'}):
+            with self.subTest(extra=extra):
+                self.assertEqual(self.post({'codigo_matricula':'FICTICIO1234',**extra}).status_code,400)
+        self.db.assert_not_called(); self.old.assert_not_called()
 
-    def test_desconocidos_corte_futuro_y_cerrados_no_infiere(self):
-        for ref in ['2026-07-22','2026-07-31','2026-10-18','2026-10-23','2026-08-03']:
-            with self.subTest(ref=ref):
-                self.model.predict_proba.reset_mock()
-                self.assertEqual(self.post(candidate.SELECTOR,ref).status_code,400)
-                self.model.predict_proba.assert_not_called()
+    def test_referencia_nunca_futura_ni_jornada_en_curso(self):
+        for now, expected in [(datetime(2026,10,21,10,tzinfo=ZoneInfo('America/Lima')),'2026-10-20'),
+                              (datetime(2026,10,22,8,tzinfo=ZoneInfo('America/Lima')),'2026-10-21')]:
+            with patch.object(candidate,'_now',return_value=now):
+                self.assertEqual(candidate._referencia_automatica(self.profile,now).isoformat(),expected)
 
-    def test_cierre_en_ventana_no_aporta_visitas(self):
-        self.cursor.fetchall.return_value=self.rows+[(date(2026,10,8),999999)]
-        self.assertEqual(self.post(candidate.SELECTOR).status_code,200)
-        used=self.model.predict_proba.call_args.args[0]
-        self.assertEqual(used.iloc[0]['visitas_30d'],14)
-
-    def test_candidato_insuficiente_y_alumno_inexistente_no_cambian_actual(self):
-        self.cursor.fetchall.return_value=self.rows[:2]
-        data=self.post(candidate.SELECTOR).get_json()
-        self.assertEqual(data['status'],'historial_insuficiente')
-        self.assertEqual(data['diagnostico'],{
-            'motivo':'historial_reciente_insuficiente',
-            'dias_activos_validos':{'7':2,'14':2,'30':2},
-            'fechas_cobertura_faltante':[]})
-        self.assertNotIn('codigo_mascarado',data)
-        self.assertIsNone(data['probabilidad_h1'])
-        self.model.predict_proba.assert_not_called()
-        self.cursor.fetchone.return_value=None
-        self.assertEqual(self.post(candidate.SELECTOR).get_json()['status'],'error')
-
-    def test_cobertura_desconocida_y_posterior_corte_sin_consultar_ni_identificadores(self):
-        for ref,motivo,missing in [('2026-07-24','cobertura_desconocida','2026-07-24'),
-                                   ('2026-10-01','cobertura_desconocida','2026-09-18'),
-                                   ('2026-10-23','posterior_al_corte','2026-10-22')]:
-            with self.subTest(ref=ref), redirect_stdout(io.StringIO()) as output:
-                response=self.post(candidate.SELECTOR,ref)
-                self.assertEqual(response.status_code,400)
-                data=response.get_json()
-                self.assertEqual(data['modelo_selector'],candidate.SELECTOR)
-                self.assertEqual(data['diagnostico']['motivo'],motivo)
-                self.assertIn(missing,data['diagnostico']['fechas_cobertura_faltante'])
-                self.assertEqual(data['diagnostico']['dias_activos_validos'],{'7':None,'14':None,'30':None})
+    def test_captura_no_confirmada_no_disfraza_referencia_antigua(self):
+        for now in [datetime(2026,10,23,21,tzinfo=ZoneInfo('America/Lima')),datetime(2026,10,24,10,tzinfo=ZoneInfo('America/Lima'))]:
+            with self.subTest(now=now), patch.object(candidate,'_now',return_value=now):
+                data=self.post().get_json()
+                self.assertEqual(data['status'],'no_calculable')
                 self.assertIsNone(data['probabilidad_h1'])
-                for secret in ['PRUEBA1234','codigo_mascarado','AlumnoID','DNI','nombre']:
-                    self.assertNotIn(secret,response.get_data(as_text=True)+output.getvalue())
-        self.cursor.execute.assert_not_called()
+                self.assertTrue(data['diagnostico']['fechas_cobertura_faltante'])
+        self.db.assert_not_called(); self.old.assert_not_called()
+
+    def test_confirmacion_responsable_solo_22_no_certificacion_tecnica(self):
+        source=json.loads(candidate.COBERTURA_INFERENCIA.read_text(encoding='utf-8'))
+        self.assertEqual(source['sede'],'Central')
+        self.assertEqual([r['fecha'] for r in source['jornadas']],['2026-10-22'])
+        row=source['jornadas'][0]
+        self.assertEqual((row['hora_inicio'],row['hora_fin']),('08:00:00','20:45:00'))
+        self.assertEqual(row['tipo_evidencia'],'confirmacion_operativa_del_responsable')
+        self.assertIs(row['certificacion_tecnica_independiente'],False)
+        p=candidate._perfil_inferencia(self.profile)
+        self.assertEqual(p['confirmed']-self.profile['confirmed'],{date(2026,10,22)})
+        self.assertEqual(p['cut'],date(2026,10,21))
+        self.assertEqual(p['inference_cut'],date(2026,10,22))
+        self.assertNotIn(date(2026,10,23),p['confirmed'])
+
+    def test_referencia_22_objetivo_23_cortes_separados_sin_fuga(self):
+        paths=list(candidate.DIRECTORY.iterdir())
+        before={p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in paths if p.is_file()}
+        self.cursor.fetchall.return_value=self.rows+[(date(2026,10,21),3)]
+        now=datetime(2026,10,22,21,tzinfo=ZoneInfo('America/Lima'))
+        with patch.object(candidate,'_now',return_value=now):
+            data=self.post().get_json()
+        self.assertEqual(data['status'],'success')
+        self.assertEqual(data['fecha_referencia'],'2026-10-22')
+        self.assertEqual(data['fecha_objetivo'],'2026-10-23')
+        self.assertEqual(data['corte_variables'],'2026-10-21')
+        self.assertEqual(data['corte_datos_confirmados'],'2026-10-22')
+        self.assertEqual(data['corte_entrenamiento'],'2026-10-21')
+        self.assertEqual(data['metadatos_modelo']['ultima_referencia_entrenamiento'],'2026-10-20')
+        self.assertEqual(data['metadatos_modelo']['ultimo_objetivo_entrenamiento'],'2026-10-21')
+        self.assertIs(data['evidencia_cobertura_inferencia'][0]['certificacion_tecnica_independiente'],False)
+        sql,params=self.cursor.execute.call_args.args
+        self.assertIn('FechaHora < ?',sql)
+        self.assertEqual(params[2:4],('2026-09-22','2026-10-22'))
+        expected=self.profile['recipe'].feature_row(dict(self.cursor.fetchall.return_value),date(2026,10,22),date(2026,10,23),self.profile['confirmed'])
+        frame=self.model.predict_proba.call_args.args[0]
+        for name,value in expected.items():
+            self.assertAlmostEqual(frame.iloc[0][name],value,places=10)
+        self.assertEqual(before,{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in paths if p.is_file()})
+        self.conn.commit.assert_not_called();self.old.assert_not_called()
+
+    def test_datos_de_referencia_22_y_objetivo_23_no_entran_en_variables(self):
+        now=datetime(2026,10,22,21,tzinfo=ZoneInfo('America/Lima'))
+        for day in (date(2026,10,22),date(2026,10,23)):
+            self.cursor.fetchall.return_value=self.rows+[(day,9999)]
+            with patch.object(candidate,'_now',return_value=now):
+                self.assertEqual(self.post().get_json()['status'],'no_calculable')
         self.model.predict_proba.assert_not_called()
 
-    def test_diagnostico_historial_no_imprime_identificadores(self):
+    def test_fuente_cobertura_invalida_bloquea_sin_bd(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'cobertura.json'
+            source=json.loads(candidate.COBERTURA_INFERENCIA.read_text(encoding='utf-8'))
+            for change in ({'sede':'Tarma'}, {'jornadas':[dict(source['jornadas'][0],hora_fin='20:00:00')]},
+                           {'jornadas':[dict(source['jornadas'][0],certificacion_tecnica_independiente=True)]}):
+                path.write_text(json.dumps({**source,**change}),encoding='utf-8')
+                with patch.object(candidate,'COBERTURA_INFERENCIA',path):
+                    self.assertEqual(self.post().get_json()['status'],'no_calculable')
+        self.db.assert_not_called();self.old.assert_not_called()
+
+    def test_objetivo_salta_fin_de_semana_calendario_congelado(self):
+        p=dict(self.profile); p['cut']=date(2026,10,23)
+        p['confirmed']=self.profile['confirmed']|{date(2026,10,22),date(2026,10,23)}
+        p['states']={**p['states'],date(2026,10,22):'atencion_segun_calendario',date(2026,10,23):'atencion_segun_calendario'}
+        now=datetime(2026,10,24,10,tzinfo=ZoneInfo('America/Lima'))
+        ref=candidate._referencia_automatica(p,now)
+        self.assertEqual(ref,date(2026,10,23))
+        self.assertEqual(candidate._dates(p,ref,now)[1],date(2026,10,26))
+
+    def test_cobertura_desconocida_en_ventana_no_infiere(self):
+        p=dict(self.profile);p['states']=dict(p['states']);p['states'].pop(date(2026,10,19))
+        self.loader.return_value=p
+        self.assertEqual(self.post().get_json()['status'],'no_calculable')
+        self.db.assert_not_called();self.model.predict_proba.assert_not_called()
+
+    def test_historial_insuficiente_y_sin_ficha_no_son_negativos(self):
         self.cursor.fetchall.return_value=self.rows[:2]
-        with redirect_stdout(io.StringIO()) as output:
-            response=self.post(candidate.SELECTOR)
-        self.assertNotIn('PRUEBA1234',response.get_data(as_text=True)+output.getvalue())
-        self.assertNotIn('codigo_mascarado',response.get_json())
+        data=self.post().get_json()
+        self.assertEqual(data['status'],'no_calculable')
+        self.assertEqual(data['diagnostico']['dias_activos_validos']['30'],2)
+        self.assertIsNone(data['probabilidad_h1'])
+        self.cursor.fetchone.return_value=None
+        data=self.post().get_json()
+        self.assertEqual(data['status'],'no_calculable')
+        self.assertIn('No se encontró',data['mensaje'])
+        self.model.predict_proba.assert_not_called();self.old.assert_not_called()
 
-    def test_excepcion_inesperada_candidato_no_registra_detalles(self):
-        self.conn.close.side_effect=RuntimeError('PRUEBA1234 identificador privado')
-        with redirect_stdout(io.StringIO()) as output:
-            response=self.post(candidate.SELECTOR)
-        self.assertEqual(response.status_code,500)
-        self.assertNotIn('PRUEBA1234',response.get_data(as_text=True)+output.getvalue())
+    def test_fuente_futura_y_referencia_fuera_de_variables(self):
+        for day in [date(2026,10,21),date(2026,10,22),date(2026,10,23)]:
+            self.cursor.fetchall.return_value=self.rows+[(day,999)]
+            self.assertEqual(self.post().get_json()['status'],'no_calculable')
+        self.model.predict_proba.assert_not_called()
 
-    def test_fallo_candidato_no_hace_fallback(self):
-        with patch.object(routes,'predecir_retorno_experimental',side_effect=candidate.CandidatoNoDisponible('Candidato no disponible')), \
-             patch.object(routes,'predecir_retorno_alumno') as current:
-            self.assertEqual(self.post(candidate.SELECTOR).status_code,503)
-            current.assert_not_called()
-
-    def test_consultor_y_csrf_siguen_bloqueando_ambos_selectores(self):
-        with self.client.session_transaction() as s:
-            s['admin_rol']='Consultor'
-        with patch.object(routes,'predecir_retorno_alumno') as current:
-            for model in ['actual',candidate.SELECTOR]:
-                self.assertEqual(self.post(model).status_code,403)
-                self.assertEqual(self.post(model,csrf=False).status_code,403)
-            current.assert_not_called()
-            self.model.predict_proba.assert_not_called()
-
-    def test_supervisor_candidato_solo_central(self):
-        with self.client.session_transaction() as s:
-            s['admin_rol']='Supervisor'; s['admin_sede']='Tarma'
-        self.assertEqual(self.post(candidate.SELECTOR).status_code,403)
-        with self.client.session_transaction() as s:
-            s['admin_sede']='Central'
-        self.assertEqual(self.post(candidate.SELECTOR).status_code,200)
-
-    def test_selector_invalido_no_invoca_servicios(self):
-        with patch.object(routes,'predecir_retorno_alumno') as current:
-            self.assertEqual(self.post('otro').status_code,400)
-            current.assert_not_called()
-            self.model.predict_proba.assert_not_called()
-
-    def test_error_bd_cierra_sin_commit(self):
-        self.cursor.fetchall.side_effect=RuntimeError('detalle no debe filtrarse')
-        response=self.post(candidate.SELECTOR)
-        self.assertEqual(response.status_code,503)
-        self.assertNotIn('detalle',response.get_data(as_text=True))
-        self.cursor.close.assert_called_once(); self.conn.close.assert_called_once()
+    def test_filtros_sql_parametrizados_y_ausencia_de_escrituras(self):
+        self.post()
+        sql,params=self.cursor.execute.call_args.args
+        self.assertIn('ISNULL(EsPrueba, 0) = 0',sql)
+        self.assertIn('FechaHora < ?',sql)
+        self.assertEqual(params[1:4],('Central','2026-09-21','2026-10-21'))
+        self.assertNotIn('FICTICIO',sql)
+        for call in self.cursor.execute.call_args_list:
+            self.assertTrue(call.args[0].lstrip().startswith('SELECT'))
+            self.assertNotIn('DNI',call.args[0])
         self.conn.commit.assert_not_called()
 
-    def test_informacion_actual_conservada(self):
-        getter=MagicMock(); getter.metadatos={'version':'actual-original'}
-        with patch.object(routes.PredictorRetornoAlumno,'obtener_instancia',return_value=getter):
-            result=self.client.get('/admin/api/ml/retorno-informacion')
-        self.assertEqual(result.get_json(),{'status':'success','metadatos':getter.metadatos})
+    def test_integridad_no_disponible_no_fallback_ni_bd(self):
+        self.loader.side_effect=candidate.CandidatoNoDisponible('No exponer detalles')
+        data=self.post().get_json()
+        self.assertEqual(data['status'],'no_calculable')
+        self.assertIsNone(data['probabilidad_h1'])
+        self.assertNotIn('No exponer',str(data))
+        self.db.assert_not_called();self.old.assert_not_called()
 
-    def test_dashboard_select_actual_y_etiqueta_candidato(self):
-        getter=MagicMock(); getter.metadatos={}
-        with patch.object(routes.PredictorRetornoAlumno,'obtener_instancia',return_value=getter), \
-             patch.object(routes,'obtener_informacion_modelo',return_value={}):
-            result=self.client.get('/admin/ml')
-        self.assertEqual(result.status_code,200)
-        html=result.get_data(as_text=True)
-        self.assertIn('<option value="actual" selected>',html)
-        self.assertIn('HistGradientBoostingClassifier · Próximo día', html)
-        self.assertIn('HistGradientBoostingClassifier · Próximos', html)
-        self.assertIn('id="retorno-base-metadatos"', html)
-        self.assertIn('Ambos selectores estiman un solo día operativo.', html)
-        self.assertIn('Experimental · pendiente de validación prospectiva',html)
-        self.assertIn('mostrarRetornoExperimental(datos, box, cont)',html)
-        self.assertNotIn('id="retorno-historico"',html)
-        self.assertNotIn('Archivo histórico del modelo base',html)
-        self.assertNotIn('retorno-info-experimental',html)
-        self.assertNotIn('Metadatos reales del candidato H1',html)
-        self.assertNotIn('[EXPERIMENTAL',html)
+    def test_probabilidades_invalidas_no_se_presentan(self):
+        for probs in ([[float('nan'),.7]],[[.8,.7]],[[-.2,1.2]]):
+            self.model.predict_proba.return_value=np.array(probs)
+            data=self.post().get_json()
+            self.assertEqual(data['status'],'no_calculable')
+            self.assertIsNone(data['probabilidad_h1'])
+            self.old.assert_not_called()
 
-    def test_javascript_renderizado_sintaxis_y_diagnostico(self):
-        node=shutil.which('node')
-        self.assertIsNotNone(node,'Node es necesario para verificar el JavaScript')
-        getter=MagicMock(); getter.metadatos={}
-        with patch.object(routes.PredictorRetornoAlumno,'obtener_instancia',return_value=getter), \
-             patch.object(routes,'obtener_informacion_modelo',return_value={}):
-            html=self.client.get('/admin/ml').get_data(as_text=True)
-        scripts='\n'.join(re.findall(r'<script\b[^>]*>(.*?)</script>',html,re.S))
-        check=subprocess.run([node,'--check'],input=scripts,text=True,capture_output=True)
-        self.assertEqual(check.returncode,0,check.stderr)
-        renderer=scripts.split('    function mostrarRetornoExperimental',1)[1].split('    // Predicción interactiva de retorno',1)[0]
-        renderer='function mostrarRetornoExperimental'+renderer
+    def test_error_bd_y_inesperado_no_filtra_datos(self):
+        for error in (ConnectionError('FICTICIO-SECRETO'),RuntimeError('FICTICIO-SECRETO')):
+            with patch.object(routes,'predecir_h1_actual',side_effect=error):
+                data=self.post().get_json()
+            self.assertEqual(data['status'],'no_calculable')
+            self.assertNotIn('FICTICIO-SECRETO',str(data));self.assertIsNone(data['probabilidad_h1'])
+
+    def test_roles_csrf_y_sede_siguen_protegidos(self):
+        for role,sede in [('Consultor','Central'),('Supervisor','Tarma'),('Supervisor',''),('Operador','Central')]:
+            self.session(role,sede)
+            self.assertEqual(self.post().status_code,403)
+        self.session('SuperAdmin');self.assertEqual(self.post(csrf=False).status_code,403)
+        self.db.assert_not_called()
+
+    def test_supervisor_codigo_enmascarado_y_administrador_completo(self):
+        self.session('Supervisor')
+        self.assertNotIn('FICTICIO1234',str(self.post().get_json()))
+        self.session('Administrador')
+        self.assertEqual(self.post().get_json()['codigo_consultado'],'FICTICIO1234')
+
+    def test_metadatos_reales_sin_cargar_base(self):
+        with patch.object(candidate,'_profile',return_value=self.profile):
+            data=self.client.get('/admin/api/ml/retorno-informacion').get_json()['metadatos']
+        self.assertEqual(data['algoritmo'],'HistGradientBoostingClassifier')
+        self.assertEqual(data['corte_entrenamiento'],'2026-10-21')
+        self.assertEqual(data['ultima_referencia_entrenamiento'],'2026-10-20')
+        self.assertEqual(data['ultimo_objetivo_entrenamiento'],'2026-10-21')
+        self.assertEqual(data['artefacto_sha256'],hashlib.sha256((candidate.DIRECTORY/'modelo_retorno_h1_ventanas_experimental.joblib').read_bytes()).hexdigest())
+        self.old_loader.assert_not_called()
+
+    def test_html_real_unico_flujo_sin_fechas_ni_selectores(self):
+        html=self.html();section=html.split('id="seccion-retorno"',1)[1].split('{% endblock %}',1)[0]
+        for removed in ('retorno-modelo','retorno-fecha-ref','Ambos selectores','Próximos','Archivo histórico del modelo base','GradientBoostingClassifier · Experimental local'):
+            self.assertNotIn(removed,html)
+        for present in ('Calcular retorno','HistGradientBoostingClassifier','2026-10-20','2026-10-21','retorno-detalles-tecnicos','aria-live="polite"','Experimental · pendiente de validación prospectiva'):
+            self.assertIn(present,section)
+        self.assertIn('sm:flex-row',section);self.assertIn('min-w-0',section)
+
+    def test_html_integridad_fallida_no_oculta_estado(self):
+        with patch.object(routes,'informacion_h1_actual',return_value={'disponible':False}),patch.object(routes,'obtener_informacion_modelo',return_value={}):
+            response=self.client.get('/admin/ml')
+        self.assertIn('No calculable',response.get_data(as_text=True));self.old_loader.assert_not_called()
+
+    def test_javascript_renderizado_tarjeta_accesible_y_peticion_real(self):
+        node=shutil.which('node');self.assertIsNotNone(node)
+        scripts='\n'.join(re.findall(r'<script\b[^>]*>(.*?)</script>',self.html(),re.S))
+        result=subprocess.run([node,'--check'],input=scripts,text=True,capture_output=True)
+        self.assertEqual(result.returncode,0,result.stderr)
+        functions='function mostrarRetornoH1'+scripts.split('function mostrarRetornoH1',1)[1].split('    function escaparHTML',1)[0]
         harness=r'''
-const assert = require('node:assert/strict');
-function escaparHTML(x) { return String(x).replaceAll('<', '&lt;'); }
-const box={}, cont={};
-
-// Caso 1: Historial insuficiente (No calculable, sin porcentajes inventados)
-mostrarRetornoExperimental({status:'historial_insuficiente',diagnostico:{
-    motivo:'historial_reciente_insuficiente',dias_activos_validos:{7:0,14:1,30:2},
-    fechas_cobertura_faltante:[]}},box,cont);
-assert.ok(cont.innerHTML.includes('No calculable'));
-assert.ok(cont.innerHTML.includes('Historial reciente insuficiente'));
-assert.ok(!cont.innerHTML.includes('bg-amber-'));
-assert.ok(cont.innerHTML.includes('7 días: 0'));
-assert.ok(cont.innerHTML.includes('30 días: 2'));
-assert.ok(!cont.innerHTML.includes('%'), 'No debe mostrar porcentajes cuando es no calculable');
-
-// Caso 2: Cobertura no confirmada (No calculable, sin porcentajes)
-mostrarRetornoExperimental({status:'cobertura_no_confirmada',diagnostico:{
-    motivo:'posterior_al_corte',dias_activos_validos:{7:null,14:null,30:null},
-    fechas_cobertura_faltante:['2026-10-22','<no ejecutar>']}},box,cont);
-assert.ok(cont.innerHTML.includes('Cobertura posterior al corte confirmado'));
-assert.ok(cont.innerHTML.includes('no calculable sin cobertura'));
-assert.ok(cont.innerHTML.includes('2026-10-22'));
-assert.ok(!cont.innerHTML.includes('<no ejecutar>'));
-assert.ok(!cont.innerHTML.includes('%'));
-
-// Caso 3: Éxito calculable (Porcentaje destacado 5xl, fecha objetivo, explicación breve, aviso prospectivo)
-mostrarRetornoExperimental({
-    status: 'success',
-    probabilidad_h1: 0.742,
-    probabilidad_porcentaje: '74.2%',
-    fecha_objetivo: '2026-10-22',
-    fecha_referencia: '2026-10-21',
-    corte_datos_confirmados: '2026-10-21',
-    corte_entrenamiento: '2026-10-21',
-    corte_variables: '2026-10-20',
-    version_modelo: 'candidato_h1_logreg_v1',
-    fecha_entrenamiento: '2026-10-21',
-    dias_activos_30d: 5,
-    algoritmo: 'LogisticRegression'
-}, box, cont);
-assert.ok(cont.innerHTML.includes('text-5xl font-black'), 'Debe incluir porcentaje destacado con clase 5xl bold');
-assert.ok(cont.innerHTML.includes('74.2%'));
-assert.ok(cont.innerHTML.includes('2026-10-22'));
-assert.ok(cont.innerHTML.includes('Probabilidad de al menos un ingreso en el siguiente día operativo'));
-assert.ok(cont.innerHTML.includes('Experimental · pendiente de validación prospectiva'));
-assert.ok(!cont.innerHTML.includes('[EXPERIMENTAL'));
-assert.ok(!cont.innerHTML.includes('bg-amber-'));
-assert.ok(!cont.innerHTML.includes('Versión'));
-assert.ok(!cont.innerHTML.includes('Fecha de entrenamiento'));
-assert.equal((cont.innerHTML.match(/2026-10-22/g) || []).length,1);
-assert.ok(cont.innerHTML.includes('Último día utilizado en variables'));
+const assert=require('node:assert/strict');
+const elements=new Map();
+const document={getElementById(id){if(!elements.has(id))elements.set(id,{value:'FICTICIO1234',disabled:false,innerHTML:'',textContent:'',attrs:{},classList:{remove(){},add(){}},setAttribute(k,v){this.attrs[k]=v}});return elements.get(id)},querySelector(){return {getAttribute(){return 'csrf-ficticio'}}}};
+function escaparHTML(v){return String(v).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');}
+let cancel,cleared=0,mode='success';
+function setTimeout(cb,ms){assert.equal(ms,30000);cancel=cb;return 1;}
+function clearTimeout(){cleared++;}
+async function fetch(url,options){
+ assert.equal(url,'/admin/api/ml/predecir-retorno');assert.equal(options.method,'POST');
+ assert.deepEqual(JSON.parse(options.body),{codigo_matricula:'FICTICIO1234'});
+ assert.equal(options.headers['X-CSRFToken'],'csrf-ficticio');
+ assert.equal(document.getElementById('resultado-retorno-box').attrs['aria-busy'],'true');
+ assert.ok(document.getElementById('retorno-contenido').textContent.includes('Verificando'));
+ if(mode==='timeout'){cancel();assert.ok(options.signal.aborted);throw Object.assign(new Error(),{name:'AbortError'});}
+ if(mode==='error')return {ok:false,json:async()=>({mensaje:'Acceso denegado'})};
+ return {ok:true,json:async()=>({status:'success',codigo_consultado:'FICTICIO1234',probabilidad_h1:.7,fecha_referencia:'2026-10-21',fecha_objetivo:'2026-10-22'})};
+}
+(async()=>{
+ await ejecutarPrediccionRetorno({preventDefault(){}});
+ let out=document.getElementById('retorno-contenido').innerHTML;
+ assert.ok(out.includes('70.0'));assert.ok(out.includes('width:70.0%'));assert.ok(out.includes('aria-valuenow="70.0"'));assert.ok(out.includes('22/10/2026'));
+ for(const prob of [null,NaN,1.2]){mostrarRetornoH1({status:'success',probabilidad_h1:prob});assert.ok(document.getElementById('retorno-contenido').innerHTML.includes('No calculable'));assert.ok(!document.getElementById('retorno-contenido').innerHTML.includes('role="progressbar"'));}
+ mostrarRetornoH1({status:'no_calculable',mensaje:'<img src=x onerror=alert(1)>'});assert.ok(!document.getElementById('retorno-contenido').innerHTML.includes('<img'));
+ mode='timeout';await ejecutarPrediccionRetorno({preventDefault(){}});assert.ok(document.getElementById('retorno-contenido').innerHTML.includes('reintentar'));
+ mode='error';await ejecutarPrediccionRetorno({preventDefault(){}});assert.ok(document.getElementById('retorno-contenido').innerHTML.includes('Acceso denegado'));
+ assert.equal(document.getElementById('btn-evaluar-retorno').disabled,false);assert.equal(document.getElementById('resultado-retorno-box').attrs['aria-busy'],'false');assert.equal(cleared,3);
+})().catch(e=>{console.error(e);process.exitCode=1});
 '''
-        run=subprocess.run([node],input=renderer+harness,text=True,capture_output=True)
-        self.assertEqual(run.returncode,0,run.stderr)
-
-    def test_rotulos_historicos_ausencia_h7_y_aislamiento_secciones(self):
-        getter=MagicMock(); getter.metadatos={}
-        with patch.object(routes.PredictorRetornoAlumno,'obtener_instancia',return_value=getter), \
-             patch.object(routes,'obtener_informacion_modelo',return_value={}):
-            html=self.client.get('/admin/ml').get_data(as_text=True)
-
-        # 1. Ausencia del bloque H7 (7 días) en la interfaz
-        self.assertNotIn('retorno-7-operativos', html)
-        self.assertNotIn('retorno-siete-experimental', html)
-        self.assertNotIn('form-retorno-siete', html)
-        self.assertNotIn('consultarRetornoSiete', html)
-        self.assertNotIn('GradientBoostingClassifier · Experimental local', html)
-
-        # 2. Secciones aisladas: seccion-afluencia y seccion-individual no contienen la auditoría fija de junio-julio
-        self.assertIn('id="seccion-afluencia"', html)
-        self.assertIn('id="seccion-individual"', html)
-        self.assertIn('id="seccion-retorno"', html)
-
-        sec_afluencia = html.split('id="seccion-afluencia"')[1].split('id="seccion-individual"')[0]
-        self.assertNotIn('Auditoría histórica de junio–julio 2026 · cifras de referencia', sec_afluencia)
-        self.assertNotIn('18,168', sec_afluencia)
-        # En Afluencia, el periodo histórico documentado está explícitamente rotulado
-        self.assertIn('Periodo histórico documentado (no es el corte actual)', sec_afluencia)
-
-        sec_individual = html.split('id="seccion-individual"')[1].split('id="seccion-retorno"')[0]
-        self.assertNotIn('Auditoría histórica de junio–julio 2026 · cifras de referencia', sec_individual)
-        # En Análisis Individual, la línea base histórica está en su propio desplegable con rótulo claro
-        self.assertIn('Línea base histórica de referencia · Central · junio–julio 2026', sec_individual)
-
-        sec_retorno = html.split('id="seccion-retorno"')[1]
-        self.assertNotIn('id="retorno-historico"',sec_retorno)
-        self.assertNotIn('18,168',sec_retorno)
-        self.assertNotIn('Auditoría histórica de junio–julio',sec_retorno)
-
-
-
-if __name__=='__main__':
-    unittest.main()
-
+        result=subprocess.run([node],input=functions+harness,text=True,capture_output=True)
+        self.assertEqual(result.returncode,0,result.stderr)
