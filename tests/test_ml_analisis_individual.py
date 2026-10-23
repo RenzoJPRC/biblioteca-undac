@@ -105,10 +105,10 @@ def _generar_filas_fixture_descriptivo():
 
 
 _FILAS_FIXTURE_DESCRIPTIVO = _generar_filas_fixture_descriptivo()
-_MOCK_MAX_FECHA_BD = date(2026, 7, 31)
 
 
 def _crear_mock_db_cursor(*args, **kwargs):
+    obtener_fecha_maxima = kwargs.pop("obtener_fecha_maxima", lambda: date(2026, 7, 31))
     mock_conn = MagicMock()
     mock_cursor = MagicMock()
 
@@ -151,7 +151,7 @@ def _crear_mock_db_cursor(*args, **kwargs):
                 f_ref = date(2026, 7, 31)
             mock_cursor.fetchall.return_value = [(d,) for d in _FECHAS_OPERATIVAS_FIXTURE if d <= f_ref]
         elif "MAX(CAST(FECHAHORA AS DATE))" in sql_u:
-            mock_cursor.fetchone.return_value = (_MOCK_MAX_FECHA_BD,) if _MOCK_MAX_FECHA_BD is not None else (None,)
+            mock_cursor.fetchone.return_value = (obtener_fecha_maxima(),)
         else:
             mock_cursor.fetchall.return_value = []
             mock_cursor.fetchone.return_value = None
@@ -164,12 +164,15 @@ def _crear_mock_db_cursor(*args, **kwargs):
 
 
 class TestAnalisisIndividualML(unittest.TestCase):
+    """Servicio histórico y estadísticas; el dashboard usa el H1 único en sus pruebas propias."""
 
     def setUp(self):
         self.app = app
         self.client = self.app.test_client()
         limpiar_cache_analisis_descriptivo()
-        self.patcher_db = patch("ml.services.analisis_individual.get_db_cursor", side_effect=_crear_mock_db_cursor)
+        self.max_fecha_bd = date(2026, 7, 31)
+        self.patcher_db = patch("ml.services.analisis_individual.get_db_cursor",
+            side_effect=lambda *a, **kw: _crear_mock_db_cursor(*a, obtener_fecha_maxima=lambda: self.max_fecha_bd, **kw))
         self.patcher_db.start()
 
     def tearDown(self):
@@ -585,10 +588,10 @@ class TestAnalisisIndividualML(unittest.TestCase):
 
     def test_25_separacion_fechas_referencia_bd_y_entrenamiento(self):
         """
-        Verifica la estricta separación entre:
+        Verifica el contrato del servicio histórico interno, no el H1 único del dashboard:
         1. fecha_referencia (la fecha del pronóstico).
         2. fecha_corte_bd / ultima_fecha_bd (la fecha máxima observada en la base de datos).
-        3. fecha_entrenamiento_artefacto (corte fijo del entrenamiento del modelo: 2026-07-31).
+        3. fecha_entrenamiento_artefacto (campo legado que representa el corte de datos 2026-07-31, no la fecha de creación del archivo).
         """
         # Caso A: Pronóstico dentro del periodo de entrenamiento (fecha_referencia <= 2026-07-31)
         res_entrenamiento = predecir_retorno_alumno(
@@ -603,11 +606,9 @@ class TestAnalisisIndividualML(unittest.TestCase):
         self.assertEqual(res_entrenamiento["estado_vigencia"], "vigente")
 
         # Caso B: Pronóstico post-entrenamiento pero con datos actualizados en BD (ej. octubre)
-        global _MOCK_MAX_FECHA_BD
-        fecha_bd_anterior = _MOCK_MAX_FECHA_BD
+        fecha_bd_anterior = self.max_fecha_bd
         try:
-            import tests.test_ml_analisis_individual as mod_test
-            mod_test._MOCK_MAX_FECHA_BD = date(2026, 10, 20)
+            self.max_fecha_bd = date(2026, 10, 20)
             res_post = predecir_retorno_alumno(
                 codigo_matricula="2341304357",
                 fecha_referencia="2026-10-15"
@@ -622,20 +623,18 @@ class TestAnalisisIndividualML(unittest.TestCase):
             self.assertEqual(res_post["dias_desfase_bd"], 0)
             self.assertFalse(res_post["es_desfase_severo"])
         finally:
-            import tests.test_ml_analisis_individual as mod_test
-            mod_test._MOCK_MAX_FECHA_BD = fecha_bd_anterior
+            self.max_fecha_bd = fecha_bd_anterior
 
     def test_26_fecha_por_defecto_dinamica_toma_ultima_fecha_bd(self):
         """
-        Si el usuario no especifica fecha_referencia, el sistema debe tomar dinámicamente
-        la última fecha real disponible en la base de datos (y no quedarse fijo en 2026-07-31).
+        El servicio histórico interno usa MAX de la BD simulada cuando no recibe referencia;
+        2026-07-31 es solo el valor inicial del fixture, no un fallback productivo.
+        El dashboard H1 actual usa cobertura confirmada y tiene pruebas separadas.
         """
-        global _MOCK_MAX_FECHA_BD
-        fecha_bd_anterior = _MOCK_MAX_FECHA_BD
+        fecha_bd_anterior = self.max_fecha_bd
         try:
-            import tests.test_ml_analisis_individual as mod_test
             # Simular que en la BD los ingresos llegan hasta el 20 de octubre de 2026
-            mod_test._MOCK_MAX_FECHA_BD = date(2026, 10, 20)
+            self.max_fecha_bd = date(2026, 10, 20)
             res = predecir_retorno_alumno(codigo_matricula="2341304357")
             self.assertEqual(res["status"], "success")
             self.assertEqual(res["fecha_referencia"], "2026-10-20")
@@ -646,20 +645,17 @@ class TestAnalisisIndividualML(unittest.TestCase):
             self.assertEqual(res["tipo_prediccion"], "experimental_post_entrenamiento")
             self.assertEqual(res["estado_validacion"], "pendiente_validacion_prospectiva")
         finally:
-            import tests.test_ml_analisis_individual as mod_test
-            mod_test._MOCK_MAX_FECHA_BD = fecha_bd_anterior
+            self.max_fecha_bd = fecha_bd_anterior
 
     def test_27_fecha_historica_seleccionada_respeta_input_usuario(self):
         """
-        Si el usuario selecciona explícitamente una fecha de referencia histórica,
-        el sistema debe respetarla exactamente para permitir evaluaciones retrospectivas.
+        El servicio histórico interno conserva su referencia retrospectiva explícita.
+        El endpoint H1 actual rechaza fechas del cliente; este caso no cambia ese contrato.
         """
-        global _MOCK_MAX_FECHA_BD
-        fecha_bd_anterior = _MOCK_MAX_FECHA_BD
+        fecha_bd_anterior = self.max_fecha_bd
         try:
-            import tests.test_ml_analisis_individual as mod_test
             # Aunque la BD tenga datos hasta octubre, el usuario solicita fecha retrospectiva de junio
-            mod_test._MOCK_MAX_FECHA_BD = date(2026, 10, 20)
+            self.max_fecha_bd = date(2026, 10, 20)
             res = predecir_retorno_alumno(
                 codigo_matricula="2341304357",
                 fecha_referencia="2026-06-25"
@@ -673,19 +669,16 @@ class TestAnalisisIndividualML(unittest.TestCase):
             self.assertEqual(res["tipo_prediccion"], "vigente_en_periodo_entrenamiento")
             self.assertEqual(res["estado_validacion"], "validada_en_muestra")
         finally:
-            import tests.test_ml_analisis_individual as mod_test
-            mod_test._MOCK_MAX_FECHA_BD = fecha_bd_anterior
+            self.max_fecha_bd = fecha_bd_anterior
 
     def test_28_ausencia_de_datos_en_bd_sin_fecha_devuelve_estado_explicito(self):
         """
         Si no hay registros en la base de datos (MAX FechaHora es None) y no se proporciona fecha,
         debe devolver un estado explícito 'sin_datos_en_bd' en lugar de usar silenciosamente el corte del artefacto.
         """
-        global _MOCK_MAX_FECHA_BD
-        fecha_bd_anterior = _MOCK_MAX_FECHA_BD
+        fecha_bd_anterior = self.max_fecha_bd
         try:
-            import tests.test_ml_analisis_individual as mod_test
-            mod_test._MOCK_MAX_FECHA_BD = None
+            self.max_fecha_bd = None
             res = predecir_retorno_alumno(codigo_matricula="2341304357")
             self.assertEqual(res["status"], "sin_datos_en_bd")
             self.assertFalse(res["confiable"])
@@ -694,8 +687,7 @@ class TestAnalisisIndividualML(unittest.TestCase):
             self.assertEqual(res["fecha_entrenamiento_artefacto"], "2026-07-31")
             self.assertIn("No se encontraron registros de ingresos", res["mensaje"])
         finally:
-            import tests.test_ml_analisis_individual as mod_test
-            mod_test._MOCK_MAX_FECHA_BD = fecha_bd_anterior
+            self.max_fecha_bd = fecha_bd_anterior
 
     def test_29_exclusion_estricta_de_visitas_posteriores_al_corte(self):
         """
@@ -724,11 +716,9 @@ class TestAnalisisIndividualML(unittest.TestCase):
         Verifica que una consulta post-entrenamiento (fecha_referencia > 2026-07-31) presente
         claramente el estado experimental y la advertencia de validación prospectiva.
         """
-        global _MOCK_MAX_FECHA_BD
-        fecha_bd_anterior = _MOCK_MAX_FECHA_BD
+        fecha_bd_anterior = self.max_fecha_bd
         try:
-            import tests.test_ml_analisis_individual as mod_test
-            mod_test._MOCK_MAX_FECHA_BD = date(2026, 10, 20)
+            self.max_fecha_bd = date(2026, 10, 20)
             res = predecir_retorno_alumno(
                 codigo_matricula="2341304357",
                 fecha_referencia="2026-10-15"
@@ -741,8 +731,7 @@ class TestAnalisisIndividualML(unittest.TestCase):
             self.assertIn("validación prospectiva", res["advertencia_experimental"].lower())
             self.assertIn("[EXPERIMENTAL - PENDIENTE VALIDACIÓN PROSPECTIVA]", res["mensaje"])
         finally:
-            import tests.test_ml_analisis_individual as mod_test
-            mod_test._MOCK_MAX_FECHA_BD = fecha_bd_anterior
+            self.max_fecha_bd = fecha_bd_anterior
 
     def test_31_consulta_posterior_a_ultima_fecha_bd_es_no_calculable(self):
         """
@@ -750,11 +739,9 @@ class TestAnalisisIndividualML(unittest.TestCase):
         registros en BD (ej. 23/10 con BD hasta 21/10) sea rechazada como 'no_calculable'
         debido a la ausencia de cobertura intermedia confirmada.
         """
-        global _MOCK_MAX_FECHA_BD
-        fecha_bd_anterior = _MOCK_MAX_FECHA_BD
+        fecha_bd_anterior = self.max_fecha_bd
         try:
-            import tests.test_ml_analisis_individual as mod_test
-            mod_test._MOCK_MAX_FECHA_BD = date(2026, 10, 21)
+            self.max_fecha_bd = date(2026, 10, 21)
             res = predecir_retorno_alumno(
                 codigo_matricula="2341304357",
                 fecha_referencia="2026-10-23"
@@ -765,8 +752,7 @@ class TestAnalisisIndividualML(unittest.TestCase):
             self.assertIn("posterior", res["mensaje"])
             self.assertIn("sin cobertura confirmada", res["mensaje"])
         finally:
-            import tests.test_ml_analisis_individual as mod_test
-            mod_test._MOCK_MAX_FECHA_BD = fecha_bd_anterior
+            self.max_fecha_bd = fecha_bd_anterior
 
 
 if __name__ == "__main__":

@@ -13,6 +13,7 @@ Verifica:
 """
 
 import json
+import os
 import unittest
 from datetime import date
 from pathlib import Path
@@ -40,8 +41,6 @@ class TestBacktestRobustezReconciliado(unittest.TestCase):
             cls.data = json.load(f)
 
         cls.panel_path = DATA_DIR / "dataset_retorno_panel_completo_backtest.csv"
-        cls.df_panel = pd.read_csv(cls.panel_path)
-        cls.df_panel["FechaRef"] = pd.to_datetime(cls.df_panel["FechaRef"]).dt.date
 
         cls.cal_s1, cls.cal_s2 = construir_calendarios_por_semestre()
         cls.cal_completo = cls.cal_s1 + cls.cal_s2
@@ -108,6 +107,12 @@ class TestBacktestRobustezReconciliado(unittest.TestCase):
 
     def test_reconciliacion_exacta_conteos_reportados_vs_subconjuntos_panel(self):
         """Compara automáticamente cada fecha y conteo de observaciones del JSON contra el panel real."""
+        if os.getenv("ML_TEST_DATOS_LOCALES") != "1":
+            self.skipTest("Integración histórica opt-in: requiere ML_TEST_DATOS_LOCALES=1 y dataset_retorno_panel_completo_backtest.csv privado; no se publica ni se sustituye por conteos inventados.")
+        if not self.panel_path.exists():
+            self.skipTest("Integración histórica: falta dataset_retorno_panel_completo_backtest.csv local no versionado.")
+        self.df_panel = pd.read_csv(self.panel_path)
+        self.df_panel["FechaRef"] = pd.to_datetime(self.df_panel["FechaRef"]).dt.date
         cal_s1, cal_s2 = construir_calendarios_por_semestre()
         cal_completo = cal_s1 + cal_s2
 

@@ -14,6 +14,7 @@ Verifica:
 """
 
 import json
+import os
 import unittest
 from datetime import date, timedelta
 from pathlib import Path
@@ -41,9 +42,19 @@ class TestExperimentoCincoModelosRetorno(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.df_panel, cls.calendario = preparar_datos_panel_y_visitas()
-        cls.parts_h1 = obtener_particiones_purgadas(cls.df_panel, cls.calendario, horizonte_dias=1)
-        cls.parts_h7 = obtener_particiones_purgadas(cls.df_panel, cls.calendario, horizonte_dias=7)
+        # Calendario del experimento legado, no el calendario vigente de H1.
+        cls.calendario = construir_calendario_real_operativo()
+
+    def cargar_datos_locales(self):
+        if os.getenv("ML_TEST_DATOS_LOCALES") != "1":
+            self.skipTest("Integración histórica opt-in: requiere ML_TEST_DATOS_LOCALES=1 y los CSV privados dataset_retorno_panel_completo_backtest.csv / dataset_retorno_visitas_diarias_completo.csv; CI no reconstruye ni inventa observaciones.")
+        paths=[DATA_DIR/'dataset_retorno_panel_completo_backtest.csv',DATA_DIR/'dataset_retorno_visitas_diarias_completo.csv']
+        missing=[p.name for p in paths if not p.exists()]
+        if missing:
+            self.skipTest("Integración histórica: faltan archivos locales no versionados: " + ', '.join(missing))
+        self.df_panel, self.calendario = preparar_datos_panel_y_visitas()
+        self.parts_h1 = obtener_particiones_purgadas(self.df_panel, self.calendario, horizonte_dias=1)
+        self.parts_h7 = obtener_particiones_purgadas(self.df_panel, self.calendario, horizonte_dias=7)
 
     def test_calendario_real_operativo_y_distincion_agosto(self):
         """Verifica que el calendario real no marque agosto completo como cerrado y distinga cierres."""
@@ -63,6 +74,7 @@ class TestExperimentoCincoModelosRetorno(unittest.TestCase):
 
     def test_etiquetas_julio_17_a_31_resueltas_sin_censura_artificial(self):
         """Verifica que las referencias del 17 al 31 de julio tengan etiquetas completas en H1 y H7."""
+        self.cargar_datos_locales()
         df_julio_tardio = self.df_panel[
             (self.df_panel["FechaRef"] >= date(2026, 7, 17)) &
             (self.df_panel["FechaRef"] <= date(2026, 7, 31))
@@ -79,6 +91,7 @@ class TestExperimentoCincoModelosRetorno(unittest.TestCase):
 
     def test_censuras_estrictas_al_corte_21_octubre(self):
         """Verifica que no se usen como completas etiquetas cuya ventana todavía esté abierta."""
+        self.cargar_datos_locales()
         # 1. Para H1: 19/10 debe tener etiqueta completa; 20/10 debe estar censurado (sig. día en curso)
         df_19_oct = self.df_panel[self.df_panel["FechaRef"] == date(2026, 10, 19)]
         df_20_oct = self.df_panel[self.df_panel["FechaRef"] == date(2026, 10, 20)]
@@ -118,6 +131,7 @@ class TestExperimentoCincoModelosRetorno(unittest.TestCase):
 
     def test_purged_temporal_split_sin_fuga_temporal(self):
         """Verifica que la purga elimine rigurosamente el solapamiento hacia bloques futuros."""
+        self.cargar_datos_locales()
         cal = self.calendario
 
         # 1. Para H1:
@@ -158,9 +172,20 @@ class TestExperimentoCincoModelosRetorno(unittest.TestCase):
         X_val = pd.DataFrame(np.random.randn(40, len(VARIABLES_RETORNO)), columns=VARIABLES_RETORNO)
         y_val = pd.Series(np.random.choice([0, 1], size=40, p=[0.7, 0.3]))
 
-        factory = lambda: HistGradientBoostingClassifier(random_state=42)
+        class EstimadorFicticio:
+            def fit(self, X, y):
+                self.X_ajuste = X.copy()
+                self.y_ajuste = y.copy()
+                return self
+            def predict_proba(self, X):
+                probability = np.linspace(.1, .9, len(X))
+                return np.column_stack((1-probability,probability))
+        estimador = EstimadorFicticio()
+        factory = lambda: estimador
         u = seleccionar_umbral_optimo_validacion(factory, X_tr, y_tr, X_val, y_val)
 
+        pd.testing.assert_frame_equal(estimador.X_ajuste,X_tr)
+        pd.testing.assert_series_equal(estimador.y_ajuste,y_tr)
         self.assertIsInstance(u, float)
         self.assertGreaterEqual(u, 0.15)
         self.assertLessEqual(u, 0.85)
@@ -178,16 +203,17 @@ class TestExperimentoCincoModelosRetorno(unittest.TestCase):
         self.assertTrue(cand_hgb_path.exists(), "El candidato HGB H1 debe existir")
         self.assertTrue(cand_hgb_meta.exists(), "Los metadatos del candidato HGB H1 deben existir")
 
-        cand_lr_path = MODELS_DIR / "modelo_retorno_alumno_candidato_logreg_h1.joblib"
-        cand_lr_meta = MODELS_DIR / "metadatos_retorno_alumno_candidato_logreg_h1.json"
-        self.assertTrue(cand_lr_path.exists(), "El candidato LogReg H1 debe existir")
-        self.assertTrue(cand_lr_meta.exists(), "Los metadatos del candidato LogReg H1 deben existir")
-
         # 3. La aplicación actual en servicio NO carga los candidatos
         from ml.services.analisis_individual import PredictorRetornoAlumno
         predictor = PredictorRetornoAlumno.obtener_instancia()
         self.assertEqual(predictor.ruta_modelo, prod_model_path)
         self.assertNotEqual(predictor.ruta_modelo, cand_hgb_path)
+
+    def test_candidato_logreg_local_separado(self):
+        paths=[MODELS_DIR/'modelo_retorno_alumno_candidato_logreg_h1.joblib',MODELS_DIR/'metadatos_retorno_alumno_candidato_logreg_h1.json']
+        if os.getenv("ML_TEST_DATOS_LOCALES") != "1" or not all(p.exists() for p in paths):
+            self.skipTest("Integración histórica opt-in: candidato LogReg local y metadatos no versionados; no son dependencias del H1 actual.")
+        self.assertTrue(all(p.is_file() for p in paths))
 
     def test_corte_temporal_candidato_h1_y_ausencia_informacion_futura(self):
         """Verifica que el candidato H1 se entrene hasta el 19/10 y excluya estrictamente el 20/10 y 21/10."""
@@ -207,7 +233,8 @@ class TestExperimentoCincoModelosRetorno(unittest.TestCase):
         self.assertEqual(cand_pkg["fecha_corte_entrenamiento"], "2026-10-19")
         self.assertEqual(cand_pkg["algoritmo"], "HistGradientBoostingClassifier")
 
-        # Verificar que 20/10/2026 NO tenga etiquetas en el entrenamiento
+    def test_etiquetas_20_octubre_integracion_historica(self):
+        self.cargar_datos_locales()
         df_20 = self.df_panel[self.df_panel["FechaRef"] == date(2026, 10, 20)]
         self.assertTrue(df_20["target_h1"].isna().all(), "El 20/10 debe ser estrictamente NaN para evitar fuga del 21/10")
 
@@ -215,6 +242,8 @@ class TestExperimentoCincoModelosRetorno(unittest.TestCase):
         """Verifica que la ejecución de sombra cumpla con aislamiento de fecha objetivo y exclusión de Git."""
         import pandas as pd
         csv_sombra = ROOT_DIR / "scratch" / "predicciones_sombra_h1.csv"
+        if os.getenv("ML_TEST_DATOS_LOCALES") != "1" or not csv_sombra.exists():
+            self.skipTest("Integración histórica opt-in: scratch/predicciones_sombra_h1.csv privado no versionado; no es una prueba del registro prospectivo actual.")
         self.assertTrue(csv_sombra.exists(), "El archivo de predicciones en sombra debe existir en scratch/")
 
         df_sombra = pd.read_csv(csv_sombra)
