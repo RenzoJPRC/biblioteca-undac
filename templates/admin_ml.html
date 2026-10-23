@@ -108,7 +108,7 @@
                         Actualización de Afluencia General (Gráfico y Pronóstico)
                     </h4>
                     <p class="text-xs text-slate-500 mt-0.5">
-                        Refresca en memoria los registros recientes de afluencia para el gráfico histórico y el pronóstico general. No actualiza las pestañas de Análisis Individual ni Predicción de Retorno.
+                        Refresca en memoria el gráfico y recalcula el pronóstico combinando el histórico agregado con los ingresos recientes de captura confirmada mediante consultas de solo lectura. No actualiza tablas ni las pestañas de Análisis Individual o Retorno.
                     </p>
                 </div>
             </div>
@@ -188,11 +188,12 @@
                         </label>
                         <select id="selector-modelo" name="modelo"
                             class="w-full border border-slate-300 rounded-lg px-3 py-2 text-xs bg-white focus:ring-2 focus:ring-indigo-500 outline-none">
-                            <option value="candidato" selected>Gradient Boosting (Candidato Ganador - Recomendado)</option>
-                            <option value="produccion">Random Forest (Línea Base Producción Original)</option>
+                            <option value="produccion" {% if not info_afluencia.get('es_candidato') %}selected{% endif %}>RandomForestClassifier · Producción</option>
+                            <option value="candidato" {% if info_afluencia.get('es_candidato') %}selected{% endif %} {% if not info_afluencia.get('modelo_candidato_disponible') %}disabled{% endif %}>GradientBoostingClassifier · Candidato</option>
                         </select>
                         <p class="text-[11px] text-slate-400">
-                            Conmuta entre el candidato Gradient Boosting y el modelo histórico Random Forest.
+                            Ambos usan la misma fuente histórica compartida. El candidato no sustituye automáticamente a Random Forest.
+                            {% if not info_afluencia.get('modelo_candidato_disponible') %}<span class="block">Candidato no disponible: {{ info_afluencia.get('motivo_candidato_no_disponible') or 'No se pudo verificar la carga del artefacto.' }}</span>{% endif %}
                         </p>
                     </div>
 
@@ -374,6 +375,7 @@
             </section>
         </div>
 
+        <p id="diagnostico-fuente-afluencia" class="text-xs text-slate-600" aria-live="polite">Fuente y cobertura del pronóstico: pendientes de consulta.</p>
         <p id="afluencia-consulta-descriptiva" class="text-xs text-slate-500" aria-live="polite">Periodo y hora de consulta descriptiva: pendientes de carga desde el endpoint existente.</p>
         <!-- Comportamiento histórico por hora de molinetes -->
         <section class="bg-white border border-slate-200 rounded-xl shadow-sm">
@@ -1281,7 +1283,7 @@
         document.getElementById("estado-modelo").textContent = "Procesando";
 
         try {
-            const modeloSeleccionado = document.getElementById("selector-modelo")?.value || "candidato";
+            const modeloSeleccionado = document.getElementById("selector-modelo")?.value || "produccion";
             const respuesta = await fetch("/admin/api/ml/predecir-afluencia", {
                 method: "POST",
                 headers: {
@@ -1341,6 +1343,8 @@
         document.getElementById("nivel-predicho").textContent = nivel;
 
         const elEstado = document.getElementById("estado-modelo");
+        const contextoHistorial = document.getElementById("diagnostico-fuente-afluencia");
+        if (contextoHistorial) contextoHistorial.textContent = `Fuente: ${consulta.fuente_historial || "no informada"}. Último dato: ${consulta.ultima_fecha_disponible || "no informado"}. Fechas para esta hora: ${consulta.fechas_historicas ?? "no informado"}. Antigüedad: ${consulta.dias_antiguedad_ultimo_registro ?? "no informada"} días. Criterios: mínimo 15 fechas y máximo 14 días.`;
         if (consulta.modo_demostracion) {
             elEstado.textContent = "Modo demostración (Historial no representativo)";
             elEstado.className = "text-xs font-semibold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200";
@@ -1617,7 +1621,7 @@
 
     async function recalcularPrediccionAfluencia(fecha, hora, sede) {
         const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || "";
-        const modeloSeleccionado = document.getElementById("selector-modelo")?.value || "candidato";
+        const modeloSeleccionado = document.getElementById("selector-modelo")?.value || "produccion";
         try {
             const respuesta = await fetch("/admin/api/ml/predecir-afluencia", {
                 method: "POST",

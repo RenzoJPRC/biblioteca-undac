@@ -27,6 +27,17 @@ def _now():
     return datetime.now(ZoneInfo('America/Lima'))
 
 
+def _hash_json_o_bytes(payload, expected, name):
+    """Solo los dos JSON afectados admiten conversión CRLF/LF, nunca otros cambios."""
+    if hashlib.sha256(payload).hexdigest() == expected:
+        return True
+    if name not in {'metadatos_candidato.json', 'preflight.json'}:
+        return False
+    lf = payload.replace(b'\r\n', b'\n')
+    return any(hashlib.sha256(value).hexdigest() == expected
+               for value in (lf, lf.replace(b'\n', b'\r\n')))
+
+
 def _profile():
     """Comprueba artefacto, metadatos, constructor y calendario antes de habilitarlo."""
     try:
@@ -34,12 +45,12 @@ def _profile():
         names=[ARTIFACT,'metadatos_candidato.json','preflight.json','constructor_congelado.py',
                'calendario_aplicado.csv','reglas_calendario_fuente.py']
         content={n:(DIRECTORY/n).read_bytes() for n in names}
-        if any(hashlib.sha256(b).hexdigest()!=manifest[n] for n,b in content.items()):
+        if any(not _hash_json_o_bytes(b,manifest[n],n) for n,b in content.items()):
             raise ValueError('Integridad')
         meta=json.loads(content['metadatos_candidato.json']); pre=json.loads(content['preflight.json'])
         if hashlib.sha256(content[ARTIFACT]).hexdigest()!=meta['artefacto_sha256']:
             raise ValueError('Artefacto')
-        if hashlib.sha256(content['preflight.json']).hexdigest()!=meta['preflight_sha256']:
+        if not _hash_json_o_bytes(content['preflight.json'],meta['preflight_sha256'],'preflight.json'):
             raise ValueError('Reglas')
         if hashlib.sha256(content['constructor_congelado.py']).hexdigest()!=pre['fuentes_sha256']['constructor']:
             raise ValueError('Constructor')

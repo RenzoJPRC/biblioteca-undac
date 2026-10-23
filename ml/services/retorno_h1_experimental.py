@@ -44,6 +44,20 @@ def _now():
     return datetime.now(ZoneInfo("America/Lima"))
 
 
+def _hash_json_o_bytes(payload, expected, name):
+    """Git normaliza los JSON de Windows a LF: aceptar solo ese cambio de EOL.
+
+    Mantiene la comprobación exacta para binarios, código y calendario; para JSON
+    no se ignoran espacios, valores ni ningún otro cambio de contenido.
+    """
+    if hashlib.sha256(payload).hexdigest()==expected:
+        return True
+    if name not in {'metadatos_candidato.json','preflight.json','inicio_evaluacion.json'}:
+        return False
+    lf=payload.replace(b'\r\n',b'\n')
+    return any(hashlib.sha256(value).hexdigest()==expected for value in (lf,lf.replace(b'\n',b'\r\n')))
+
+
 def _profile(load_model=True):
     """Verifica los bytes antes de cargar el modelo y el constructor congelados."""
     try:
@@ -53,7 +67,7 @@ def _profile(load_model=True):
         content={}
         for name in names:
             payload=(DIRECTORY/name).read_bytes()
-            if hashlib.sha256(payload).hexdigest()!=manifest["archivos"][name]:
+            if not _hash_json_o_bytes(payload,manifest["archivos"][name],name):
                 raise ValueError("Hash no coincidente")
             content[name]=payload
         meta=json.loads(content["metadatos_candidato.json"])

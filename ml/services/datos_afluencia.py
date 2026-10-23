@@ -29,6 +29,13 @@ FERIADOS_CONFIRMADOS_2026 = {
 CIERRE_CONFIRMADO_27_JULIO = "2026-07-27"
 CIERRE_CONFIRMADO_24_JULIO = "2026-07-24"
 
+# Confirmaciones operativas del responsable registradas en el proyecto:
+# 29/09–20/10 y ampliación expresa al 21/10. No es verificación técnica.
+# Aplican exclusivamente a Central; no se prolongan por observar visitas.
+CAPTURA_CONTINUA_CONFIRMADA = {
+    "Central": (date(2026, 9, 29), date(2026, 10, 21)),
+}
+
 # Almacenamiento en memoria para el refresco del análisis y pronóstico
 _HISTORIAL_REFRESCADO_MEMORIA = {}
 
@@ -355,13 +362,16 @@ def convertir_fecha(fecha_objetivo):
 def obtener_historial_agrupado(
     fecha_objetivo,
     sede="Central",
-    cursor_externo=None
+    cursor_externo=None,
+    fuente_compartida=False
 ):
     """
     Obtiene la cantidad de ingresos por fecha y hora
     anteriores a la fecha que se desea predecir.
 
-    Si se ejecutó previamente un refresco en memoria para la sede consultada,
+    Con fuente_compartida=True combina el histórico y los ingresos recientes,
+    sin depender del refresco de un worker. Es el modo usado para inferencia.
+    En consultas descriptivas, si se ejecutó previamente un refresco en memoria,
     utiliza el historial refrescado con los registros reales desde 2026-06-01.
     De lo contrario, utiliza la tabla analítica AfluenciaHistoricaAgregada.
     """
@@ -374,7 +384,7 @@ def obtener_historial_agrupado(
         raise ValueError("Debe especificar una sede válida.")
 
     # 1. Prioridad: Si existe historial refrescado en memoria para esta sede, utilizarlo
-    if sede in _HISTORIAL_REFRESCADO_MEMORIA and _HISTORIAL_REFRESCADO_MEMORIA[sede].get("df") is not None:
+    if not fuente_compartida and sede in _HISTORIAL_REFRESCADO_MEMORIA and _HISTORIAL_REFRESCADO_MEMORIA[sede].get("df") is not None:
         df_mem = _HISTORIAL_REFRESCADO_MEMORIA[sede]["df"]
         historial = df_mem[df_mem["Fecha"] < fecha_objetivo].copy()
 
@@ -448,6 +458,41 @@ def obtener_historial_agrupado(
             for descripcion in cursor.description
         ]
 
+        if fuente_compartida:
+            # Releer el día del corte permite reemplazar una última franja parcial.
+            # La cobertura no se deduce de MAX(FechaHora) ni de tener visitas.
+            corte = max(convertir_fecha(f[0]) for f in filas)
+            limite = min(fecha_objetivo, datetime.now(ZoneInfo("America/Lima")).date())
+            cursor.execute("""
+                SELECT CAST(FechaHora AS DATE) AS Fecha,
+                       DATEPART(HOUR, FechaHora) AS Hora, COUNT(*) AS CantidadIngresos
+                FROM dbo.RegistroIngresos
+                WHERE FechaHora >= ? AND FechaHora < ? AND Sede = ?
+                  AND ISNULL(EsPrueba, 0) = 0
+                  AND CAST(FechaHora AS TIME) >= CAST('08:00:00' AS TIME)
+                  AND CAST(FechaHora AS TIME) <= CAST('20:45:00.000' AS TIME)
+                GROUP BY CAST(FechaHora AS DATE), DATEPART(HOUR, FechaHora)
+                ORDER BY Fecha, Hora
+            """, (corte.isoformat(), limite.isoformat(), sede))
+            recientes = cursor.fetchall()
+            # Confirmación operativa del responsable, NO comprobación técnica.
+            # No extender este periodo por la mera presencia de nuevos registros.
+            periodo = CAPTURA_CONTINUA_CONFIRMADA.get(sede)
+            confirmadas = {d.date() for d in pd.date_range(*periodo)} if periodo else set()
+            recientes = [list(f[:3]) for f in recientes
+                         if corte <= convertir_fecha(f[0]) < limite
+                         and convertir_fecha(f[0]) in confirmadas]
+            # Reemplazar claves, nunca sumar dos fuentes que cuentan las mismas visitas.
+            combinado = {(convertir_fecha(f[0]), int(f[1])): list(f[:3]) for f in filas}
+            # Para días confirmados, RI es la fuente íntegra desde el corte,
+            # incluso cuando una franja no tiene filas (cero confirmado).
+            for dia in sorted(confirmadas):
+                if corte <= dia < limite:
+                    for hora in HORAS_PERMITIDAS:
+                        combinado[(dia, hora)] = [dia, hora, 0]
+            combinado.update({(convertir_fecha(f[0]), int(f[1])): f for f in recientes})
+            filas = list(combinado.values())
+
     historial = pd.DataFrame(
         [list(fila) for fila in filas],
         columns=columnas
@@ -469,6 +514,15 @@ def obtener_historial_agrupado(
     historial["Fecha"] = pd.to_datetime(
         historial["Fecha"]
     ).dt.date
+
+    if fuente_compartida:
+        historial = historial[
+            historial.Fecha.map(lambda d: d.weekday() < 5 and d.isoformat() != CIERRE_CONFIRMADO_24_JULIO
+                                and not date(2026, 8, 1) <= d <= date(2026, 8, 23))
+            & (historial.Fecha < limite)
+            & historial.Hora.between(8, 20)
+        ].sort_values(['Fecha', 'Hora']).reset_index(drop=True)
+        historial.attrs['fechas_ceros_confirmados'] = confirmadas
 
     fechas_operativas = historial["Fecha"].nunique()
     if sede != "Central" and fechas_operativas < 15:
@@ -499,6 +553,18 @@ def completar_horas_sin_ingresos(historial):
     Esta operación reproduce la preparación utilizada
     durante el entrenamiento.
     """
+    if 'fechas_ceros_confirmados' in historial.attrs:
+        # No inferir ceros del histórico sin una declaración explícita de captura.
+        confirmadas = historial.attrs['fechas_ceros_confirmados']
+        partes = []
+        for fecha, grupo in historial.groupby('Fecha'):
+            if fecha in confirmadas:
+                grupo = grupo.set_index('Hora').reindex(HORAS_PERMITIDAS, fill_value=0)
+                grupo['Fecha'] = fecha
+                grupo = grupo.reset_index()
+            partes.append(grupo)
+        return pd.concat(partes, ignore_index=True) if partes else historial.copy()
+
     fechas_activas = sorted(
         historial["Fecha"].unique()
     )
@@ -559,7 +625,8 @@ def construir_variables_afluencia(
 
     historial = obtener_historial_agrupado(
         fecha_objetivo,
-        sede
+        sede,
+        fuente_compartida=True
     )
 
     historial_completo = (
@@ -653,7 +720,15 @@ def construir_variables_afluencia(
     dias_antiguedad = max(0, (fecha_objetivo - ultima_fecha_date).days)
     es_desactualizado = dias_antiguedad > 14
     historial_insuficiente = len(historial_hora) < 15
-    calidad_minima_historial = bool((not es_desactualizado) and (not historial_insuficiente))
+    faltan_fechas = []
+    if 'fechas_ceros_confirmados' in historial.attrs:
+        for valor in pd.date_range(ultima_fecha_date + timedelta(days=1), fecha_objetivo - timedelta(days=1)):
+            dia = valor.date()
+            if (dia.weekday() < 5 and dia.isoformat() not in FERIADOS_CONFIRMADOS_2026
+                    and dia.isoformat() not in {CIERRE_CONFIRMADO_24_JULIO, CIERRE_CONFIRMADO_27_JULIO}
+                    and not date(2026, 8, 1) <= dia <= date(2026, 8, 23)):
+                faltan_fechas.append(dia.isoformat())
+    calidad_minima_historial = bool((not es_desactualizado) and (not historial_insuficiente) and not faltan_fechas)
     modo_demostracion = not calidad_minima_historial
 
     es_parcial = bool(hora_objetivo == 20)
@@ -664,6 +739,8 @@ def construir_variables_afluencia(
     ) if es_parcial else None
 
     motivos_advertencia = []
+    if faltan_fechas:
+        motivos_advertencia.append('Cobertura no confirmada para fechas operativas intermedias: ' + ', '.join(faltan_fechas))
     if es_parcial:
         motivos_advertencia.append(nota_parcial)
     if es_desactualizado:
@@ -683,6 +760,7 @@ def construir_variables_afluencia(
         )
 
     contexto = {
+        "fuente_historial": "AfluenciaHistoricaAgregada + RegistroIngresos (fuente compartida SELECT)",
         "fecha": fecha_objetivo.isoformat(),
         "hora": hora_objetivo,
         "sede": sede,
@@ -698,6 +776,7 @@ def construir_variables_afluencia(
         "dias_antiguedad_ultimo_registro": int(dias_antiguedad),
         "es_desactualizado": es_desactualizado,
         "historial_insuficiente": historial_insuficiente,
+        "fechas_sin_cobertura": faltan_fechas,
         "calidad_minima_historial": calidad_minima_historial,
         "criterio_justificado_por_evaluacion": False,
         "confiable": calidad_minima_historial,

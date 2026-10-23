@@ -1,0 +1,64 @@
+{
+    "nombre": "Modelo de predicción de afluencia UNDAC (Candidato Gradient Boosting)",
+    "version": "1.1.0-candidato",
+    "algoritmo": "GradientBoostingClassifier",
+    "es_candidato": true,
+    "tipo_modelo": "candidato",
+    "finalidad": "Predecir el nivel de afluencia por fecha y hora (Modelo Candidato)",
+    "variables": [
+        "Hora",
+        "DiaSemana",
+        "Mes",
+        "DiaMes",
+        "SemanaAnio",
+        "EsLunes",
+        "EsViernes",
+        "IngresosDiaAnterior",
+        "IngresosCincoDiasAntes",
+        "PromedioMovil5",
+        "PromedioHistoricoHora",
+        "TendenciaReciente"
+    ],
+    "clases": [
+        "Alto",
+        "Bajo",
+        "Medio"
+    ],
+    "limites_afluencia": {
+        "bajo_hasta": 7,
+        "medio_hasta": 35,
+        "alto_desde": 36
+    },
+    "umbrales": {
+        "bajo_maximo": 7,
+        "medio_minimo": 8,
+        "medio_maximo": 35,
+        "alto_minimo": 36,
+        "metodo": "Percentiles 33 y 66 del conjunto real de entrenamiento"
+    },
+    "configuracion": {
+        "n_estimators": 150,
+        "max_depth": 4,
+        "learning_rate": 0.08,
+        "min_samples_leaf": 3,
+        "random_state": 42
+    },
+    "metricas_validacion_septiembre": {
+        "accuracy": 0.6117,
+        "f1_macro": 0.6084,
+        "balanced_accuracy": 0.5897,
+        "recall_alto": 0.6222,
+        "precision_alto": 0.5773,
+        "casos_altos_detectados": 56,
+        "casos_altos_reales": 90
+    },
+    "periodo_entrenamiento": {
+        "inicio": "2026-05-13",
+        "fin": "2026-08-31",
+        "fechas_operativas": 72,
+        "cantidad_registros": 936
+    },
+    "fecha_entrenamiento": "2026-10-20T02:30:00",
+    "version_sklearn": "1.6.1",
+    "advertencia": "Modelo de apoyo (Candidato Gradient Boosting). La predicción no representa una garantía exacta de afluencia."
+}

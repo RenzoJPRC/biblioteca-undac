@@ -1,0 +1,21 @@
+{
+  "modelo_sha256": "4f045df9d18697469f8a8e4a9afe10d3e8039b5f2333d9a56796bc487abe158b",
+  "metadatos_sha256": "6e8352e2f55368ef184862df0ef3ee9dd203f097a58c9166fed31d08773aaf52",
+  "algoritmo": "GradientBoostingClassifier",
+  "variables": [
+    "Hora",
+    "DiaSemana",
+    "Mes",
+    "DiaMes",
+    "SemanaAnio",
+    "EsLunes",
+    "EsViernes",
+    "IngresosDiaAnterior",
+    "IngresosCincoDiasAntes",
+    "PromedioMovil5",
+    "PromedioHistoricoHora",
+    "TendenciaReciente"
+  ],
+  "procedencia": "Hashes cotejados con ml/experiments/retorno_h1_ventanas_finitas_20261021/preflight.json: modelos_antes. Configuración de 150 árboles cotejada con el informe comparativo previo; no es el GB experimental de 14 variables.",
+  "privacidad": "Solo estimador de árboles y metadatos agregados; sin filas de entrenamiento ni identificadores de alumnos."
+}

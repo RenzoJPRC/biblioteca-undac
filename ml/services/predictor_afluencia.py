@@ -1,4 +1,5 @@
 import json
+import hashlib
 import logging
 import os
 from functools import lru_cache
@@ -20,7 +21,7 @@ class PredictorAfluencia:
        ganador de la evaluación comparativa.
 
     Resiliencia y Conmutación:
-    - Por defecto ejecuta el modelo candidato si está disponible.
+    - Por defecto conserva Random Forest; el candidato requiere selección explícita.
     - Si el artefacto candidato no existe o falla en ejecución, conmuta automáticamente
       al Random Forest de producción sin lanzar error al usuario ni a la API.
     - Permite conmutar explícitamente entre 'candidato' y 'produccion' vía parámetro,
@@ -57,13 +58,27 @@ class PredictorAfluencia:
         # 2. Intentar cargar el modelo candidato (Gradient Boosting)
         self.modelo_candidato = None
         self.metadatos_candidato = None
+        self.motivo_candidato_no_disponible = 'Artefacto candidato no instalado.'
 
         if self.ruta_modelo_candidato.exists():
             try:
+                manifest_path=self.ruta_ml/'models'/'manifest_afluencia_candidato_gb.json'
+                meta_path=self.ruta_ml/'models'/'metadatos_modelo_afluencia_candidato_gb.json'
+                manifest=json.loads(manifest_path.read_text(encoding='utf-8'))
+                if (hashlib.sha256(self.ruta_modelo_candidato.read_bytes()).hexdigest()!=manifest['modelo_sha256']
+                    or hashlib.sha256(meta_path.read_bytes()).hexdigest()!=manifest['metadatos_sha256']):
+                    raise ValueError('Integridad del candidato no confirmada')
                 paquete_cand = joblib.load(self.ruta_modelo_candidato)
                 if isinstance(paquete_cand, dict) and "modelo" in paquete_cand and "metadatos" in paquete_cand:
+                    model=paquete_cand['modelo']
+                    if (type(model).__name__!='GradientBoostingClassifier'
+                        or list(model.feature_names_in_)!=manifest['variables']
+                        or manifest['variables']!=self.metadatos_prod.get('variables')
+                        or sorted(model.classes_)!=['Alto','Bajo','Medio']):
+                        raise ValueError('Candidato incompatible')
                     self.modelo_candidato = paquete_cand["modelo"]
                     self.metadatos_candidato = dict(paquete_cand["metadatos"])
+                    self.motivo_candidato_no_disponible = None
 
                     ruta_meta_cand_json = self.ruta_ml / "models" / "metadatos_modelo_afluencia_candidato_gb.json"
                     if ruta_meta_cand_json.exists():
@@ -75,13 +90,14 @@ class PredictorAfluencia:
                 else:
                     logger.warning("El archivo candidato no contiene un diccionario con 'modelo' y 'metadatos'.")
             except Exception as e_cand:
-                logger.warning("Error al cargar modelo candidato: %s. Se mantendrá Random Forest como único activo.", e_cand)
+                logger.warning("No se pudo verificar/cargar el candidato (%s); se conserva Random Forest.", type(e_cand).__name__)
                 self.modelo_candidato = None
                 self.metadatos_candidato = None
+                self.motivo_candidato_no_disponible = 'No se pudo verificar la integridad o compatibilidad del candidato.'
 
         # 3. Definir modelo activo por defecto
-        # Configuración por variable de entorno: 'candidato' (default) o 'produccion'
-        preferencia_env = os.getenv("MODELO_AFLUENCIA_ACTIVO", "candidato").strip().lower()
+        # Incorporar un artefacto no promueve el candidato automáticamente.
+        preferencia_env = os.getenv("MODELO_AFLUENCIA_ACTIVO", "produccion").strip().lower()
         if preferencia_env in ("candidato", "gradient_boosting", "gb") and self.modelo_candidato is not None:
             self.tipo_modelo_activo = "candidato"
         else:
@@ -159,6 +175,7 @@ class PredictorAfluencia:
             "tipo_modelo": tipo_modelo,
             "es_candidato": (tipo_modelo == "candidato"),
             "modelo_candidato_disponible": (self.modelo_candidato is not None),
+            "motivo_candidato_no_disponible": self.motivo_candidato_no_disponible,
             "modelo_produccion_disponible": True,
             "fecha_entrenamiento": fecha_entrenamiento,
             "periodo_entrenamiento": periodo_entrenamiento,

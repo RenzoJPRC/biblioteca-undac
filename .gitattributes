@@ -1,0 +1,3 @@
+# Preservar los bytes del candidato validado y sus metadatos.
+ml/models/modelo_afluencia_candidato_gb.joblib -text
+ml/models/metadatos_modelo_afluencia_candidato_gb.json -text whitespace=cr-at-eol

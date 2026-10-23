@@ -1,6 +1,7 @@
 """Verifica el paquete desplegable del candidato existente, sin BD ni entrenamiento."""
 import hashlib
 import json
+import re
 from pathlib import Path
 import subprocess
 import unittest
@@ -10,6 +11,14 @@ from ml.services.analisis_individual import PredictorRetornoAlumno
 
 
 class TestPaqueteH1Render(unittest.TestCase):
+    def test_ci_y_docker_comparten_version_python(self):
+        workflow=(candidate.ROOT/'.github/workflows/tests.yml').read_text(encoding='utf-8')
+        docker=(candidate.ROOT/'Dockerfile').read_text(encoding='utf-8')
+        ci=re.search(r"python-version:\s*['\"]([\d.]+)['\"]",workflow).group(1)
+        runtime=re.search(r'FROM python:([\d.]+)',docker).group(1)
+        self.assertEqual(ci,runtime)
+        self.assertEqual(ci,'3.11')
+
     def test_artefacto_y_fuentes_requeridas_estan_versionados_e_integros(self):
         root=candidate.ROOT
         names=['metadatos_candidato.json','preflight.json','receta.py','calendario_aplicado.csv',
@@ -17,7 +26,7 @@ class TestPaqueteH1Render(unittest.TestCase):
         manifest=json.loads((candidate.DIRECTORY/'manifest_evaluacion.json').read_text(encoding='utf-8'))['archivos']
         for name in names:
             path=candidate.DIRECTORY/name
-            self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(),manifest[name])
+            self.assertTrue(candidate._hash_json_o_bytes(path.read_bytes(),manifest[name],name),name)
             tracked=subprocess.check_output(['git','ls-files','--',path.relative_to(root).as_posix()],cwd=root,text=True)
             self.assertTrue(tracked.strip(),name)
         self.assertEqual(type(candidate._profile()['model']).__name__,'HistGradientBoostingClassifier')

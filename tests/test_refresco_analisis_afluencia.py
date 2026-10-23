@@ -19,6 +19,21 @@ class TestRefrescoAnalisisAfluencia(unittest.TestCase):
 
     def setUp(self):
         limpiar_cache_refresco_memoria()
+        for target in ('pyodbc.connect','pymssql.connect'):
+            blocked=patch(target,side_effect=AssertionError('Conexión real prohibida en pruebas'))
+            blocked.start()
+            self.addCleanup(blocked.stop)
+
+    def fuente_compartida_simulada(self, filas):
+        """Contexto de cursor para SELECT a la tabla agregada, nunca una BD real."""
+        from contextlib import contextmanager
+        cursor=MagicMock()
+        cursor.description=[('Fecha',),('Hora',),('CantidadIngresos',)]
+        cursor.fetchall.return_value=[tuple(row[:3]) for row in filas]
+        @contextmanager
+        def source(**kwargs):
+            yield None,cursor
+        return patch('ml.services.datos_afluencia.get_db_cursor',source)
 
     def tearDown(self):
         limpiar_cache_refresco_memoria()
@@ -188,7 +203,8 @@ class TestRefrescoAnalisisAfluencia(unittest.TestCase):
         self.assertEqual(res_refresco["status"], "success")
 
         # Ahora invocar la predicción para 2026-10-21 a las 10:00 (fecha posterior a las fechas en memoria)
-        res_pred = predecir_afluencia_desde_bd(fecha="2026-10-21", hora=10, sede="Central")
+        with self.fuente_compartida_simulada(filas_simuladas):
+            res_pred = predecir_afluencia_desde_bd(fecha="2026-10-21", hora=10, sede="Central")
         self.assertEqual(res_pred["status"], "success")
         self.assertIn("prediccion", res_pred)
         self.assertIn(res_pred["prediccion"]["nivel"], ["Bajo", "Medio", "Alto"])
@@ -400,7 +416,7 @@ class TestRefrescoAnalisisAfluencia(unittest.TestCase):
 
     def test_14_recalculo_prediccion_con_datos_refrescados(self):
         """
-        Verifica que tras actualizar en memoria, la predicción use inmediatamente el historial refrescado.
+        Verifica el recálculo con el historial compartido simulado, independiente de la caché.
         """
         filas = []
         for d in range(1, 20):
@@ -416,7 +432,8 @@ class TestRefrescoAnalisisAfluencia(unittest.TestCase):
         refrescar_analisis_afluencia_memoria(sede="Central", cursor_externo=mock_cur)
 
         # Predicción posterior al refresco
-        res_pred = predecir_afluencia_desde_bd(fecha="2026-10-20", hora=10, sede="Central")
+        with self.fuente_compartida_simulada(filas):
+            res_pred = predecir_afluencia_desde_bd(fecha="2026-10-20", hora=10, sede="Central")
         self.assertEqual(res_pred["status"], "success")
         self.assertIn("prediccion", res_pred)
         # Última fecha disponible debe ser 2026-10-19
