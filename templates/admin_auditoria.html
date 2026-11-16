@@ -1,114 +1,2364 @@
 {% extends 'layout_admin.html' %}
-{% block title %}Auditoría Global | Panel Admin{% endblock %}
+{% block title %}Centro de Auditoría y Seguridad | Panel Admin{% endblock %}
 
 {% block content %}
+<!-- ENCABEZADO SUPERIOR -->
 <header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shrink-0">
-    <div class="flex flex-col">
-        <h2 class="text-lg font-bold text-slate-700">El Gran Ojo</h2>
-        <span class="text-xs text-indigo-500 font-bold uppercase tracking-wide">Trazabilidad Total</span>
+    <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-600/20">
+            <i class="ph ph-shield-check text-xl"></i>
+        </div>
+        <div class="flex flex-col">
+            <h2 class="text-base font-bold text-slate-800 tracking-tight">Centro de Auditoría de Base de Datos</h2>
+            <span class="text-[10px] text-indigo-600 font-bold uppercase tracking-wider">
+                CIS SQL Server 2022 • COBIT 2019 DSS05 • Ley N.º 29733
+            </span>
+        </div>
+    </div>
+
+    <!-- DISTINCIÓN VISUAL OBLIGATORIA DE ENTORNOS -->
+    <div class="flex items-center gap-2">
+        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            Producción: Evidencia Solo Lectura
+        </span>
+        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+            <i class="ph ph-flask text-sm text-amber-600"></i>
+            Laboratorio: Pruebas Controladas
+        </span>
+        <a href="{{ url_for('admin_auditoria.exportar_informe_consolidado') }}" 
+           class="inline-flex items-center gap-2.5 bg-slate-900 hover:bg-slate-800 text-white px-3.5 py-1.5 rounded-xl shadow-sm transition-all ml-2 text-left border border-slate-700"
+           title="Descargar Informe Consolidado de Auditoría en formato Markdown">
+            <i class="ph ph-file-text text-lg text-indigo-400"></i>
+            <div class="flex flex-col leading-tight">
+                <span class="text-xs font-bold tracking-tight">Generar informe de auditoría</span>
+                <span class="text-[10px] text-slate-400 font-medium">Formato Markdown (.MD)</span>
+            </div>
+        </a>
     </div>
 </header>
 
-<main class="flex-1 overflow-y-auto p-6">
+<main class="flex-1 overflow-y-auto p-6 bg-slate-50">
     <div class="max-w-7xl mx-auto space-y-6">
 
-        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <div>
-                <h1 class="text-2xl font-bold text-slate-800 tracking-tight">Registro de Auditoría</h1>
-                <p class="text-sm text-slate-500 mt-1 uppercase font-semibold tracking-wider flex items-center gap-2">
-                    <i class="ph ph-eye text-sky-500"></i> EL GRAN OJO ({{ total }} EVENTOS)
-                </p>
+        <!-- MENSAJES FLASH -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="space-y-2">
+            {% for category, message in messages %}
+            <div class="p-4 rounded-xl text-sm font-medium flex items-center justify-between border shadow-sm
+                        {% if category == 'success' %} bg-emerald-50 text-emerald-800 border-emerald-200
+                        {% elif category == 'error' %} bg-rose-50 text-rose-800 border-rose-200
+                        {% else %} bg-sky-50 text-sky-800 border-sky-200 {% endif %}">
+                <div class="flex items-center gap-2">
+                    <i class="ph {% if category == 'success' %}ph-check-circle text-emerald-600{% else %}ph-warning-circle text-rose-600{% endif %} text-lg"></i>
+                    <span>{{ message }}</span>
+                </div>
+                <button type="button" onclick="this.parentElement.remove()" class="text-slate-400 hover:text-slate-600">
+                    <i class="ph ph-x text-base"></i>
+                </button>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <!-- NAVEGACIÓN POR PESTAÑAS (9 PESTAÑAS AUDITORAS) -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-2 relative group">
+            <!-- Indicadores discretos de desplazamiento horizontal (visibles cuando desborda) -->
+            <button type="button" id="tab-scroll-left" onclick="scrollTabsNav('left')" 
+                    class="hidden absolute left-1.5 top-1/2 -translate-y-1/2 z-10 w-7 h-7 bg-white/95 hover:bg-white text-slate-700 hover:text-indigo-600 rounded-full shadow-md border border-slate-200 items-center justify-center transition-all opacity-90 hover:opacity-100 focus:outline-none"
+                    aria-label="Desplazar pestañas a la izquierda" title="Desplazar a la izquierda">
+                <i class="ph ph-caret-left font-bold text-sm"></i>
+            </button>
+            <button type="button" id="tab-scroll-right" onclick="scrollTabsNav('right')" 
+                    class="hidden absolute right-1.5 top-1/2 -translate-y-1/2 z-10 w-7 h-7 bg-white/95 hover:bg-white text-slate-700 hover:text-indigo-600 rounded-full shadow-md border border-slate-200 items-center justify-center transition-all opacity-90 hover:opacity-100 focus:outline-none"
+                    aria-label="Desplazar pestañas a la derecha" title="Desplazar a la derecha">
+                <i class="ph ph-caret-right font-bold text-sm"></i>
+            </button>
+
+            <!-- Indicador responsivo para pantallas medianas/pequeñas -->
+            <div class="flex items-center justify-between text-[11px] text-slate-400 px-2 pb-1.5 sm:hidden border-b border-slate-100 mb-1">
+                <span class="flex items-center gap-1 font-medium"><i class="ph ph-arrows-horizontal text-indigo-500"></i> Desliza para explorar las 9 pestañas</span>
+                <span class="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">9 Pestañas</span>
+            </div>
+
+            <nav class="flex space-x-1.5 overflow-x-auto pb-1 scroll-smooth" aria-label="Pestañas de Auditoría" id="audit-tabs-nav">
+                <a href="{{ url_for('admin_auditoria.index', tab='resumen') }}" data-tab="resumen"
+                   class="audit-tab-btn flex flex-col items-start px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 whitespace-nowrap {% if tab_activa == 'resumen' %}bg-indigo-600 text-white shadow-md shadow-indigo-600/20 active-tab{% else %}text-slate-600 hover:bg-slate-100{% endif %}"
+                   title="Resumen ejecutivo, estado general y conciliación">
+                    <span class="flex items-center gap-1.5 whitespace-nowrap"><i class="ph ph-squares-four text-base"></i> 1. Resumen</span>
+                    <span class="text-[9px] font-normal whitespace-nowrap {% if tab_activa == 'resumen' %}text-indigo-200{% else %}text-slate-400{% endif %}">Estado general y KPIs</span>
+                </a>
+                <a href="{{ url_for('admin_auditoria.index', tab='eventos') }}" data-tab="eventos"
+                   class="audit-tab-btn flex flex-col items-start px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 whitespace-nowrap {% if tab_activa == 'eventos' %}bg-indigo-600 text-white shadow-md shadow-indigo-600/20 active-tab{% else %}text-slate-600 hover:bg-slate-100{% endif %}"
+                   title="AdminAuditLog: registro de acciones administrativas de la aplicación">
+                    <span class="flex items-center gap-1.5 whitespace-nowrap"><i class="ph ph-list-dashes text-base"></i> 2. Eventos Aplicación</span>
+                    <span class="text-[9px] font-normal whitespace-nowrap {% if tab_activa == 'eventos' %}text-indigo-200{% else %}text-slate-400{% endif %}">AdminAuditLog (bitácora app)</span>
+                </a>
+                <a href="{{ url_for('admin_auditoria.index', tab='sql') }}" data-tab="sql"
+                   class="audit-tab-btn flex flex-col items-start px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 whitespace-nowrap {% if tab_activa == 'sql' %}bg-indigo-600 text-white shadow-md shadow-indigo-600/20 active-tab{% else %}text-slate-600 hover:bg-slate-100{% endif %}"
+                   title="Principales SQL (usuarios) y db_owner (control elevado)">
+                    <span class="flex items-center gap-1.5 whitespace-nowrap"><i class="ph ph-database text-base"></i> 3. Seguridad SQL Server</span>
+                    <span class="text-[9px] font-normal whitespace-nowrap {% if tab_activa == 'sql' %}text-indigo-200{% else %}text-slate-400{% endif %}">Principales y roles db_owner</span>
+                </a>
+                <a href="{{ url_for('admin_auditoria.index', tab='trazabilidad') }}" data-tab="trazabilidad"
+                   class="audit-tab-btn flex flex-col items-start px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 whitespace-nowrap {% if tab_activa == 'trazabilidad' %}bg-indigo-600 text-white shadow-md shadow-indigo-600/20 active-tab{% else %}text-slate-600 hover:bg-slate-100{% endif %}"
+                   title="DML (datos: INSERT/UPDATE/DELETE) y DDL (estructura: CREATE/ALTER/DROP)">
+                    <span class="flex items-center gap-1.5 whitespace-nowrap"><i class="ph ph-git-commit text-base"></i> 4. Trazabilidad DML/DDL</span>
+                    <span class="text-[9px] font-normal whitespace-nowrap {% if tab_activa == 'trazabilidad' %}text-indigo-200{% else %}text-slate-400{% endif %}">DML (datos) / DDL (estructura)</span>
+                </a>
+                <a href="{{ url_for('admin_auditoria.index', tab='evidencias') }}" data-tab="evidencias"
+                   class="audit-tab-btn flex flex-col items-start px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 whitespace-nowrap {% if tab_activa == 'evidencias' %}bg-indigo-600 text-white shadow-md shadow-indigo-600/20 active-tab{% else %}text-slate-600 hover:bg-slate-100{% endif %}"
+                   title="PT (papeles de trabajo) con huella digital SHA-256">
+                    <span class="flex items-center gap-1.5 whitespace-nowrap"><i class="ph ph-hash text-base"></i> 5. Evidencias & Custodia</span>
+                    <span class="text-[9px] font-normal whitespace-nowrap {% if tab_activa == 'evidencias' %}text-indigo-200{% else %}text-slate-400{% endif %}">PT (evidencias) / SHA-256</span>
+                </a>
+                <a href="{{ url_for('admin_auditoria.index', tab='riesgos') }}" data-tab="riesgos"
+                   class="audit-tab-btn flex flex-col items-start px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 whitespace-nowrap {% if tab_activa == 'riesgos' %}bg-indigo-600 text-white shadow-md shadow-indigo-600/20 active-tab{% else %}text-slate-600 hover:bg-slate-100{% endif %}"
+                   title="RSK: riesgos preliminares o hipótesis técnicas">
+                    <span class="flex items-center gap-1.5 whitespace-nowrap"><i class="ph ph-warning text-base"></i> 6. Riesgos Preliminares</span>
+                    <span class="text-[9px] font-normal whitespace-nowrap {% if tab_activa == 'riesgos' %}text-indigo-200{% else %}text-slate-400{% endif %}">RSK (hipótesis de riesgo)</span>
+                </a>
+                <a href="{{ url_for('admin_auditoria.index', tab='hallazgos') }}" data-tab="hallazgos"
+                   class="audit-tab-btn flex flex-col items-start px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 whitespace-nowrap {% if tab_activa == 'hallazgos' %}bg-indigo-600 text-white shadow-md shadow-indigo-600/20 active-tab{% else %}text-slate-600 hover:bg-slate-100{% endif %}"
+                   title="H: hallazgos formales documentados">
+                    <span class="flex items-center gap-1.5 whitespace-nowrap"><i class="ph ph-notebook text-base"></i> 7. Hallazgos Formales</span>
+                    <span class="text-[9px] font-normal whitespace-nowrap {% if tab_activa == 'hallazgos' %}text-indigo-200{% else %}text-slate-400{% endif %}">H (hallazgos no conformes)</span>
+                </a>
+                <a href="{{ url_for('admin_auditoria.index', tab='backups') }}" data-tab="backups"
+                   class="audit-tab-btn flex flex-col items-start px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 whitespace-nowrap {% if tab_activa == 'backups' %}bg-indigo-600 text-white shadow-md shadow-indigo-600/20 active-tab{% else %}text-slate-600 hover:bg-slate-100{% endif %}"
+                   title="Copias de seguridad y pruebas de restauración">
+                    <span class="flex items-center gap-1.5 whitespace-nowrap"><i class="ph ph-hard-drives text-base"></i> 8. Backups & Recuperación</span>
+                    <span class="text-[9px] font-normal whitespace-nowrap {% if tab_activa == 'backups' %}text-indigo-200{% else %}text-slate-400{% endif %}">Copias y restauración</span>
+                </a>
+                <a href="{{ url_for('admin_auditoria.index', tab='criterios') }}" data-tab="criterios"
+                   class="audit-tab-btn flex flex-col items-start px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 whitespace-nowrap {% if tab_activa == 'criterios' %}bg-indigo-600 text-white shadow-md shadow-indigo-600/20 active-tab{% else %}text-slate-600 hover:bg-slate-100{% endif %}"
+                   title="Matriz de cumplimiento normativo CIS y COBIT">
+                    <span class="flex items-center gap-1.5 whitespace-nowrap"><i class="ph ph-matrix-logo text-base"></i> 9. Criterios CIS/COBIT</span>
+                    <span class="text-[9px] font-normal whitespace-nowrap {% if tab_activa == 'criterios' %}text-indigo-200{% else %}text-slate-400{% endif %}">Matriz de cumplimiento</span>
+                </a>
+            </nav>
+        </div>
+
+        <!-- INDICADOR FLOTANTE 'CARGANDO EVIDENCIA...' (Demoras > 300 ms) -->
+        <div id="tab-loading-indicator" class="hidden fixed bottom-6 right-6 bg-slate-900/95 text-white px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-3 z-50 border border-slate-700 animate-in fade-in duration-200">
+            <div class="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin shrink-0"></div>
+            <div class="flex flex-col">
+                <span class="text-xs font-bold tracking-tight text-white">Cargando evidencia...</span>
+                <span class="text-[10px] text-slate-300">Consultando datos de solo lectura</span>
             </div>
         </div>
 
-        <!-- Tarjetas de Resumen -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
-                <h3 class="text-xs font-bold text-slate-500 uppercase mb-4">Top Operadores Destructivos</h3>
-                <div class="space-y-3">
-                    {% for tu in tops %}
-                    <div class="flex justify-between items-center text-sm">
-                        <span class="font-medium text-slate-700 capitalize"><i
-                                class="ph ph-user text-slate-400 mr-2"></i>{{ tu[0] }}</span>
-                        <span class="bg-slate-100 text-slate-600 px-2 py-1 rounded-md text-xs font-bold">{{
-                            tu[1] }} acciones</span>
+        <!-- ÁREA DINÁMICA DE CONTENIDO DE PESTAÑAS -->
+        <div id="tab-content-area" class="transition-opacity duration-150">
+
+        <!-- ============================================================== -->
+        <!-- PESTAÑA 1: RESUMEN EJECUTIVO Y COMPLETITUD DE LA EVIDENCIA     -->
+        <!-- ============================================================== -->
+        {% if tab_activa == 'resumen' %}
+        <div class="space-y-6">
+
+            <!-- SECCIÓN OBLIGATORIA: ESTADO GENERAL DE LA AUDITORÍA -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-4">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 gap-2">
+                    <div>
+                        <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+                            <i class="ph ph-chart-pie-slice text-indigo-600 text-lg"></i> Estado general de la auditoría
+                        </h3>
+                        <p class="text-xs text-slate-500 mt-0.5">
+                            Visión consolidada y objetiva de elementos evaluados sin calificación automática de seguridad.
+                        </p>
                     </div>
-                    {% endfor %}
-                    {% if not tops %}
-                    <p class="text-slate-400 text-sm italic">No hay actividad registrada aún.</p>
+                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200 shrink-0">
+                        <i class="ph ph-shield text-slate-500"></i> Evaluación Metodológica
+                    </span>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 text-xs">
+                    <!-- Item 1: Riesgos -->
+                    <div class="p-3.5 rounded-xl bg-slate-50/80 border border-slate-200/80 flex items-start gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center font-bold shrink-0 mt-0.5">
+                            <i class="ph ph-warning text-base"></i>
+                        </div>
+                        <div>
+                            <span class="font-bold text-slate-800 block text-xs">Riesgos Preliminares (RSK)</span>
+                            <span class="text-amber-700 font-bold block text-sm mt-0.5">{{ kpis.riesgos_registrados }} hipótesis registradas</span>
+                            <span class="text-[10px] text-slate-500 block mt-0.5">RSK-01 a RSK-04 sujetas a evaluación</span>
+                        </div>
+                    </div>
+
+                    <!-- Item 2: Hallazgos -->
+                    <div class="p-3.5 rounded-xl bg-slate-50/80 border border-slate-200/80 flex items-start gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center font-bold shrink-0 mt-0.5">
+                            <i class="ph ph-notebook text-base"></i>
+                        </div>
+                        <div>
+                            <span class="font-bold text-slate-800 block text-xs">Hallazgos en Borrador (H)</span>
+                            <span class="text-rose-700 font-bold block text-sm mt-0.5">{{ kpis.hallazgos_abiertos }} en revisión de auditor</span>
+                            <span class="text-[10px] text-slate-500 block mt-0.5">H01 en espera de deliberación</span>
+                        </div>
+                    </div>
+
+                    <!-- Item 3: Evidencias Válidas -->
+                    <div class="p-3.5 rounded-xl bg-slate-50/80 border border-slate-200/80 flex items-start gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold shrink-0 mt-0.5">
+                            <i class="ph ph-check-circle text-base"></i>
+                        </div>
+                        <div>
+                            <span class="font-bold text-slate-800 block text-xs">Evidencias Válidas / Verificadas</span>
+                            <span class="text-emerald-700 font-bold block text-sm mt-0.5">{{ kpis.evidencias_validas }} papeles con hash íntegro</span>
+                            <span class="text-[10px] text-slate-500 block mt-0.5">{% if kpis.evidencias_validas >= 6 %}PT-01 a PT-06 comprobadas en disco{% else %}PT-01 a PT-05 comprobadas en disco{% endif %}</span>
+                        </div>
+                    </div>
+
+                    <!-- Item 4: Evidencias Pendientes -->
+                    <div class="p-3.5 rounded-xl bg-slate-50/80 border border-slate-200/80 flex items-start gap-3">
+                        <div class="w-8 h-8 rounded-lg {% if kpis.evidencias_pendientes == 0 %}bg-emerald-100 text-emerald-700{% else %}bg-amber-100 text-amber-700{% endif %} flex items-center justify-center font-bold shrink-0 mt-0.5">
+                            <i class="ph {% if kpis.evidencias_pendientes == 0 %}ph-check{% else %}ph-clock{% endif %} text-base"></i>
+                        </div>
+                        <div>
+                            <span class="font-bold text-slate-800 block text-xs">Evidencias Pendientes</span>
+                            <span class="{% if kpis.evidencias_pendientes == 0 %}text-emerald-700{% else %}text-amber-800{% endif %} font-bold block text-sm mt-0.5">{{ kpis.evidencias_pendientes }} pendientes</span>
+                            <span class="text-[10px] text-slate-500 block mt-0.5">{% if kpis.evidencias_pendientes == 0 %}Todas las evidencias (PT-01 a PT-06) cuentan con archivo físico{% else %}PT-06 pendiente de generación en disco{% endif %}</span>
+                        </div>
+                    </div>
+
+                    <!-- Item 5: Entorno Producción -->
+                    <div class="p-3.5 rounded-xl bg-slate-50/80 border border-slate-200/80 flex items-start gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold shrink-0 mt-0.5">
+                            <i class="ph ph-cloud text-base"></i>
+                        </div>
+                        <div>
+                            <span class="font-bold text-slate-800 block text-xs">Entorno de Producción</span>
+                            <span class="text-emerald-800 font-bold block text-sm mt-0.5">Solo Lectura (SmarterASP.NET)</span>
+                            <span class="text-[10px] text-slate-500 block mt-0.5">sys.database_principals, sys.database_role_members, AdminAuditLog</span>
+                        </div>
+                    </div>
+
+                    <!-- Item 6: Entorno Laboratorio -->
+                    <div class="p-3.5 rounded-xl bg-slate-50/80 border border-slate-200/80 flex items-start gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center font-bold shrink-0 mt-0.5">
+                            <i class="ph ph-flask text-base"></i>
+                        </div>
+                        <div>
+                            <span class="font-bold text-slate-800 block text-xs">Entorno de Laboratorio</span>
+                            <span class="text-amber-800 font-bold block text-sm mt-0.5">Pruebas Controladas (SQL Local)</span>
+                            <span class="text-[10px] text-slate-500 block mt-0.5">4 DML (dbo.Salas) y 3 DDL (dbo.AuditoriaDDL_Prueba)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Aviso de neutralidad -->
+                <div class="p-3 rounded-xl bg-slate-100/70 border border-slate-200 text-[11px] text-slate-600 flex items-center gap-2">
+                    <i class="ph ph-info text-base text-slate-500 shrink-0"></i>
+                    <span><strong>Principio de Neutralidad:</strong> Este resumen presenta el inventario objetivo de controles y evidencias recolectadas. El sistema evita calificar automáticamente la postura como "segura" o "insegura", reservando dicha atribución al informe final del auditor.</span>
+                </div>
+            </div>
+
+            <!-- GLOSARIO DE TÉRMINOS PARA USUARIOS NO TÉCNICOS -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-3">
+                <button type="button" onclick="document.getElementById('glosario-auditoria').classList.toggle('hidden')" 
+                        class="w-full flex items-center justify-between text-left">
+                    <div class="flex items-center gap-2 text-xs font-bold text-slate-700 uppercase tracking-wider">
+                        <i class="ph ph-book-open text-indigo-600 text-base"></i>
+                        <span>Glosario Rápido de Conceptos de Auditoría (Términos técnicos y explicaciones sencillas)</span>
+                    </div>
+                    <span class="text-xs text-indigo-600 font-semibold flex items-center gap-1 hover:underline">
+                        Ver / Ocultar definiciones <i class="ph ph-caret-down"></i>
+                    </span>
+                </button>
+                
+                <div id="glosario-auditoria" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 pt-2 border-t border-slate-100 text-xs">
+                    <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                        <span class="font-bold text-indigo-700 font-mono text-[11px] block">Principal SQL</span>
+                        <span class="text-slate-600 text-[11px]">Usuario o identidad reconocida por SQL Server.</span>
+                    </div>
+                    <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                        <span class="font-bold text-indigo-700 font-mono text-[11px] block">db_owner</span>
+                        <span class="text-slate-600 text-[11px]">Rol con control elevado sobre la base de datos.</span>
+                    </div>
+                    <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                        <span class="font-bold text-indigo-700 font-mono text-[11px] block">DML</span>
+                        <span class="text-slate-600 text-[11px]">Cambios en datos: INSERT, UPDATE, DELETE.</span>
+                    </div>
+                    <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                        <span class="font-bold text-indigo-700 font-mono text-[11px] block">DDL</span>
+                        <span class="text-slate-600 text-[11px]">Cambios en estructura: CREATE, ALTER, DROP.</span>
+                    </div>
+                    <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                        <span class="font-bold text-indigo-700 font-mono text-[11px] block">SHA-256</span>
+                        <span class="text-slate-600 text-[11px]">Huella digital que permite detectar alteraciones de una evidencia.</span>
+                    </div>
+                    <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                        <span class="font-bold text-indigo-700 font-mono text-[11px] block">GRANT</span>
+                        <span class="text-slate-600 text-[11px]">Permiso concedido.</span>
+                    </div>
+                    <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                        <span class="font-bold text-indigo-700 font-mono text-[11px] block">DENY</span>
+                        <span class="text-slate-600 text-[11px]">Permiso denegado.</span>
+                    </div>
+                    <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                        <span class="font-bold text-indigo-700 font-mono text-[11px] block">AdminAuditLog</span>
+                        <span class="text-slate-600 text-[11px]">Registro de acciones administrativas de la aplicación.</span>
+                    </div>
+                    <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                        <span class="font-bold text-indigo-700 font-mono text-[11px] block">PT</span>
+                        <span class="text-slate-600 text-[11px]">Papel de trabajo / evidencia.</span>
+                    </div>
+                    <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                        <span class="font-bold text-indigo-700 font-mono text-[11px] block">RSK</span>
+                        <span class="text-slate-600 text-[11px]">Riesgo preliminar.</span>
+                    </div>
+                    <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                        <span class="font-bold text-indigo-700 font-mono text-[11px] block">H</span>
+                        <span class="text-slate-600 text-[11px]">Hallazgo de auditoría.</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TARJETAS CORREGIDAS (PROBLEMAS PREVIOS RESUELTOS) -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Tarjeta 1: Corrección de nombre 'Top Operadores Destructivos' a 'Usuarios con mayor actividad registrada' -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                            <i class="ph ph-users text-indigo-500"></i> Usuarios con mayor actividad registrada
+                        </h3>
+                        <span class="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-600">
+                            Frecuencia Total
+                        </span>
+                    </div>
+                    <div class="space-y-2.5">
+                        {% for tu in tops %}
+                        <div class="flex justify-between items-center text-sm p-2 rounded-lg bg-slate-50/80 border border-slate-100">
+                            <span class="font-semibold text-slate-700 capitalize flex items-center gap-2">
+                                <i class="ph ph-user-circle text-slate-400 text-base"></i> {{ tu[0] }}
+                            </span>
+                            <span class="bg-indigo-50 text-indigo-700 px-2.5 py-0.5 rounded-full text-xs font-bold">
+                                {{ tu[1] }} acciones
+                            </span>
+                        </div>
+                        {% else %}
+                        <p class="text-slate-400 text-sm italic">No se ha registrado actividad de usuarios en la bitácora aún.</p>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Tarjeta 2: Corrección de afirmación absoluta de seguridad a declaración auditada sin sesgo -->
+                <div class="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl shadow-sm border border-slate-700 p-5 text-white relative overflow-hidden flex flex-col justify-between">
+                    <div class="absolute -right-6 -bottom-6 opacity-10">
+                        <i class="ph ph-shield-check text-9xl"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2 text-sky-400 text-xs font-bold uppercase tracking-wider mb-2">
+                            <i class="ph ph-shield-check text-base"></i> Alcance de Trazabilidad Administrativa
+                        </div>
+                        <p class="text-xs text-slate-300 leading-relaxed mb-4">
+                            Monitoreo de eventos administrativos activo. La cobertura depende de los eventos instrumentados y debe validarse mediante pruebas de auditoría periódicas.
+                        </p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <span class="inline-flex items-center gap-1.5 bg-slate-800/80 rounded-lg px-2.5 py-1.5 border border-slate-700 text-[11px] font-mono text-emerald-400">
+                            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                            AdminAuditLog Activo
+                        </span>
+                        <span class="text-[11px] font-mono text-slate-400 bg-slate-800/80 rounded-lg px-2.5 py-1.5 border border-slate-700">
+                            Trazabilidad: Operaciones POST / PUT / DELETE
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TARJETAS DE INDICADORES CLAVE (KPIS DE AUDITORÍA) -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex flex-col justify-between">
+                    <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Eventos Aplicación</span>
+                    <div class="flex items-baseline justify-between mt-2">
+                        <span class="text-2xl font-black text-slate-800">{{ kpis.total_eventos }}</span>
+                        <span class="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">AdminAuditLog</span>
+                    </div>
+                    <span class="text-[11px] text-slate-500 mt-2">Operaciones administrativas auditadas</span>
+                </div>
+
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex flex-col justify-between">
+                    <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Principales SQL</span>
+                    <div class="flex items-baseline justify-between mt-2">
+                        <span class="text-2xl font-black text-slate-800">{{ kpis.principales_visibles }}</span>
+                        <span class="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">sys.database_principals</span>
+                    </div>
+                    <span class="text-[11px] text-slate-500 mt-2">Usuarios de base de datos visibles</span>
+                </div>
+
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex flex-col justify-between">
+                    <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Membresías de Roles</span>
+                    <div class="flex items-baseline justify-between mt-2">
+                        <span class="text-2xl font-black text-slate-800">{{ kpis.roles_detectados }}</span>
+                        <span class="text-[10px] font-bold text-sky-600 bg-sky-50 px-2 py-0.5 rounded-full">Roles de BD</span>
+                    </div>
+                    <span class="text-[11px] text-slate-500 mt-2">Asignaciones en catálogo</span>
+                </div>
+
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex flex-col justify-between">
+                    <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Permisos Explícitos</span>
+                    <div class="flex items-baseline justify-between mt-2">
+                        <span class="text-2xl font-black text-slate-800">{{ kpis.permisos_detectados }}</span>
+                        <span class="text-[10px] font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">GRANT/DENY</span>
+                    </div>
+                    <span class="text-[11px] text-slate-500 mt-2">Directos sobre objetos y BD</span>
+                </div>
+
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex flex-col justify-between">
+                    <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Riesgos Preliminares</span>
+                    <div class="flex items-baseline justify-between mt-2">
+                        <span class="text-2xl font-black text-amber-600">{{ kpis.riesgos_registrados }}</span>
+                        <span class="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">Hipótesis</span>
+                    </div>
+                    <span class="text-[11px] text-slate-500 mt-2">Riesgo preliminar ≠ Hallazgo</span>
+                </div>
+
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex flex-col justify-between">
+                    <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Hallazgos Abiertos</span>
+                    <div class="flex items-baseline justify-between mt-2">
+                        <span class="text-2xl font-black text-rose-600">{{ kpis.hallazgos_abiertos }}</span>
+                        <span class="text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full">Revisión Requerida</span>
+                    </div>
+                    <span class="text-[11px] text-slate-500 mt-2">En borrador o confirmados</span>
+                </div>
+
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex flex-col justify-between">
+                    <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Último Respaldo</span>
+                    <div class="flex items-baseline justify-between mt-2">
+                        <span class="text-xs font-bold text-slate-800 truncate" title="{{ kpis.ultimo_backup }}">{{ kpis.ultimo_backup }}</span>
+                        <span class="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">Verificado</span>
+                    </div>
+                    <span class="text-[11px] text-slate-500 mt-2">Historial en aplicación</span>
+                </div>
+
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex flex-col justify-between">
+                    <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Trazabilidad DML</span>
+                    <div class="flex items-baseline justify-between mt-2">
+                        <span class="text-2xl font-black text-emerald-600">{{ kpis.dml_cobertura }}</span>
+                        <span class="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">Laboratorio</span>
+                    </div>
+                    <span class="text-[11px] text-slate-500 mt-2">Caso controlado ejecutado</span>
+                </div>
+            </div>
+
+            <!-- TABLA DE COMPLETITUD Y CONCILIACIÓN DE LA EVIDENCIA -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="p-5 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between">
+                    <div>
+                        <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+                            <i class="ph ph-scales text-indigo-600 text-base"></i> Completitud de la Evidencia y Límites Metodológicos
+                        </h3>
+                        <p class="text-xs text-slate-500 mt-0.5">
+                            Declaración formal del tipo de población evaluada, fuente exacta y restricciones técnicas del hosting para evitar conclusiones absolutas.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead>
+                            <tr class="bg-slate-100 text-slate-600 uppercase font-bold tracking-wider border-b border-slate-200">
+                                <th class="p-4">Elemento Auditado</th>
+                                <th class="p-4">Fuente / Catálogo</th>
+                                <th class="p-4">Tipo de Población</th>
+                                <th class="p-4">Alcance Visible</th>
+                                <th class="p-4">Limitación Técnica / Observación</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100 text-slate-700">
+                            {% for c in completitud %}
+                            <tr class="hover:bg-slate-50/70 transition-colors">
+                                <td class="p-4 font-bold text-slate-800">{{ c.elemento }}</td>
+                                <td class="p-4 font-mono text-[11px] text-indigo-600">{{ c.fuente }}</td>
+                                <td class="p-4">
+                                    <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase
+                                          {% if 'Censo' in c.tipo_poblacion %}bg-emerald-50 text-emerald-700 border border-emerald-200
+                                          {% elif 'Muestra' in c.tipo_poblacion %}bg-amber-50 text-amber-700 border border-amber-200
+                                          {% else %}bg-slate-100 text-slate-700{% endif %}">
+                                        {{ c.tipo_poblacion }}
+                                    </span>
+                                </td>
+                                <td class="p-4 font-medium">{{ c.elementos_visibles }}</td>
+                                <td class="p-4 text-slate-500 italic max-w-md">{{ c.limitacion }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+        {% endif %}
+
+        <!-- ============================================================== -->
+        <!-- PESTAÑA 2: EVENTOS DE APLICACIÓN (AdminAuditLog)                -->
+        <!-- ============================================================== -->
+        {% if tab_activa == 'eventos' %}
+        <div class="space-y-6">
+
+            <!-- GLOSA ACLARATORIA NO TÉCNICA -->
+            <div class="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-4 flex items-center justify-between text-xs text-indigo-900">
+                <div class="flex items-center gap-2">
+                    <i class="ph ph-info text-base text-indigo-600"></i>
+                    <span><strong>AdminAuditLog:</strong> Registro de acciones administrativas de la aplicación. Captura operaciones relevantes ejecutadas por los operadores para trazabilidad y rendición de cuentas.</span>
+                </div>
+                <span class="text-[10px] font-mono font-bold bg-white px-2.5 py-1 rounded-lg border border-indigo-200 text-indigo-700">Bitácora de Aplicación</span>
+            </div>
+
+            <!-- BARRA DE FILTROS Y EXPORTACIÓN -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+                <form method="GET" action="{{ url_for('admin_auditoria.index') }}" class="space-y-4">
+                    <input type="hidden" name="tab" value="eventos">
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 text-xs">
+                        <div>
+                            <label class="block font-bold text-slate-600 mb-1">Fecha Desde</label>
+                            <input type="date" name="fecha_desde" value="{{ filtros.fecha_desde }}" 
+                                   class="w-full rounded-xl border-slate-200 text-xs px-3 py-2 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                        <div>
+                            <label class="block font-bold text-slate-600 mb-1">Fecha Hasta</label>
+                            <input type="date" name="fecha_hasta" value="{{ filtros.fecha_hasta }}" 
+                                   class="w-full rounded-xl border-slate-200 text-xs px-3 py-2 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                        <div>
+                            <label class="block font-bold text-slate-600 mb-1">Usuario</label>
+                            <input type="text" name="usuario" value="{{ filtros.usuario }}" placeholder="Ej. admin" 
+                                   class="w-full rounded-xl border-slate-200 text-xs px-3 py-2 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                        <div>
+                            <label class="block font-bold text-slate-600 mb-1">Acción</label>
+                            <input type="text" name="accion" value="{{ filtros.accion }}" placeholder="Ej. VACIAR" 
+                                   class="w-full rounded-xl border-slate-200 text-xs px-3 py-2 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                        <div>
+                            <label class="block font-bold text-slate-600 mb-1">IP Origen</label>
+                            <input type="text" name="ip" value="{{ filtros.ip }}" placeholder="Ej. 192.168" 
+                                   class="w-full rounded-xl border-slate-200 text-xs px-3 py-2 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                        <div>
+                            <label class="block font-bold text-slate-600 mb-1">Severidad</label>
+                            <select name="nivel" class="w-full rounded-xl border-slate-200 text-xs px-3 py-2 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500">
+                                <option value="">Todos los niveles</option>
+                                <option value="Crítico" {% if filtros.nivel == 'Crítico' %}selected{% endif %}>Crítico</option>
+                                <option value="Advertencia" {% if filtros.nivel == 'Advertencia' %}selected{% endif %}>Advertencia</option>
+                                <option value="Informativo" {% if filtros.nivel == 'Informativo' %}selected{% endif %}>Informativo</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-between pt-2 border-t border-slate-100">
+                        <span class="text-xs text-slate-500 font-medium">
+                            Mostrando los últimos <strong>{{ logs|length }}</strong> eventos de un total acumulado de <strong>{{ total }}</strong>
+                        </span>
+                        <div class="flex items-center gap-2">
+                            <a href="{{ url_for('admin_auditoria.index', tab='eventos') }}" class="text-xs text-slate-500 hover:text-slate-800 font-bold px-3 py-2 rounded-xl hover:bg-slate-100 transition-colors">
+                                Limpiar Filtros
+                            </a>
+                            <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-sm transition-all flex items-center gap-1.5">
+                                <i class="ph ph-funnel text-sm"></i> Aplicar Filtros
+                            </button>
+                            <a href="{{ url_for('admin_auditoria.exportar_eventos_csv', **filtros) }}" 
+                               class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-sm transition-all flex items-center gap-1.5">
+                                <i class="ph ph-file-csv text-sm"></i> Exportar CSV
+                            </a>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <!-- TABLA DE LOGS -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead>
+                            <tr class="bg-slate-100 text-slate-600 uppercase font-bold tracking-wider border-b border-slate-200">
+                                <th class="p-4">Fecha y Hora</th>
+                                <th class="p-4">Usuario</th>
+                                <th class="p-4">Acción Protocolar</th>
+                                <th class="p-4">Categoría</th>
+                                <th class="p-4">Nivel Severidad</th>
+                                <th class="p-4">IP Origen</th>
+                                <th class="p-4">Carga Útil (Detalle Sanatizado)</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100 text-slate-700">
+                            {% for log in logs %}
+                            <tr class="hover:bg-slate-50/70 transition-colors">
+                                <td class="p-4 font-mono text-[11px] text-slate-500 whitespace-nowrap">{{ log.fecha_fmt }}</td>
+                                <td class="p-4 font-bold text-slate-800 capitalize">{{ log.usuario }}</td>
+                                <td class="p-4 font-semibold text-slate-700">{{ log.accion_legible }}</td>
+                                <td class="p-4 text-slate-500">{{ log.categoria }}</td>
+                                <td class="p-4">
+                                    <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase
+                                          {% if log.nivel == 'Crítico' %}bg-rose-100 text-rose-700 border border-rose-200
+                                          {% elif log.nivel == 'Advertencia' %}bg-amber-100 text-amber-700 border border-amber-200
+                                          {% else %}bg-emerald-100 text-emerald-700 border border-emerald-200{% endif %}">
+                                        {{ log.nivel }}
+                                    </span>
+                                </td>
+                                <td class="p-4 font-mono text-[11px] text-slate-400">{{ log.ip }}</td>
+                                <td class="p-4 text-slate-600 max-w-md truncate" title="{{ log.detalle }}">{{ log.detalle }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="7" class="p-8 text-center text-slate-400">
+                                    <i class="ph ph-magnifying-glass text-4xl mb-2 block opacity-40"></i>
+                                    No se encontraron eventos coincidentes con los filtros aplicados.
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- BARRA DE PAGINACIÓN DE EVENTOS -->
+                {% if paginacion and paginacion.total_paginas > 1 %}
+                <div class="p-4 border-t border-slate-100 bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600">
+                    <div>
+                        <span>Página <strong>{{ paginacion.page }}</strong> de <strong>{{ paginacion.total_paginas }}</strong> (Total: <strong>{{ paginacion.total_logs }}</strong> eventos registrados)</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        {% if paginacion.page > 1 %}
+                        <a href="{{ url_for('admin_auditoria.index', tab='eventos', page=paginacion.page - 1, per_page=paginacion.per_page, fecha_desde=filtros.fecha_desde, fecha_hasta=filtros.fecha_hasta, usuario=filtros.usuario, accion=filtros.accion, ip=filtros.ip, nivel=filtros.nivel) }}"
+                           class="px-3 py-1.5 rounded-lg bg-white border border-slate-200 font-bold hover:bg-slate-100 text-slate-700 transition-colors flex items-center gap-1">
+                            <i class="ph ph-caret-left"></i> Anterior
+                        </a>
+                        {% endif %}
+                        <span class="px-3 py-1.5 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold">
+                            {{ paginacion.page }}
+                        </span>
+                        {% if paginacion.page < paginacion.total_paginas %}
+                        <a href="{{ url_for('admin_auditoria.index', tab='eventos', page=paginacion.page + 1, per_page=paginacion.per_page, fecha_desde=filtros.fecha_desde, fecha_hasta=filtros.fecha_hasta, usuario=filtros.usuario, accion=filtros.accion, ip=filtros.ip, nivel=filtros.nivel) }}"
+                           class="px-3 py-1.5 rounded-lg bg-white border border-slate-200 font-bold hover:bg-slate-100 text-slate-700 transition-colors flex items-center gap-1">
+                            Siguiente <i class="ph ph-caret-right"></i>
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+
+        </div>
+        {% endif %}
+
+        <!-- ============================================================== -->
+        <!-- PESTAÑA 3: SEGURIDAD SQL SERVER (CATÁLOGO EN PRODUCCIÓN)       -->
+        <!-- ============================================================== -->
+        {% if tab_activa == 'sql' %}
+        <div class="space-y-6">
+
+            <div class="bg-sky-50 border border-sky-200 rounded-2xl p-4 flex items-center justify-between text-xs text-sky-800">
+                <div class="flex items-center gap-2 font-medium">
+                    <i class="ph ph-info text-lg text-sky-600"></i>
+                    <span>Consultas ejecutadas en modo <strong>Solo Lectura (SELECT)</strong> contra vistas de catálogo de Microsoft SQL Server 2022 en producción.</span>
+                </div>
+                <span class="font-mono text-[11px] bg-white px-2.5 py-1 rounded-lg border border-sky-200 font-bold">Ambiente: Producción</span>
+            </div>
+
+            <!-- SECCIÓN 1: PRINCIPALES DE BASE DE DATOS -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
+                    <div>
+                        <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+                            <i class="ph ph-users-three text-indigo-600 text-base"></i> 1. Principales de Base de Datos
+                        </h3>
+                        <p class="text-xs text-slate-500 mt-0.5"><span class="text-slate-600 font-medium">Principal SQL = usuario o identidad reconocida por SQL Server.</span> • Fuente: <code class="text-indigo-600">sys.database_principals WHERE type NOT IN ('A', 'R')</code></p>
+                    </div>
+                    <a href="{{ url_for('admin_auditoria.exportar_principales_csv') }}" 
+                       class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5">
+                        <i class="ph ph-file-csv text-sm"></i> Exportar CSV (PT-01)
+                    </a>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead>
+                            <tr class="bg-slate-100 text-slate-600 uppercase font-bold tracking-wider border-b border-slate-200">
+                                <th class="p-4">Principal Name</th>
+                                <th class="p-4">Tipo Principal</th>
+                                <th class="p-4">Tipo Autenticación</th>
+                                <th class="p-4">Fecha Creación</th>
+                                <th class="p-4">Fecha Modificación</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100 text-slate-700">
+                            {% for p in principales.datos %}
+                            <tr class="hover:bg-slate-50/70 transition-colors">
+                                <td class="p-4 font-bold text-slate-800 flex items-center gap-2">
+                                    <i class="ph ph-user text-slate-400"></i> {{ p.name }}
+                                </td>
+                                <td class="p-4 font-mono text-[11px] text-slate-600">{{ p.type_desc }}</td>
+                                <td class="p-4">
+                                    <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase
+                                          {% if p.authentication_type_desc == 'INSTANCE' %}bg-sky-50 text-sky-700 border border-sky-200
+                                          {% else %}bg-slate-100 text-slate-600{% endif %}">
+                                        {{ p.authentication_type_desc }}
+                                    </span>
+                                </td>
+                                <td class="p-4 font-mono text-[11px] text-slate-500">{{ p.create_date }}</td>
+                                <td class="p-4 font-mono text-[11px] text-slate-500">{{ p.modify_date }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="5" class="p-6 text-center text-slate-400 italic">
+                                    {{ principales.mensaje or 'No evaluable por restricción del proveedor.' }}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- SECCIÓN 2: MEMBRESÍAS DE ROLES -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
+                    <div>
+                        <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+                            <i class="ph ph-shield-check text-indigo-600 text-base"></i> 2. Membresías de Roles de Base de Datos
+                        </h3>
+                        <p class="text-xs text-slate-500 mt-0.5"><span class="text-slate-600 font-medium">db_owner = rol con control elevado sobre la base de datos.</span> • Fuente: <code class="text-indigo-600">sys.database_role_members</code></p>
+                    </div>
+                    <a href="{{ url_for('admin_auditoria.exportar_roles_csv') }}" 
+                       class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5">
+                        <i class="ph ph-file-csv text-sm"></i> Exportar CSV (PT-02)
+                    </a>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead>
+                            <tr class="bg-slate-100 text-slate-600 uppercase font-bold tracking-wider border-b border-slate-200">
+                                <th class="p-4">Usuario / Miembro</th>
+                                <th class="p-4">Rol Asignado</th>
+                                <th class="p-4">Evaluación de Privilegio</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100 text-slate-700">
+                            {% for r in roles_sql.datos %}
+                            <tr class="hover:bg-slate-50/70 transition-colors">
+                                <td class="p-4 font-bold text-slate-800">{{ r.usuario }}</td>
+                                <td class="p-4 font-mono text-[11px] text-slate-600 font-bold">{{ r.rol }}</td>
+                                <td class="p-4">
+                                    {% if r.rol == 'db_owner' %}
+                                    <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-100 text-amber-800 border border-amber-200">
+                                        Privilegio Elevado (Revisar en RSK-02)
+                                    </span>
+                                    {% else %}
+                                    <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-100 text-slate-600">
+                                        Rol Ordinario
+                                    </span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="3" class="p-6 text-center text-slate-400 italic">
+                                    {{ roles_sql.mensaje or 'No evaluable por restricción del proveedor.' }}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- SECCIÓN 3: PERMISOS EXPLÍCITOS -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
+                    <div>
+                        <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+                            <i class="ph ph-key text-indigo-600 text-base"></i> 3. Permisos Explícitos
+                        </h3>
+                        <p class="text-xs text-slate-500 mt-0.5"><span class="text-slate-600 font-medium">GRANT = permiso concedido • DENY = permiso denegado.</span> • Fuente: <code class="text-indigo-600">sys.database_permissions</code></p>
+                    </div>
+                    <a href="{{ url_for('admin_auditoria.exportar_permisos_csv') }}" 
+                       class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5">
+                        <i class="ph ph-file-csv text-sm"></i> Exportar CSV (PT-03)
+                    </a>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead>
+                            <tr class="bg-slate-100 text-slate-600 uppercase font-bold tracking-wider border-b border-slate-200">
+                                <th class="p-4">Usuario / Receptor</th>
+                                <th class="p-4">Permiso</th>
+                                <th class="p-4">Estado</th>
+                                <th class="p-4">Tipo de Objeto</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100 text-slate-700">
+                            {% for p in permisos_sql.datos %}
+                            <tr class="hover:bg-slate-50/70 transition-colors">
+                                <td class="p-4 font-bold text-slate-800">{{ p.usuario }}</td>
+                                <td class="p-4 font-mono text-[11px] text-slate-600 font-bold">{{ p.permiso }}</td>
+                                <td class="p-4">
+                                    <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase
+                                          {% if p.estado == 'GRANT' %}bg-emerald-50 text-emerald-700 border border-emerald-200
+                                          {% elif p.estado == 'DENY' %}bg-rose-50 text-rose-700 border border-rose-200
+                                          {% else %}bg-slate-100 text-slate-600{% endif %}"
+                                          title="{% if p.estado == 'GRANT' %}Permiso concedido explícitamente{% elif p.estado == 'DENY' %}Permiso denegado explícitamente{% else %}Estado de permiso{% endif %}">
+                                        {{ p.estado }} {% if p.estado == 'GRANT' %}(Concedido){% elif p.estado == 'DENY' %}(Denegado){% endif %}
+                                    </span>
+                                </td>
+                                <td class="p-4 text-slate-500">{{ p.tipo_objeto }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="4" class="p-6 text-center text-slate-400 italic">
+                                    {{ permisos_sql.mensaje or 'No evaluable por restricción del proveedor.' }}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- BARRA DE PAGINACIÓN DE PERMISOS EXPLÍCITOS -->
+                {% if permisos_sql.paginacion and permisos_sql.paginacion.total_paginas > 1 %}
+                <div class="p-4 border-t border-slate-100 bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600">
+                    <div>
+                        <span>Página <strong>{{ permisos_sql.paginacion.page }}</strong> de <strong>{{ permisos_sql.paginacion.total_paginas }}</strong> (Total: <strong>{{ permisos_sql.total }}</strong> permisos explícitos catalogados)</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        {% if permisos_sql.paginacion.page > 1 %}
+                        <a href="{{ url_for('admin_auditoria.index', tab='sql', page_perm=permisos_sql.paginacion.page - 1, per_page_perm=permisos_sql.paginacion.per_page) }}"
+                           class="px-3 py-1.5 rounded-lg bg-white border border-slate-200 font-bold hover:bg-slate-100 text-slate-700 transition-colors flex items-center gap-1">
+                            <i class="ph ph-caret-left"></i> Anterior
+                        </a>
+                        {% endif %}
+                        <span class="px-3 py-1.5 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold">
+                            {{ permisos_sql.paginacion.page }}
+                        </span>
+                        {% if permisos_sql.paginacion.page < permisos_sql.paginacion.total_paginas %}
+                        <a href="{{ url_for('admin_auditoria.index', tab='sql', page_perm=permisos_sql.paginacion.page + 1, per_page_perm=permisos_sql.paginacion.per_page) }}"
+                           class="px-3 py-1.5 rounded-lg bg-white border border-slate-200 font-bold hover:bg-slate-100 text-slate-700 transition-colors flex items-center gap-1">
+                            Siguiente <i class="ph ph-caret-right"></i>
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+
+        </div>
+        {% endif %}
+
+        <!-- ============================================================== -->
+        <!-- PESTAÑA 4: TRAZABILIDAD DML / DDL (EVIDENCIA DE LABORATORIO)   -->
+        <!-- ============================================================== -->
+        {% if tab_activa == 'trazabilidad' %}
+        <div class="space-y-6">
+
+            <!-- BANNER METODOLÓGICO OBLIGATORIO DE LABORATORIO -->
+            <div class="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-5 text-amber-900 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                <div class="space-y-1">
+                    <span class="text-xs font-black uppercase tracking-wider text-amber-700 flex items-center gap-2">
+                        <i class="ph ph-flask text-lg"></i> Evidencia Exclusiva de Laboratorio Controlado
+                    </span>
+                    <p class="text-xs text-amber-800 font-medium">
+                        {{ dml.disclaimer }}
+                    </p>
+                </div>
+                <span class="text-xs font-mono font-bold bg-white px-3 py-1.5 rounded-xl border border-amber-300 text-amber-800 shrink-0">
+                    Copia Local .bak Restaurada
+                </span>
+            </div>
+
+            <!-- SECCIÓN DML -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
+                    <div>
+                        <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+                            <i class="ph ph-rows text-indigo-600 text-base"></i> Trazabilidad DML (INSERT, UPDATE, DELETE)
+                        </h3>
+                        <p class="text-xs text-slate-500 mt-0.5">
+                            <span class="text-slate-600 font-medium">DML = cambios en datos: INSERT, UPDATE, DELETE.</span> • 
+                            Cálculo de Cobertura: <strong>{{ dml.observados }}</strong> observados / <strong>{{ dml.esperados }}</strong> esperados = <span class="font-bold text-emerald-600">{{ dml.cobertura }}%</span>
+                        </p>
+                    </div>
+                    <a href="{{ url_for('admin_auditoria.exportar_dml_csv') }}" 
+                       class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5">
+                        <i class="ph ph-file-csv text-sm"></i> Exportar DML (PT-04)
+                    </a>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead>
+                            <tr class="bg-slate-100 text-slate-600 uppercase font-bold tracking-wider border-b border-slate-200">
+                                <th class="p-4">Fecha y Hora</th>
+                                <th class="p-4">Operación</th>
+                                <th class="p-4">Tabla</th>
+                                <th class="p-4">Identificador</th>
+                                <th class="p-4">Usuario Técnico</th>
+                                <th class="p-4">Valores Antes</th>
+                                <th class="p-4">Valores Después</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100 text-slate-700">
+                            {% for d in dml.datos %}
+                            <tr class="hover:bg-slate-50/70 transition-colors">
+                                <td class="p-4 font-mono text-[11px] text-slate-500 whitespace-nowrap">{{ d.fecha_hora }}</td>
+                                <td class="p-4">
+                                    <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase
+                                          {% if d.operacion == 'DELETE' %}bg-rose-100 text-rose-700 border border-rose-200
+                                          {% elif d.operacion == 'UPDATE' %}bg-amber-100 text-amber-700 border border-amber-200
+                                          {% else %}bg-emerald-100 text-emerald-700 border border-emerald-200{% endif %}">
+                                        {{ d.operacion }}
+                                    </span>
+                                </td>
+                                <td class="p-4 font-bold text-slate-800">{{ d.tabla }}</td>
+                                <td class="p-4 font-mono text-[11px] text-slate-600">{{ d.identificador }}</td>
+                                <td class="p-4 text-slate-600">{{ d.usuario_tecnico }}</td>
+                                <td class="p-4 font-mono text-[11px] text-slate-500 max-w-xs truncate" title="{{ d.valores_antes }}">{{ d.valores_antes }}</td>
+                                <td class="p-4 font-mono text-[11px] text-slate-500 max-w-xs truncate" title="{{ d.valores_despues }}">{{ d.valores_despues }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="7" class="p-6 text-center text-slate-400 italic">No hay registros de trazabilidad DML cargados.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- SECCIÓN DDL -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
+                    <div>
+                        <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+                            <i class="ph ph-terminal text-indigo-600 text-base"></i> Trazabilidad DDL (Eventos Estructurales de Laboratorio)
+                        </h3>
+                        <p class="text-xs text-slate-500 mt-0.5"><span class="text-slate-600 font-medium">DDL = cambios en estructura: CREATE, ALTER, DROP.</span> • Captura de CREATE_TABLE, ALTER_TABLE y DROP_TABLE mediante triggers de servidor en laboratorio.</p>
+                    </div>
+                    <a href="{{ url_for('admin_auditoria.exportar_ddl_csv') }}" 
+                       class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5">
+                        <i class="ph ph-file-csv text-sm"></i> Exportar DDL (PT-05)
+                    </a>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead>
+                            <tr class="bg-slate-100 text-slate-600 uppercase font-bold tracking-wider border-b border-slate-200">
+                                <th class="p-4">Fecha y Hora</th>
+                                <th class="p-4">Evento DDL</th>
+                                <th class="p-4">Objeto</th>
+                                <th class="p-4">Tipo</th>
+                                <th class="p-4">Usuario SQL</th>
+                                <th class="p-4">Comando SQL Ejecutado</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100 text-slate-700">
+                            {% for d in ddl.datos %}
+                            <tr class="hover:bg-slate-50/70 transition-colors">
+                                <td class="p-4 font-mono text-[11px] text-slate-500 whitespace-nowrap">{{ d.fecha_hora }}</td>
+                                <td class="p-4 font-bold text-indigo-600 font-mono text-[11px]">{{ d.evento }}</td>
+                                <td class="p-4 font-bold text-slate-800">{{ d.esquema }}.{{ d.objeto }}</td>
+                                <td class="p-4 text-slate-500">{{ d.tipo_objeto }}</td>
+                                <td class="p-4 text-slate-600">{{ d.usuario_sql }}</td>
+                                <td class="p-4 font-mono text-[11px] text-slate-600 max-w-md truncate" title="{{ d.comando }}">{{ d.comando }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="6" class="p-6 text-center text-slate-400 italic">No hay eventos DDL registrados en la bitácora de laboratorio.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+        {% endif %}
+
+        <!-- ============================================================== -->
+        <!-- PESTAÑA 5: EVIDENCIAS Y CADENA DE CUSTODIA (SHA-256)           -->
+        <!-- ============================================================== -->
+        {% if tab_activa == 'evidencias' %}
+        <div class="space-y-6">
+
+            <!-- BARRA DE ACCIÓN Y EXPLICACIÓN METODOLÓGICA -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                <div class="space-y-1">
+                    <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                        <i class="ph ph-shield-check text-indigo-600"></i> Integridad Criptográfica de Evidencias (PT)
+                    </h3>
+                    <p class="text-xs text-slate-500 font-medium max-w-2xl">
+                        <strong>PT = Papel de Trabajo / evidencia técnica.</strong> • <strong>Nota metodológica:</strong> SHA-256 es una huella digital que permite verificar la integridad de la evidencia y detectar modificaciones posteriores a su recolección. No cifra el contenido ni impide su modificación.
+                    </p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="abrirModalVerificarHash()" 
+                            class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5">
+                        <i class="ph ph-fingerprint text-sm"></i> Verificar Hash
+                    </button>
+                    <button type="button" onclick="abrirModalRegistrarEvidencia()" 
+                            class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-sm transition-all flex items-center gap-1.5">
+                        <i class="ph ph-plus-circle text-sm"></i> Registrar Evidencia
+                    </button>
+                    <a href="{{ url_for('admin_auditoria.exportar_evidencias_csv') }}" 
+                       class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-sm transition-all flex items-center gap-1.5">
+                        <i class="ph ph-file-csv text-sm"></i> Exportar CSV
+                    </a>
+                </div>
+            </div>
+
+            <!-- TABLA DE EVIDENCIAS -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead>
+                            <tr class="bg-slate-100 text-slate-600 uppercase font-bold tracking-wider border-b border-slate-200">
+                                <th class="p-4">Código</th>
+                                <th class="p-4">Procedimiento Relacionado</th>
+                                <th class="p-4">Entorno</th>
+                                <th class="p-4">Nombre Archivo</th>
+                                <th class="p-4">Responsable</th>
+                                <th class="p-4">Hash SHA-256 (Cadena de Custodia)</th>
+                                <th class="p-4">Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100 text-slate-700">
+                            {% for e in evidencias %}
+                            <tr class="hover:bg-slate-50/70 transition-colors">
+                                <td class="p-4 font-black text-indigo-700 font-mono">{{ e.codigo }}</td>
+                                <td class="p-4">
+                                    <span class="font-bold text-slate-800 block">{{ e.procedimiento }}</span>
+                                    <span class="text-[11px] text-slate-500">{{ e.descripcion }}</span>
+                                </td>
+                                <td class="p-4">
+                                    <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase
+                                          {% if e.entorno == 'Producción' %}bg-emerald-50 text-emerald-700 border border-emerald-200
+                                          {% else %}bg-amber-50 text-amber-700 border border-amber-200{% endif %}">
+                                        {{ e.entorno }}
+                                    </span>
+                                </td>
+                                <td class="p-4 font-mono text-[11px]">
+                                    {% if e.archivo_existe %}
+                                    <span class="text-emerald-700 font-bold" title="Archivo físico presente en disco">{{ e.nombre_archivo }}</span>
+                                    {% else %}
+                                    <span class="text-amber-700" title="Archivo físico no encontrado en disco">{{ e.nombre_archivo }}</span>
+                                    <span class="text-[9px] bg-amber-100 text-amber-800 px-1 py-0.5 rounded font-sans font-bold ml-1">No en disco</span>
+                                    {% endif %}
+                                </td>
+                                <td class="p-4 text-slate-600">{{ e.responsable }}</td>
+                                <td class="p-4">
+                                    <div class="flex items-center gap-2">
+                                        <div class="flex items-center gap-1.5 font-mono text-[10px] text-slate-700 bg-slate-50 px-2 py-1 rounded border border-slate-200" title="{{ e.sha256_hash }}">
+                                            <i class="ph ph-hash text-slate-400"></i>
+                                            {% if e.sha256_hash and e.sha256_hash|length == 64 %}
+                                            <span class="font-semibold">{{ e.sha256_hash[:8] }}...{{ e.sha256_hash[-5:] }}</span>
+                                            {% else %}
+                                            <span>{{ e.sha256_hash }}</span>
+                                            {% endif %}
+                                        </div>
+                                        {% if e.sha256_hash and e.sha256_hash != 'PENDIENTE' and e.sha256_hash != 'Pendiente de prueba' %}
+                                        <button type="button" 
+                                                onclick="copiarHashPortapapeles('{{ e.sha256_hash }}', this)" 
+                                                class="inline-flex items-center gap-1 px-2 py-1 rounded bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-600 border border-slate-200 text-[10px] font-bold transition-all shrink-0 cursor-pointer"
+                                                title="Copiar hash completo al portapapeles">
+                                            <i class="ph ph-copy"></i>
+                                            <span>Copiar hash</span>
+                                        </button>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                                <td class="p-4">
+                                    <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase
+                                          {% if e.estado in ('Válido', 'Verificado') %}bg-emerald-50 text-emerald-700 border border-emerald-200
+                                          {% elif e.estado == 'Pendiente' %}bg-amber-50 text-amber-700 border border-amber-200
+                                          {% elif e.estado == 'Alterado' %}bg-rose-100 text-rose-800 border border-rose-300 font-black
+                                          {% else %}bg-slate-100 text-slate-600 border border-slate-200{% endif %}">
+                                        {{ e.estado }}
+                                    </span>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="7" class="p-8 text-center text-slate-400 italic">No hay evidencias registradas aún en la cadena de custodia.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+        {% endif %}
+
+        <!-- ============================================================== -->
+        <!-- PESTAÑA 6: GESTIÓN DE RIESGOS PRELIMINARES                     -->
+        <!-- ============================================================== -->
+        {% if tab_activa == 'riesgos' %}
+        <div class="space-y-6">
+
+            <!-- AVISO METODOLÓGICO: RIESGO PRELIMINAR != HALLAZGO -->
+            <div class="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-amber-900">
+                <div class="space-y-0.5">
+                    <div class="flex items-center gap-2 font-medium">
+                        <i class="ph ph-warning text-lg text-amber-600 shrink-0"></i>
+                        <span><strong>Principio de Auditoría:</strong> Riesgo preliminar ≠ hallazgo confirmado.</span>
+                    </div>
+                    <p class="text-[11px] text-amber-800 ml-6">
+                        <strong>RSK = Riesgo preliminar o hipótesis técnica identificada.</strong> Los riesgos son hipótesis que requieren recolección de evidencia empírica antes de considerarse observaciones formales.
+                    </p>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    <button type="button" onclick="abrirModalRegistrarRiesgo()" 
+                            class="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 shadow-xs">
+                        <i class="ph ph-plus text-sm"></i> Registrar Hipótesis de Riesgo
+                    </button>
+                    <a href="{{ url_for('admin_auditoria.exportar_riesgos_csv') }}" 
+                       class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 shadow-xs">
+                        <i class="ph ph-file-csv text-sm"></i> Exportar CSV
+                    </a>
+                </div>
+            </div>
+
+            <!-- TABLA DE RIESGOS -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead>
+                            <tr class="bg-slate-100 text-slate-600 uppercase font-bold tracking-wider border-b border-slate-200">
+                                <th class="p-4">Código</th>
+                                <th class="p-4">Riesgo Preliminar</th>
+                                <th class="p-4">Probabilidad</th>
+                                <th class="p-4">Impacto</th>
+                                <th class="p-4">Nivel (P×I)</th>
+                                <th class="p-4">Razón Técnica</th>
+                                <th class="p-4">Evidencia Disponible</th>
+                                <th class="p-4">Estado</th>
+                                <th class="p-4 text-center">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100 text-slate-700">
+                            {% for r in riesgos %}
+                            <tr class="hover:bg-slate-50/70 transition-colors">
+                                <td class="p-4 font-black text-slate-800 font-mono">{{ r.codigo }}</td>
+                                <td class="p-4 font-bold text-slate-800 max-w-xs">{{ r.riesgo }}</td>
+                                <td class="p-4 font-medium text-center">{{ r.probabilidad }}/5</td>
+                                <td class="p-4 font-medium text-center">{{ r.impacto }}/5</td>
+                                <td class="p-4">
+                                    <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase
+                                          {% if r.nivel == 'Crítico' %}bg-rose-100 text-rose-800 border border-rose-200
+                                          {% elif r.nivel == 'Alto' %}bg-amber-100 text-amber-800 border border-amber-200
+                                          {% elif r.nivel == 'Medio' %}bg-sky-100 text-sky-800 border border-sky-200
+                                          {% else %}bg-slate-100 text-slate-700{% endif %}">
+                                        {{ r.nivel }}
+                                    </span>
+                                </td>
+                                <td class="p-4 text-slate-500 max-w-sm text-[11px] leading-relaxed">
+                                    <div class="line-clamp-2 text-slate-700" id="rsk-prev-{{ r.codigo }}">{{ r.razon }}</div>
+                                    <div id="rsk-full-{{ r.codigo }}" class="hidden"
+                                         data-codigo="{{ r.codigo }}"
+                                         data-riesgo="{{ r.riesgo }}"
+                                         data-probabilidad="{{ r.probabilidad }}"
+                                         data-impacto="{{ r.impacto }}"
+                                         data-nivel="{{ r.nivel }}"
+                                         data-evidencia="{{ r.evidencia_disponible }}"
+                                         data-estado="{{ r.estado }}">
+                                        <div class="rsk-razon-text">{{ r.razon }}</div>
+                                    </div>
+                                    <button type="button" 
+                                            onclick="mostrarDetalleRiesgo('{{ r.codigo }}')" 
+                                            class="mt-1 text-indigo-600 hover:text-indigo-800 font-bold text-[10px] inline-flex items-center gap-1 transition-colors cursor-pointer"
+                                            title="Ver detalle completo de la hipótesis técnica">
+                                        <i class="ph ph-eye"></i> Ver detalle
+                                    </button>
+                                </td>
+                                <td class="p-4 font-mono text-[10px] text-indigo-600">{{ r.evidencia_disponible }}</td>
+                                <td class="p-4">
+                                    <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-100 text-slate-600">
+                                        {{ r.estado }}
+                                    </span>
+                                </td>
+                                <td class="p-4 text-center whitespace-nowrap">
+                                    <form method="POST" action="{{ url_for('admin_auditoria.convertir_riesgo') }}" class="inline" onsubmit="return confirm('¿Desea convertir este riesgo en un Borrador de Hallazgo? Deberá ser revisado y confirmado manualmente.');">
+                                        <input type="hidden" name="csrf_token" value="{{ session.get('csrf_token') }}">
+                                        <input type="hidden" name="codigo_riesgo" value="{{ r.codigo }}">
+                                        <button type="submit" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-2.5 py-1 rounded-lg font-bold text-[10px] transition-colors" title="Convertir a Borrador de Hallazgo">
+                                            <i class="ph ph-arrow-right"></i> A Borrador
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="9" class="p-8 text-center text-slate-400 italic">No hay riesgos preliminares registrados.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+        {% endif %}
+
+        <!-- ============================================================== -->
+        <!-- PESTAÑA 7: HALLAZGOS FORMALES DE AUDITORÍA                     -->
+        <!-- ============================================================== -->
+        {% if tab_activa == 'hallazgos' %}
+        <div class="space-y-6">
+
+            <!-- AVISO: REVISIÓN HUMANA OBLIGATORIA -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                <div class="space-y-1">
+                    <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                        <i class="ph ph-check-square-offset text-indigo-600"></i> Registro Formal de Hallazgos (H)
+                    </h3>
+                    <p class="text-xs text-slate-500 font-medium max-w-2xl">
+                        <strong>H = Hallazgo formal de auditoría.</strong> Un riesgo <strong>NO se convierte automáticamente en hallazgo</strong>. Toda no conformidad debe ser revisada y confirmada manualmente por el auditor tras contrastar la condición contra el criterio y la evidencia.
+                    </p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="abrirModalRegistrarHallazgo()" 
+                            class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-sm transition-all flex items-center gap-1.5">
+                        <i class="ph ph-plus-circle text-sm"></i> Registrar Hallazgo
+                    </button>
+                    <a href="{{ url_for('admin_auditoria.exportar_hallazgos_csv') }}" 
+                       class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-sm transition-all flex items-center gap-1.5">
+                        <i class="ph ph-file-csv text-sm"></i> Exportar CSV
+                    </a>
+                </div>
+            </div>
+
+            <!-- CUADRO EXPLICATIVO VISUAL DE LOS 5 ATRIBUTOS METODOLÓGICOS -->
+            <div class="bg-indigo-50/70 border border-indigo-200 rounded-2xl p-5 space-y-3">
+                <div class="flex items-center gap-2">
+                    <span class="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs font-bold shrink-0">5</span>
+                    <h4 class="text-xs font-bold text-indigo-900 uppercase tracking-wider">Estructura Metodológica de Hallazgos de Auditoría (5 Atributos Clave)</h4>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 text-xs">
+                    <div class="p-3 bg-white rounded-xl border border-indigo-100 shadow-2xs">
+                        <span class="font-bold text-indigo-700 block text-[11px] mb-1">1. Condición</span>
+                        <span class="text-slate-600 text-[11px] leading-snug block"><strong>Qué ocurrió:</strong> Situación objetiva observada durante las pruebas.</span>
+                    </div>
+                    <div class="p-3 bg-white rounded-xl border border-indigo-100 shadow-2xs">
+                        <span class="font-bold text-indigo-700 block text-[11px] mb-1">2. Criterio</span>
+                        <span class="text-slate-600 text-[11px] leading-snug block"><strong>Contra qué se compara:</strong> Norma, control CIS o COBIT infringido o ausente.</span>
+                    </div>
+                    <div class="p-3 bg-white rounded-xl border border-indigo-100 shadow-2xs">
+                        <span class="font-bold text-indigo-700 block text-[11px] mb-1">3. Causa</span>
+                        <span class="text-slate-600 text-[11px] leading-snug block"><strong>Por qué ocurrió:</strong> Origen raíz, omisión o deficiencia en el control.</span>
+                    </div>
+                    <div class="p-3 bg-white rounded-xl border border-indigo-100 shadow-2xs">
+                        <span class="font-bold text-indigo-700 block text-[11px] mb-1">4. Efecto</span>
+                        <span class="text-slate-600 text-[11px] leading-snug block"><strong>Qué impacto genera:</strong> Exposición a riesgo, pérdida de trazabilidad o brecha.</span>
+                    </div>
+                    <div class="p-3 bg-white rounded-xl border border-indigo-100 shadow-2xs">
+                        <span class="font-bold text-indigo-700 block text-[11px] mb-1">5. Recomendación</span>
+                        <span class="text-slate-600 text-[11px] leading-snug block"><strong>Qué debe hacerse:</strong> Medida correctiva para subsanar la debilidad.</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- LISTA DE HALLAZGOS DETALLADOS -->
+            <div class="space-y-4">
+                {% for h in hallazgos %}
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-4">
+                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 pb-3 border-b border-slate-100">
+                        <div class="flex items-center gap-2.5">
+                            <span class="text-xs font-mono font-black px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                {{ h.codigo }}
+                            </span>
+                            <h4 class="text-base font-bold text-slate-800">{{ h.titulo }}</h4>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="px-2.5 py-1 rounded-full text-xs font-bold uppercase
+                                  {% if h.estado == 'Confirmado' %}bg-rose-100 text-rose-700 border border-rose-200
+                                  {% elif h.estado == 'Borrador' %}bg-slate-100 text-slate-600 border border-slate-200
+                                  {% elif h.estado == 'Requiere evidencia' %}bg-amber-100 text-amber-700 border border-amber-200
+                                  {% elif h.estado == 'Cerrado' %}bg-emerald-100 text-emerald-700 border border-emerald-200
+                                  {% else %}bg-slate-100 text-slate-500{% endif %}">
+                                Estado: {{ h.estado }}
+                            </span>
+                            <button type="button" onclick="abrirModalCambiarEstado('{{ h.codigo }}', '{{ h.estado }}')" 
+                                    class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs px-3 py-1 rounded-lg transition-colors">
+                                Cambiar Estado
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                        <div class="space-y-1.5 p-3 rounded-xl bg-slate-50/80 border border-slate-100">
+                            <span class="font-bold text-slate-700 uppercase tracking-wider block text-[10px]">1. Condición (qué ocurrió)</span>
+                            <p class="text-slate-600 leading-relaxed">{{ h.condicion }}</p>
+                        </div>
+
+                        <div class="space-y-1.5 p-3 rounded-xl bg-slate-50/80 border border-slate-100">
+                            <span class="font-bold text-slate-700 uppercase tracking-wider block text-[10px]">2. Criterio (contra qué se compara)</span>
+                            <p class="text-slate-600 leading-relaxed">{{ h.criterio }}</p>
+                        </div>
+
+                        <div class="space-y-1.5 p-3 rounded-xl bg-slate-50/80 border border-slate-100">
+                            <span class="font-bold text-slate-700 uppercase tracking-wider block text-[10px]">3. Causa (por qué ocurrió)</span>
+                            <p class="text-slate-600 leading-relaxed">{{ h.causa }}</p>
+                        </div>
+
+                        <div class="space-y-1.5 p-3 rounded-xl bg-slate-50/80 border border-slate-100">
+                            <span class="font-bold text-slate-700 uppercase tracking-wider block text-[10px]">4. Efecto (qué impacto puede generar)</span>
+                            <p class="text-slate-600 leading-relaxed">{{ h.efecto }}</p>
+                        </div>
+                    </div>
+
+                    <div class="p-3.5 rounded-xl bg-emerald-50/60 border border-emerald-200 text-xs space-y-1">
+                        <span class="font-bold text-emerald-800 uppercase tracking-wider block text-[10px]">5. Recomendación (qué debe hacerse)</span>
+                        <p class="text-emerald-900 leading-relaxed">{{ h.recomendacion }}</p>
+                    </div>
+
+                    <div class="flex flex-wrap items-center justify-between gap-2 pt-2 text-[11px] text-slate-400">
+                        <div class="flex items-center gap-4">
+                            <span><strong>Riesgo:</strong> {{ h.riesgo_asociado }}</span>
+                            <span><strong>Evidencias:</strong> {{ h.evidencias_relacionadas }}</span>
+                        </div>
+                        <div>
+                            {% if h.estado == 'Borrador' or 'pendiente' in h.responsable_revision|lower %}
+                            <span class="inline-flex items-center gap-1 text-amber-600 font-semibold bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                                <i class="ph ph-clock"></i> Pendiente de revisión del auditor
+                            </span>
+                            {% else %}
+                            <span>Revisado por <strong>{{ h.responsable_revision }}</strong> el {{ h.fecha }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-12 text-center text-slate-400">
+                    <i class="ph ph-folder-open text-5xl mb-3 block opacity-40"></i>
+                    No hay hallazgos registrados aún. Puede convertir un riesgo en borrador o registrar un hallazgo manualmente.
+                </div>
+                {% endfor %}
+            </div>
+
+        </div>
+        {% endif %}
+
+        <!-- ============================================================== -->
+        <!-- PESTAÑA 8: BACKUPS Y RECUPERACIÓN VERIFICADA                   -->
+        <!-- ============================================================== -->
+        {% if tab_activa == 'backups' %}
+        <div class="space-y-6">
+
+            <!-- RESUMEN DE RESPALDO DE APLICACIÓN -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-3">
+                    <span class="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                        <i class="ph ph-hard-drives text-indigo-500"></i> Último Respaldo Lógico Generado
+                    </span>
+                    {% if backups.ultimo_backup %}
+                    <div class="space-y-2 text-xs">
+                        <div class="flex justify-between py-1 border-b border-slate-100">
+                            <span class="text-slate-500">Fecha y Hora:</span>
+                            <span class="font-bold text-slate-800">{{ backups.ultimo_backup.fecha }}</span>
+                        </div>
+                        <div class="flex justify-between py-1 border-b border-slate-100">
+                            <span class="text-slate-500">Responsable:</span>
+                            <span class="font-medium text-slate-700">{{ backups.ultimo_backup.usuario }}</span>
+                        </div>
+                        <div class="flex justify-between py-1 border-b border-slate-100">
+                            <span class="text-slate-500">Tipo de Respaldo:</span>
+                            <span class="font-medium text-slate-700">{{ backups.ultimo_backup.tipo }}</span>
+                        </div>
+                        <div class="flex justify-between py-1">
+                            <span class="text-slate-500">Estado:</span>
+                            <span class="font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">{{ backups.ultimo_backup.estado }}</span>
+                        </div>
+                    </div>
+                    {% else %}
+                    <p class="text-slate-400 text-xs italic">No se ha registrado generación de backup en la bitácora aún.</p>
                     {% endif %}
                 </div>
-            </div>
 
-            <div
-                class="bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl shadow-sm border border-slate-700 p-5 text-white relative overflow-hidden">
-                <div class="absolute -right-6 -bottom-6 opacity-10"><i class="ph ph-shield-check text-9xl"></i>
-                </div>
-                <h3 class="text-xs font-bold text-sky-400 uppercase mb-2">Estado del Escudo</h3>
-                <p class="text-sm text-slate-300 mb-4">Todos los envíos POST y cargas masivas desde cuentas de
-                    Sub-Administrador están asegurados criptográficamente y auditados.</p>
-                <div
-                    class="inline-flex items-center gap-2 bg-slate-800/50 rounded-lg px-3 py-2 border border-slate-700">
-                    <span class="flex h-2 w-2 relative">
-                        <span
-                            class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                        <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                    </span>
-                    <span class="text-xs font-mono font-medium text-emerald-400">Protección Activa</span>
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex flex-col justify-between">
+                    <div class="space-y-2">
+                        <span class="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                            <i class="ph ph-shield-check text-emerald-600"></i> Política de Recuperación Verificada
+                        </span>
+                        <p class="text-xs text-slate-600 leading-relaxed">
+                            Por seguridad, las pruebas de restauración física (.bak) se ejecutan <strong>exclusivamente en laboratorio</strong> y se documentan aquí. No se ejecutan restauraciones destructivas automáticas desde la interfaz web de producción.
+                        </p>
+                    </div>
+                    <button type="button" onclick="abrirModalRegistrarRecuperacion()" 
+                            class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition-all flex items-center justify-center gap-2 mt-4">
+                        <i class="ph ph-plus-circle text-sm"></i> Registrar Prueba de Restauración Verificada
+                    </button>
                 </div>
             </div>
-        </div>
 
-        <!-- Tabla de Logs -->
-        <div class="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col">
-            <div class="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-xl">
-                <h3 class="font-bold text-slate-700 text-sm">Últimas 200 Modificaciones y Subidas de DB</h3>
+            <!-- TABLA DE RESTAURACIONES VERIFICADAS -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
+                    <div>
+                        <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+                            <i class="ph ph-clipboard-text text-indigo-600 text-base"></i> Registro de Restauraciones Verificadas (Laboratorio)
+                        </h3>
+                        <p class="text-xs text-slate-500 mt-0.5">Comprobación técnica de consistencia lógica (DBCC CHECKDB) y verificación de integridad de páginas de respaldo (RESTORE VERIFYONLY).</p>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead>
+                            <tr class="bg-slate-100 text-slate-600 uppercase font-bold tracking-wider border-b border-slate-200">
+                                <th class="p-4">Base Comprobada (Lab)</th>
+                                <th class="p-4">Archivo de Respaldo (.bak)</th>
+                                <th class="p-4">Pruebas Realizadas</th>
+                                <th class="p-4">Fecha Verificación PT-06</th>
+                                <th class="p-4">Fecha de Restauración</th>
+                                <th class="p-4">Evidencia y Hash SHA-256</th>
+                                <th class="p-4">Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100 text-slate-700">
+                            {% for r in backups.restauraciones %}
+                            <tr class="hover:bg-slate-50/70 transition-colors">
+                                <td class="p-4">
+                                    <span class="font-bold text-slate-800 block font-mono text-[11px]">{{ r.base_restaurada }}</span>
+                                    <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-50 text-amber-700 border border-amber-200 inline-block mt-1">
+                                        {{ r.ambiente }}
+                                    </span>
+                                </td>
+                                <td class="p-4 font-mono text-[11px]">
+                                    <span class="font-bold text-slate-800 block">{{ r.archivo_bak }}</span>
+                                    <span class="text-[10px] text-slate-500 block">Ruta: E:\aqui\</span>
+                                </td>
+                                <td class="p-4">
+                                    <div class="space-y-1 max-w-xs">
+                                        <div class="flex flex-wrap gap-1">
+                                            <span class="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                                                <i class="ph ph-terminal-window"></i> DBCC CHECKDB
+                                            </span>
+                                            <span class="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                                <i class="ph ph-check"></i> RESTORE VERIFYONLY
+                                            </span>
+                                        </div>
+                                        <p class="text-[10px] text-slate-500 font-mono leading-tight">{{ r.pruebas_realizadas }}</p>
+                                    </div>
+                                </td>
+                                <td class="p-4 font-mono text-[11px] whitespace-nowrap">
+                                    <div class="flex items-center gap-1 text-emerald-700 font-bold">
+                                        <i class="ph ph-clock text-xs"></i> {{ r.fecha_verificacion }}
+                                    </div>
+                                    <span class="text-[10px] text-slate-400 block">Ejecución en log PT-06</span>
+                                </td>
+                                <td class="p-4 text-[11px] whitespace-nowrap">
+                                    <span class="text-slate-500 italic block">{{ r.fecha_restauracion }}</span>
+                                    <span class="text-[10px] text-slate-400">Responsable: {{ r.responsable }}</span>
+                                </td>
+                                <td class="p-4">
+                                    <div class="space-y-1">
+                                        <span class="font-mono text-[11px] text-indigo-600 font-semibold block">{{ r.evidencia_adjunta }}</span>
+                                        <div class="flex items-center gap-2">
+                                            <div class="flex items-center gap-1.5 font-mono text-[10px] text-slate-700 bg-slate-50 px-2 py-0.5 rounded border border-slate-200" title="{{ r.sha256_hash }}">
+                                                <i class="ph ph-fingerprint text-slate-400"></i>
+                                                {% if r.sha256_hash and r.sha256_hash|length == 64 %}
+                                                <span class="font-semibold">{{ r.sha256_hash[:8] }}...{{ r.sha256_hash[-5:] }}</span>
+                                                {% else %}
+                                                <span>{{ r.sha256_hash }}</span>
+                                                {% endif %}
+                                            </div>
+                                            {% if r.sha256_hash and r.sha256_hash != 'PENDIENTE' and r.sha256_hash != 'Pendiente de prueba' %}
+                                            <button type="button" 
+                                                    onclick="copiarHashPortapapeles('{{ r.sha256_hash }}', this)" 
+                                                    class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-600 border border-slate-200 text-[10px] font-bold transition-all shrink-0 cursor-pointer"
+                                                    title="Copiar hash completo al portapapeles">
+                                                <i class="ph ph-copy"></i>
+                                                <span>Copiar</span>
+                                            </button>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="p-4">
+                                    <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase
+                                          {% if r.estado in ('Conforme', 'Verificado', 'Exitoso') %}bg-emerald-50 text-emerald-700 border border-emerald-200
+                                          {% elif r.estado == 'Pendiente' %}bg-amber-50 text-amber-700 border border-amber-200
+                                          {% else %}bg-slate-100 text-slate-600 border border-slate-200{% endif %}">
+                                        {{ r.estado }}
+                                    </span>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="7" class="p-6 text-center text-slate-400 italic">No hay registros de restauración verificada cargados.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
-            <div class="overflow-x-auto">
-                <table class="w-full text-left border-collapse">
-                    <thead>
-                        <tr
-                            class="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider border-b border-slate-200">
-                            <th class="p-4 font-semibold">Fecha y Hora</th>
-                            <th class="p-4 font-semibold">Usuario</th>
-                            <th class="p-4 font-semibold">Acción Protocolar</th>
-                            <th class="p-4 font-semibold">IP Origen</th>
-                            <th class="p-4 font-semibold">Carga Utíl (Detalles)</th>
-                        </tr>
-                    </thead>
-                    <tbody class="text-sm text-slate-600 divide-y divide-slate-100 table-fixed">
-                        {% for log in logs %}
-                        <tr class="hover:bg-slate-50/80 transition-colors">
-                            <td class="p-4 whitespace-nowrap text-slate-500"><i class="ph ph-calendar-blank mr-2"></i>{{
-                                log[5] }}</td>
-                            <td class="p-4 font-medium text-slate-700 capitalize">{{ log[1] }}</td>
-                            <td class="p-4">
-                                <span class="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-widest
-                                            {% if 'Bloqueo' in log[2] %}bg-rose-600 text-white shadow-lg shadow-rose-500/30 border border-rose-500
-                                            {% elif 'Eliminar' in log[2] or 'Borrar' in log[2] or 'Vaciar' in log[2] %}bg-rose-100 text-rose-700
-                                            {% elif 'Importar' in log[2] or 'Crear' in log[2] %}bg-emerald-100 text-emerald-700
-                                            {% elif 'Alterar' in log[2] or 'Editar' in log[2] %}bg-amber-100 text-amber-700
-                                            {% else %}bg-indigo-100 text-indigo-700{% endif %}">
-                                    {{ log[2] }}
-                                </span>
-                            </td>
-                            <td class="p-4 font-mono text-xs text-slate-400">{{ log[4] }}</td>
-                            <td class="p-4 max-w-sm truncate" title="{{ log[3] }}">{{ log[3] }}</td>
-                        </tr>
-                        {% else %}
-                        <tr>
-                            <td colspan="5" class="p-8 text-center text-slate-400">
-                                <i class="ph ph-magnifying-glass text-4xl mb-3 block opacity-50"></i>
-                                El sistema no ha registrado acciones destructivas aún.
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
         </div>
+        {% endif %}
+
+        <!-- ============================================================== -->
+        <!-- PESTAÑA 9: CRITERIOS DE AUDITORÍA Y MATRIZ CIS / COBIT         -->
+        <!-- ============================================================== -->
+        {% if tab_activa == 'criterios' %}
+        <div class="space-y-6">
+
+            <!-- MARCO NORMATIVO INFORMADO -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-2">
+                    <span class="text-xs font-bold text-indigo-600 uppercase tracking-wider block">1. CIS Benchmarks</span>
+                    <h4 class="font-bold text-slate-800 text-sm">CIS Microsoft SQL Server 2022</h4>
+                    <p class="text-xs text-slate-500 leading-relaxed">
+                        Secciones aplicadas: §2 Autenticación y Autorización, §3 Configuración de Cuentas, §5 Registro y Trazabilidad (Server/Database Audit).
+                    </p>
+                </div>
+
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-2">
+                    <span class="text-xs font-bold text-sky-600 uppercase tracking-wider block">2. Marco de Gobierno</span>
+                    <h4 class="font-bold text-slate-800 text-sm">COBIT 2019 DSS05</h4>
+                    <p class="text-xs text-slate-500 leading-relaxed">
+                        DSS05.02 (Gestión de Identidades y Acceso), DSS05.04 (Disponibilidad y Respaldo) y DSS05.07 (Monitoreo de Infraestructura y Trazabilidad).
+                    </p>
+                </div>
+
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-2">
+                    <span class="text-xs font-bold text-purple-600 uppercase tracking-wider block">3. Legislación Peruana</span>
+                    <h4 class="font-bold text-slate-800 text-sm">Ley N.º 29733 / Ley N.º 30096</h4>
+                    <p class="text-xs text-slate-500 leading-relaxed">
+                        Ley 29733: Principio de Seguridad en el tratamiento de datos de alumnos. Ley 30096: Marco normativo de acceso no autorizado y custodia digital.
+                    </p>
+                </div>
+            </div>
+
+            <!-- MATRIZ CRITERIO - PROCEDIMIENTO - EVIDENCIA - RESULTADO -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
+                    <div>
+                        <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+                            <i class="ph ph-table text-indigo-600 text-base"></i> Matriz de Evaluación: Control → Criterio → Procedimiento → Evidencia → Resultado
+                        </h3>
+                        <p class="text-xs text-slate-500 mt-0.5">
+                            Estados de evaluación válidos: <code>Conforme</code>, <code>No conforme</code>, <code>Requiere evidencia adicional</code>, <code>No evaluable por restricción del proveedor</code>.
+                        </p>
+                    </div>
+                    <a href="{{ url_for('admin_auditoria.exportar_matriz_csv') }}" 
+                       class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5">
+                        <i class="ph ph-file-csv text-sm"></i> Exportar Matriz CSV
+                    </a>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead>
+                            <tr class="bg-slate-100 text-slate-600 uppercase font-bold tracking-wider border-b border-slate-200">
+                                <th class="p-4">Control Auditado</th>
+                                <th class="p-4">Criterio Normativo</th>
+                                <th class="p-4">Procedimiento de Auditoría</th>
+                                <th class="p-4">Evidencia Vinculada</th>
+                                <th class="p-4">Resultado</th>
+                                <th class="p-4">Observación Técnica</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100 text-slate-700">
+                            {% for m in matriz %}
+                            <tr class="hover:bg-slate-50/70 transition-colors">
+                                <td class="p-4 font-bold text-slate-800">{{ m.control }}</td>
+                                <td class="p-4 text-slate-600 font-medium">{{ m.criterio }}</td>
+                                <td class="p-4 text-slate-600">{{ m.procedimiento }}</td>
+                                <td class="p-4 font-mono text-[11px] text-indigo-600">{{ m.evidencia }}</td>
+                                <td class="p-4">
+                                    <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase
+                                          {% if m.resultado == 'Conforme' %}bg-emerald-50 text-emerald-700 border border-emerald-200
+                                          {% elif m.resultado == 'No conforme' %}bg-rose-50 text-rose-700 border border-rose-200
+                                          {% elif m.resultado == 'Requiere evidencia adicional' %}bg-amber-50 text-amber-700 border border-amber-200
+                                          {% else %}bg-slate-100 text-slate-600 border border-slate-200{% endif %}">
+                                        {{ m.resultado }}
+                                    </span>
+                                </td>
+                                <td class="p-4 text-slate-500 italic max-w-xs">{{ m.observacion }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+        {% endif %}
+        </div> <!-- /tab-content-area -->
 
     </div>
 </main>
+
+<!-- ===================================================================== -->
+<!-- MODALES INTERACTIVOS PARA GESTIÓN DE AUDITORÍA Y CUSTODIA             -->
+<!-- ===================================================================== -->
+
+<!-- MODAL 1: REGISTRAR EVIDENCIA -->
+<div id="modal-evidencia" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <div class="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+            <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+                <i class="ph ph-file-plus text-indigo-600 text-lg"></i> Registrar Nueva Evidencia de Auditoría
+            </h3>
+            <button type="button" onclick="cerrarModal('modal-evidencia')" class="text-slate-400 hover:text-slate-600">
+                <i class="ph ph-x text-lg"></i>
+            </button>
+        </div>
+        <form method="POST" action="{{ url_for('admin_auditoria.guardar_evidencia') }}" enctype="multipart/form-data" class="p-6 space-y-4 text-xs">
+            <input type="hidden" name="csrf_token" value="{{ session.get('csrf_token') }}">
+            
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">Código Evidencia</label>
+                    <input type="text" name="codigo" placeholder="Ej. PT-07" required 
+                           class="w-full rounded-xl border-slate-200 px-3 py-2 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500">
+                </div>
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">Entorno</label>
+                    <select name="entorno" class="w-full rounded-xl border-slate-200 px-3 py-2 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500">
+                        <option value="Producción">Producción (Solo Lectura)</option>
+                        <option value="Laboratorio">Laboratorio (Controlado)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div>
+                <label class="block font-bold text-slate-700 mb-1">Procedimiento Relacionado</label>
+                <input type="text" name="procedimiento" placeholder="Ej. Censo de roles / Revisión de backup" required 
+                       class="w-full rounded-xl border-slate-200 px-3 py-2 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500">
+            </div>
+
+            <div>
+                <label class="block font-bold text-slate-700 mb-1">Descripción</label>
+                <textarea name="descripcion" rows="2" placeholder="Detalle metodológico de la extracción..." required 
+                          class="w-full rounded-xl border-slate-200 px-3 py-2 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500"></textarea>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">Fuente</label>
+                    <input type="text" name="fuente" placeholder="Ej. sys.database_principals" required 
+                           class="w-full rounded-xl border-slate-200 px-3 py-2 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500">
+                </div>
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">Nombre de Archivo</label>
+                    <input type="text" name="nombre_archivo" placeholder="Ej. evidencia_roles.csv" required 
+                           class="w-full rounded-xl border-slate-200 px-3 py-2 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500">
+                </div>
+            </div>
+
+            <div>
+                <label class="block font-bold text-slate-700 mb-1">Adjuntar Archivo (Para calcular SHA-256 automáticamente)</label>
+                <input type="file" name="archivo_evidencia" 
+                       class="w-full text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+            </div>
+
+            <div class="pt-4 border-t border-slate-100 flex justify-end gap-2">
+                <button type="button" onclick="cerrarModal('modal-evidencia')" class="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-bold">
+                    Cancelar
+                </button>
+                <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2 rounded-xl shadow-md transition-all">
+                    Guardar Evidencia
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- MODAL 2: VERIFICAR / CALCULAR HASH SHA-256 -->
+<div id="modal-hash" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <div class="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+            <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+                <i class="ph ph-fingerprint text-indigo-600 text-lg"></i> Calculador y Verificador SHA-256
+            </h3>
+            <button type="button" onclick="cerrarModal('modal-hash')" class="text-slate-400 hover:text-slate-600">
+                <i class="ph ph-x text-lg"></i>
+            </button>
+        </div>
+        <div class="p-6 space-y-4 text-xs">
+            <p class="text-slate-500 leading-relaxed">
+                Permite comprobar si un archivo o texto de evidencia fue alterado respecto al hash original registrado en la cadena de custodia.
+            </p>
+
+            <div>
+                <label class="block font-bold text-slate-700 mb-1">Texto o Carga Útil</label>
+                <textarea id="hash-input-texto" rows="3" placeholder="Pegue aquí el contenido o texto a verificar..." 
+                          class="w-full rounded-xl border-slate-200 px-3 py-2 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 font-mono text-[11px]"></textarea>
+            </div>
+
+            <div>
+                <label class="block font-bold text-slate-700 mb-1">Hash SHA-256 Esperado (Opcional, para comparar)</label>
+                <input type="text" id="hash-input-esperado" placeholder="Pegue el hash de 64 caracteres..." 
+                       class="w-full rounded-xl border-slate-200 px-3 py-2 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 font-mono text-[11px]">
+            </div>
+
+            <div id="hash-resultado-box" class="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 hidden">
+                <span class="font-bold text-slate-700 block uppercase tracking-wider text-[10px]">Resultado de Verificación:</span>
+                <p id="hash-calculado-txt" class="font-mono text-[11px] text-indigo-700 break-all select-all"></p>
+                <div id="hash-coincidencia-badge" class="pt-1"></div>
+            </div>
+
+            <div class="pt-2 flex justify-end gap-2">
+                <button type="button" onclick="cerrarModal('modal-hash')" class="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-bold">
+                    Cerrar
+                </button>
+                <button type="button" onclick="ejecutarVerificacionHash()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2 rounded-xl shadow-md transition-all flex items-center gap-1.5">
+                    <i class="ph ph-check text-sm"></i> Calcular y Comparar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL 3: REGISTRAR RIESGO PRELIMINAR -->
+<div id="modal-riesgo" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <div class="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+            <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+                <i class="ph ph-warning-circle text-amber-600 text-lg"></i> Registrar Hipótesis de Riesgo Preliminar
+            </h3>
+            <button type="button" onclick="cerrarModal('modal-riesgo')" class="text-slate-400 hover:text-slate-600">
+                <i class="ph ph-x text-lg"></i>
+            </button>
+        </div>
+        <form method="POST" action="{{ url_for('admin_auditoria.guardar_riesgo') }}" class="p-6 space-y-4 text-xs">
+            <input type="hidden" name="csrf_token" value="{{ session.get('csrf_token') }}">
+            
+            <div class="grid grid-cols-3 gap-3">
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">Código</label>
+                    <input type="text" name="codigo" placeholder="Ej. RSK-05" required 
+                           class="w-full rounded-xl border-slate-200 px-3 py-2 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-amber-500 font-mono">
+                </div>
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">Probabilidad (1-5)</label>
+                    <select name="probabilidad" class="w-full rounded-xl border-slate-200 px-3 py-2 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-amber-500">
+                        <option value="1">1 - Muy baja</option>
+                        <option value="2">2 - Baja</option>
+                        <option value="3" selected>3 - Media</option>
+                        <option value="4">4 - Alta</option>
+                        <option value="5">5 - Muy alta</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">Impacto (1-5)</label>
+                    <select name="impacto" class="w-full rounded-xl border-slate-200 px-3 py-2 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-amber-500">
+                        <option value="1">1 - Muy bajo</option>
+                        <option value="2">2 - Bajo</option>
+                        <option value="3">3 - Medio</option>
+                        <option value="4" selected>4 - Alto</option>
+                        <option value="5">5 - Muy alto</option>
+                    </select>
+                </div>
+            </div>
+
+            <div>
+                <label class="block font-bold text-slate-700 mb-1">Título del Riesgo</label>
+                <input type="text" name="riesgo" placeholder="Ej. Dependencia de backups manuales..." required 
+                       class="w-full rounded-xl border-slate-200 px-3 py-2 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-amber-500">
+            </div>
+
+            <div>
+                <label class="block font-bold text-slate-700 mb-1">Razón Técnica (Hipótesis)</label>
+                <textarea name="razon" rows="2" placeholder="Fundamento técnico observado en la arquitectura o catálogo..." required 
+                          class="w-full rounded-xl border-slate-200 px-3 py-2 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-amber-500"></textarea>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">Control Existente</label>
+                    <input type="text" name="control_existente" placeholder="Ej. Control de sesiones Flask" 
+                           class="w-full rounded-xl border-slate-200 px-3 py-2 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-amber-500">
+                </div>
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">Evidencia Disponible</label>
+                    <input type="text" name="evidencia_disponible" placeholder="Ej. PT-01, PT-06" 
+                           class="w-full rounded-xl border-slate-200 px-3 py-2 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-amber-500">
+                </div>
+            </div>
+
+            <div class="pt-4 border-t border-slate-100 flex justify-end gap-2">
+                <button type="button" onclick="cerrarModal('modal-riesgo')" class="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-bold">
+                    Cancelar
+                </button>
+                <button type="submit" class="bg-amber-600 hover:bg-amber-700 text-white font-bold px-4 py-2 rounded-xl shadow-md transition-all">
+                    Guardar Riesgo
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- MODAL 4: REGISTRAR / EDITAR HALLAZGO -->
+<div id="modal-hallazgo" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
+        <div class="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50 sticky top-0 z-10">
+            <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+                <i class="ph ph-notebook text-indigo-600 text-lg"></i> Formulario de Hallazgo Formal de Auditoría
+            </h3>
+            <button type="button" onclick="cerrarModal('modal-hallazgo')" class="text-slate-400 hover:text-slate-600">
+                <i class="ph ph-x text-lg"></i>
+            </button>
+        </div>
+        <form method="POST" action="{{ url_for('admin_auditoria.guardar_hallazgo') }}" class="p-6 space-y-4 text-xs">
+            <input type="hidden" name="csrf_token" value="{{ session.get('csrf_token') }}">
+            
+            <div class="grid grid-cols-3 gap-3">
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">ID Hallazgo</label>
+                    <input type="text" name="codigo" placeholder="Ej. H02" required 
+                           class="w-full rounded-xl border-slate-200 px-3 py-2 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 font-mono">
+                </div>
+                <div class="col-span-2">
+                    <label class="block font-bold text-slate-700 mb-1">Título del Hallazgo</label>
+                    <input type="text" name="titulo" placeholder="Ej. Ausencia de segregación de roles..." required 
+                           class="w-full rounded-xl border-slate-200 px-3 py-2 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500">
+                </div>
+            </div>
+
+            <div>
+                <label class="block font-bold text-slate-700 mb-1">1. Condición (Hecho Observado)</label>
+                <textarea name="condicion" rows="2" placeholder="Qué se encontró exactamente..." required 
+                          class="w-full rounded-xl border-slate-200 px-3 py-2 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500"></textarea>
+            </div>
+
+            <div>
+                <label class="block font-bold text-slate-700 mb-1">2. Criterio Normativo</label>
+                <textarea name="criterio" rows="2" placeholder="CIS Benchmark / COBIT DSS05 / Ley 29733..." required 
+                          class="w-full rounded-xl border-slate-200 px-3 py-2 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500"></textarea>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">3. Causa Raíz</label>
+                    <textarea name="causa" rows="2" placeholder="Por qué ocurre..." required 
+                              class="w-full rounded-xl border-slate-200 px-3 py-2 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500"></textarea>
+                </div>
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">4. Efecto / Impacto</label>
+                    <textarea name="efecto" rows="2" placeholder="Riesgo de exposición o pérdida..." required 
+                              class="w-full rounded-xl border-slate-200 px-3 py-2 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500"></textarea>
+                </div>
+            </div>
+
+            <div>
+                <label class="block font-bold text-slate-700 mb-1">5. Recomendación del Auditor</label>
+                <textarea name="recomendacion" rows="2" placeholder="Acción correctiva sugerida..." required 
+                          class="w-full rounded-xl border-slate-200 px-3 py-2 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500"></textarea>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">Riesgo Asociado</label>
+                    <input type="text" name="riesgo_asociado" placeholder="Ej. RSK-01 (Alto)" 
+                           class="w-full rounded-xl border-slate-200 px-3 py-2 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500">
+                </div>
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">Evidencias Relacionadas</label>
+                    <input type="text" name="evidencias_relacionadas" placeholder="Ej. PT-01, PT-02" 
+                           class="w-full rounded-xl border-slate-200 px-3 py-2 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500">
+                </div>
+            </div>
+
+            <div class="pt-4 border-t border-slate-100 flex justify-end gap-2">
+                <button type="button" onclick="cerrarModal('modal-hallazgo')" class="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-bold">
+                    Cancelar
+                </button>
+                <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2 rounded-xl shadow-md transition-all">
+                    Guardar Hallazgo
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- MODAL 5: CAMBIAR ESTADO DE HALLAZGO -->
+<div id="modal-estado-hallazgo" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <div class="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+            <h3 class="font-bold text-slate-800 text-sm">Cambiar Estado de Hallazgo</h3>
+            <button type="button" onclick="cerrarModal('modal-estado-hallazgo')" class="text-slate-400 hover:text-slate-600">
+                <i class="ph ph-x text-lg"></i>
+            </button>
+        </div>
+        <form method="POST" action="{{ url_for('admin_auditoria.cambiar_estado') }}" class="p-6 space-y-4 text-xs">
+            <input type="hidden" name="csrf_token" value="{{ session.get('csrf_token') }}">
+            <input type="hidden" id="cambiar-estado-codigo" name="codigo" value="">
+
+            <p class="text-slate-600">
+                Modificando el estado del hallazgo formal <strong id="cambiar-estado-codigo-lbl" class="text-indigo-600"></strong>:
+            </p>
+
+            <div>
+                <label class="block font-bold text-slate-700 mb-1">Nuevo Estado Formal</label>
+                <select name="nuevo_estado" id="cambiar-estado-select" class="w-full rounded-xl border-slate-200 px-3 py-2 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 font-bold">
+                    <option value="Borrador">Borrador (En redacción inicial)</option>
+                    <option value="Requiere evidencia">Requiere evidencia (Pendiente de sustento)</option>
+                    <option value="Confirmado">Confirmado (Validado por Auditor)</option>
+                    <option value="Cerrado">Cerrado (Subsanado / Mitigado)</option>
+                    <option value="Descartado">Descartado (No aplicable / Falso positivo)</option>
+                </select>
+            </div>
+
+            <p class="text-[11px] text-amber-700 bg-amber-50 p-3 rounded-xl border border-amber-200 leading-relaxed">
+                <strong>Aviso de Auditoría:</strong> La confirmación de un hallazgo certifica que se contrastó evidencia física o digital contra el criterio normativo.
+            </p>
+
+            <div class="pt-2 flex justify-end gap-2">
+                <button type="button" onclick="cerrarModal('modal-estado-hallazgo')" class="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-bold">
+                    Cancelar
+                </button>
+                <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2 rounded-xl shadow-md transition-all">
+                    Actualizar Estado
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- MODAL 6: REGISTRAR PRUEBA DE RECUPERACIÓN / RESTAURACIÓN -->
+<div id="modal-recuperacion" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <div class="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+            <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+                <i class="ph ph-hard-drives text-indigo-600 text-lg"></i> Registrar Prueba de Restauración Verificada
+            </h3>
+            <button type="button" onclick="cerrarModal('modal-recuperacion')" class="text-slate-400 hover:text-slate-600">
+                <i class="ph ph-x text-lg"></i>
+            </button>
+        </div>
+        <form method="POST" action="{{ url_for('admin_auditoria.guardar_recuperacion') }}" class="p-6 space-y-4 text-xs">
+            <input type="hidden" name="csrf_token" value="{{ session.get('csrf_token') }}">
+            
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">Base de Datos Restaurada</label>
+                    <input type="text" name="base_restaurada" placeholder="Ej. BibliotecaUNDAC_Auditoria" required 
+                           class="w-full rounded-xl border-slate-200 px-3 py-2 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 font-mono">
+                </div>
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">Ambiente de Prueba</label>
+                    <select name="ambiente" class="w-full rounded-xl border-slate-200 px-3 py-2 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500">
+                        <option value="Laboratorio (SQL Server Local)">Laboratorio (SQL Server Local)</option>
+                        <option value="Instancia Docker de Prueba">Instancia Docker de Prueba</option>
+                    </select>
+                </div>
+            </div>
+
+            <div>
+                <label class="block font-bold text-slate-700 mb-1">Evidencia Adjunta / Archivo Log</label>
+                <input type="text" name="evidencia_adjunta" placeholder="Ej. RESTORE_VERIFYONLY_LOG_20261115.log" required 
+                       class="w-full rounded-xl border-slate-200 px-3 py-2 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 font-mono">
+            </div>
+
+            <div>
+                <label class="block font-bold text-slate-700 mb-1">Hash SHA-256 del Backup o Log (Opcional)</label>
+                <input type="text" name="sha256_hash" placeholder="64 caracteres hex..." 
+                       class="w-full rounded-xl border-slate-200 px-3 py-2 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 font-mono text-[11px]">
+            </div>
+
+            <div>
+                <label class="block font-bold text-slate-700 mb-1">Observaciones / Resultado de Integridad</label>
+                <textarea name="observaciones" rows="2" placeholder="Resultado de DBCC CHECKDB o comprobación de tablas..." 
+                          class="w-full rounded-xl border-slate-200 px-3 py-2 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500"></textarea>
+            </div>
+
+            <div>
+                <label class="block font-bold text-slate-700 mb-1">Resultado de la Prueba</label>
+                <select name="estado" class="w-full rounded-xl border-slate-200 px-3 py-2 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 font-bold">
+                    <option value="Conforme">Conforme (Restauración completa sin errores)</option>
+                    <option value="Observado">Observado (Restauración parcial o advertencias)</option>
+                    <option value="Fallido">Fallido (Copia corrupta o falla de sintaxis)</option>
+                </select>
+            </div>
+
+            <div class="pt-4 border-t border-slate-100 flex justify-end gap-2">
+                <button type="button" onclick="cerrarModal('modal-recuperacion')" class="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-bold">
+                    Cancelar
+                </button>
+                <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2 rounded-xl shadow-md transition-all">
+                    Guardar Registro
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- MODAL: DETALLE COMPLETO DE RIESGO PRELIMINAR (RSK) -->
+<div id="modal-detalle-riesgo" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <div class="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+            <div class="flex items-center gap-2.5">
+                <span id="modal-rsk-codigo" class="text-xs font-mono font-black px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200">
+                    RSK-00
+                </span>
+                <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+                    <i class="ph ph-warning text-amber-600 text-base"></i> Detalle de Hipótesis de Riesgo
+                </h3>
+            </div>
+            <button type="button" onclick="cerrarModal('modal-detalle-riesgo')" class="text-slate-400 hover:text-slate-600">
+                <i class="ph ph-x text-lg"></i>
+            </button>
+        </div>
+        <div class="p-6 space-y-4 text-xs">
+            <div>
+                <span class="font-bold text-slate-500 uppercase tracking-wider block text-[10px] mb-1">Título del Riesgo</span>
+                <h4 id="modal-rsk-titulo" class="text-sm font-bold text-slate-800"></h4>
+            </div>
+
+            <div class="grid grid-cols-3 gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                <div>
+                    <span class="text-slate-400 text-[10px] block font-bold">Nivel (P x I)</span>
+                    <span id="modal-rsk-nivel" class="font-bold text-slate-800"></span>
+                </div>
+                <div>
+                    <span class="text-slate-400 text-[10px] block font-bold">Probabilidad</span>
+                    <span id="modal-rsk-prob" class="font-bold text-slate-800"></span>
+                </div>
+                <div>
+                    <span class="text-slate-400 text-[10px] block font-bold">Impacto</span>
+                    <span id="modal-rsk-imp" class="font-bold text-slate-800"></span>
+                </div>
+            </div>
+
+            <div class="space-y-1">
+                <span class="font-bold text-slate-700 uppercase tracking-wider block text-[10px]">Razón Técnica y Justificación Metodológica</span>
+                <div id="modal-rsk-razon" class="p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-slate-700 leading-relaxed max-h-48 overflow-y-auto whitespace-pre-wrap"></div>
+            </div>
+
+            <div class="flex items-center justify-between pt-2 border-t border-slate-100 text-[11px] text-slate-500">
+                <div>
+                    <span class="text-slate-400">Evidencia asociada:</span>
+                    <strong id="modal-rsk-evidencia" class="font-mono text-indigo-600 ml-1"></strong>
+                </div>
+                <div>
+                    <span class="text-slate-400">Estado:</span>
+                    <span id="modal-rsk-estado" class="font-bold text-slate-700 ml-1"></span>
+                </div>
+            </div>
+
+            <div class="pt-2 flex justify-end">
+                <button type="button" onclick="cerrarModal('modal-detalle-riesgo')" 
+                        class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-4 py-2 rounded-xl transition-colors cursor-pointer">
+                    Cerrar Detalle
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- SCRIPTS CLIENTE PARA MODALES, COPIADO DE HASH Y TRANSICIÓN DE PESTAÑAS -->
+<script>
+function abrirModalRegistrarEvidencia() {
+    document.getElementById('modal-evidencia').classList.remove('hidden');
+}
+
+function abrirModalVerificarHash() {
+    document.getElementById('modal-hash').classList.remove('hidden');
+}
+
+function abrirModalRegistrarRiesgo() {
+    document.getElementById('modal-riesgo').classList.remove('hidden');
+}
+
+function abrirModalRegistrarHallazgo() {
+    document.getElementById('modal-hallazgo').classList.remove('hidden');
+}
+
+function abrirModalRegistrarRecuperacion() {
+    document.getElementById('modal-recuperacion').classList.remove('hidden');
+}
+
+function abrirModalCambiarEstado(codigo, estadoActual) {
+    document.getElementById('cambiar-estado-codigo').value = codigo;
+    document.getElementById('cambiar-estado-codigo-lbl').innerText = codigo;
+    document.getElementById('cambiar-estado-select').value = estadoActual;
+    document.getElementById('modal-estado-hallazgo').classList.remove('hidden');
+}
+
+function cerrarModal(modalId) {
+    const el = document.getElementById(modalId);
+    if (el) el.classList.add('hidden');
+}
+
+// Modal Ver Detalle de Riesgo
+function mostrarDetalleRiesgo(codigo) {
+    const container = document.getElementById('rsk-full-' + codigo);
+    if (!container) return;
+    document.getElementById('modal-rsk-codigo').innerText = container.getAttribute('data-codigo') || codigo;
+    document.getElementById('modal-rsk-titulo').innerText = container.getAttribute('data-riesgo') || '';
+    document.getElementById('modal-rsk-nivel').innerText = container.getAttribute('data-nivel') || '';
+    document.getElementById('modal-rsk-prob').innerText = (container.getAttribute('data-probabilidad') || '') + ' / 5';
+    document.getElementById('modal-rsk-imp').innerText = (container.getAttribute('data-impacto') || '') + ' / 5';
+    document.getElementById('modal-rsk-evidencia').innerText = container.getAttribute('data-evidencia') || 'N/A';
+    document.getElementById('modal-rsk-estado').innerText = container.getAttribute('data-estado') || '';
+    const razonEl = container.querySelector('.rsk-razon-text');
+    document.getElementById('modal-rsk-razon').innerText = razonEl ? razonEl.innerText : '';
+    document.getElementById('modal-detalle-riesgo').classList.remove('hidden');
+}
+
+// Copiar Hash SHA-256 al portapapeles con retroalimentación visual
+function copiarHashPortapapeles(hash, btn) {
+    if (!hash) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(hash).then(function() {
+            mostrarFeedbackCopiado(btn);
+        }).catch(function() {
+            copiarFallback(hash, btn);
+        });
+    } else {
+        copiarFallback(hash, btn);
+    }
+}
+
+function copiarFallback(text, btn) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try {
+        document.execCommand('copy');
+        mostrarFeedbackCopiado(btn);
+    } catch (err) {
+        alert('Hash: ' + text);
+    }
+    document.body.removeChild(ta);
+}
+
+function mostrarFeedbackCopiado(btn) {
+    if (!btn) return;
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = '<i class="ph ph-check text-emerald-600 text-xs"></i> <span class="text-emerald-700">¡Copiado!</span>';
+    btn.classList.add('bg-emerald-50', 'border-emerald-300');
+    setTimeout(function() {
+        btn.innerHTML = originalHtml;
+        btn.classList.remove('bg-emerald-50', 'border-emerald-300');
+    }, 2000);
+}
+
+// Cálculo / Verificación interactiva de Hash SHA-256 vía API AJAX
+async function ejecutarVerificacionHash() {
+    const texto = document.getElementById('hash-input-texto').value;
+    const esperado = document.getElementById('hash-input-esperado').value.trim();
+    const formData = new FormData();
+    formData.append('texto', texto);
+    formData.append('hash_esperado', esperado);
+
+    try {
+        const resp = await fetch("{{ url_for('admin_auditoria.verificar_hash') }}", {
+            method: 'POST',
+            body: formData
+        });
+        const data = await resp.json();
+
+        if (data.status === 'success') {
+            document.getElementById('hash-resultado-box').classList.remove('hidden');
+            document.getElementById('hash-calculado-txt').innerText = data.hash_calculado;
+
+            const badgeBox = document.getElementById('hash-coincidencia-badge');
+            if (data.integridad_verificada === true) {
+                badgeBox.innerHTML = '<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300"><i class="ph ph-check-circle text-base"></i> HASH COINCIDE: Integridad confirmada. El contenido no ha sido modificado.</span>';
+            } else if (data.integridad_verificada === false) {
+                badgeBox.innerHTML = '<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-300"><i class="ph ph-warning-circle text-base"></i> HASH DISCREPANTE: El contenido difiere de la huella registrada.</span>';
+            } else {
+                badgeBox.innerHTML = '<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[11px] font-medium bg-slate-200 text-slate-700">Hash SHA-256 generado con éxito (Sin hash esperado para contrastar).</span>';
+            }
+        }
+    } catch (err) {
+        alert('Error verificando hash: ' + err);
+    }
+}
+
+// =====================================================================
+// OPTIMIZACIÓN DE RENDIMIENTO: TRANSICIÓN PROGRESIVA DE PESTAÑAS (AJAX + CACHÉ)
+// =====================================================================
+const tabCache = {};
+
+// Cachear la pestaña inicial renderizada
+(function() {
+    const activeLink = document.querySelector('#audit-tabs-nav a.active-tab');
+    const contentArea = document.getElementById('tab-content-area');
+    if (activeLink && contentArea) {
+        const currentUrl = activeLink.getAttribute('href');
+        tabCache[currentUrl] = contentArea.innerHTML;
+    }
+})();
+
+function inicializarPestanasProgressive() {
+    const navLinks = document.querySelectorAll('#audit-tabs-nav a.audit-tab-btn');
+    const loadingIndicator = document.getElementById('tab-loading-indicator');
+    const contentArea = document.getElementById('tab-content-area');
+
+    navLinks.forEach(function(link) {
+        link.onclick = function(e) {
+            const targetUrl = link.getAttribute('href');
+            if (!targetUrl || link.classList.contains('active-tab')) {
+                e.preventDefault();
+                return;
+            }
+
+            e.preventDefault();
+
+            // Si está en la caché en memoria, cambio instantáneo (0 ms percibidos)
+            if (tabCache[targetUrl]) {
+                aplicarContenidoPestana(targetUrl, tabCache[targetUrl], link);
+                history.pushState({ url: targetUrl }, '', targetUrl);
+                return;
+            }
+
+            // Indicador "Cargando evidencia..." solo si demora más de 300 ms
+            let timerMostrado = false;
+            const timer = setTimeout(function() {
+                timerMostrado = true;
+                if (loadingIndicator) loadingIndicator.classList.remove('hidden');
+            }, 300);
+
+            // Reducir opacidad suavemente durante la carga
+            if (contentArea) contentArea.style.opacity = '0.5';
+
+            fetch(targetUrl, {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(function(resp) {
+                if (!resp.ok) throw new Error('Respuesta HTTP ' + resp.status);
+                return resp.text();
+            })
+            .then(function(htmlText) {
+                clearTimeout(timer);
+                if (loadingIndicator) loadingIndicator.classList.add('hidden');
+
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(htmlText, 'text/html');
+                const nuevoContent = doc.getElementById('tab-content-area');
+
+                if (nuevoContent && contentArea) {
+                    const htmlNuevo = nuevoContent.innerHTML;
+                    tabCache[targetUrl] = htmlNuevo;
+                    aplicarContenidoPestana(targetUrl, htmlNuevo, link);
+                    history.pushState({ url: targetUrl }, '', targetUrl);
+                } else {
+                    window.location.href = targetUrl;
+                }
+            })
+            .catch(function(err) {
+                clearTimeout(timer);
+                if (loadingIndicator) loadingIndicator.classList.add('hidden');
+                window.location.href = targetUrl;
+            });
+        };
+    });
+}
+
+function asegurarPestanaVisible(link) {
+    if (!link) return;
+    link.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+}
+
+function scrollTabsNav(direction) {
+    const nav = document.getElementById('audit-tabs-nav');
+    if (!nav) return;
+    const offset = direction === 'left' ? -220 : 220;
+    nav.scrollBy({ left: offset, behavior: 'smooth' });
+}
+
+function actualizarIndicadoresScroll() {
+    const nav = document.getElementById('audit-tabs-nav');
+    const btnLeft = document.getElementById('tab-scroll-left');
+    const btnRight = document.getElementById('tab-scroll-right');
+    if (!nav || !btnLeft || !btnRight) return;
+
+    const tieneScroll = nav.scrollWidth > nav.clientWidth;
+    if (!tieneScroll) {
+        btnLeft.classList.add('hidden');
+        btnLeft.classList.remove('flex');
+        btnRight.classList.add('hidden');
+        btnRight.classList.remove('flex');
+        return;
+    }
+
+    if (nav.scrollLeft > 10) {
+        btnLeft.classList.remove('hidden');
+        btnLeft.classList.add('flex');
+    } else {
+        btnLeft.classList.add('hidden');
+        btnLeft.classList.remove('flex');
+    }
+
+    if (nav.scrollWidth - nav.clientWidth - nav.scrollLeft > 10) {
+        btnRight.classList.remove('hidden');
+        btnRight.classList.add('flex');
+    } else {
+        btnRight.classList.add('hidden');
+        btnRight.classList.remove('flex');
+    }
+}
+
+function aplicarContenidoPestana(url, htmlContent, activeLink) {
+    const contentArea = document.getElementById('tab-content-area');
+    if (contentArea) {
+        contentArea.innerHTML = htmlContent;
+        contentArea.style.opacity = '1';
+    }
+
+    // Actualizar estilos visuales de pestañas
+    const navLinks = document.querySelectorAll('#audit-tabs-nav a.audit-tab-btn');
+    navLinks.forEach(function(l) {
+        l.classList.remove('bg-indigo-600', 'text-white', 'shadow-md', 'shadow-indigo-600/20', 'active-tab');
+        l.classList.add('text-slate-600', 'hover:bg-slate-100');
+        const subtext = l.querySelector('span:last-child');
+        if (subtext) {
+            subtext.classList.remove('text-indigo-200');
+            subtext.classList.add('text-slate-400');
+        }
+    });
+
+    if (activeLink) {
+        activeLink.classList.remove('text-slate-600', 'hover:bg-slate-100');
+        activeLink.classList.add('bg-indigo-600', 'text-white', 'shadow-md', 'shadow-indigo-600/20', 'active-tab');
+        const subtext = activeLink.querySelector('span:last-child');
+        if (subtext) {
+            subtext.classList.remove('text-slate-400');
+            subtext.classList.add('text-indigo-200');
+        }
+        asegurarPestanaVisible(activeLink);
+    }
+    actualizarIndicadoresScroll();
+}
+
+// Soporte para botones Atrás/Adelante del navegador
+window.addEventListener('popstate', function(e) {
+    const url = (e.state && e.state.url) ? e.state.url : window.location.href;
+    if (tabCache[url]) {
+        const link = document.querySelector(`#audit-tabs-nav a[href="${url}"]`);
+        aplicarContenidoPestana(url, tabCache[url], link);
+    } else {
+        window.location.href = url;
+    }
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+    inicializarPestanasProgressive();
+    const activeLink = document.querySelector('#audit-tabs-nav a.active-tab');
+    if (activeLink) {
+        asegurarPestanaVisible(activeLink);
+    }
+    actualizarIndicadoresScroll();
+
+    const nav = document.getElementById('audit-tabs-nav');
+    if (nav) {
+        nav.addEventListener('scroll', actualizarIndicadoresScroll, { passive: true });
+    }
+    window.addEventListener('resize', actualizarIndicadoresScroll, { passive: true });
+});
+</script>
 {% endblock %}
