@@ -1021,10 +1021,10 @@
                                 <th class="p-4">Código</th>
                                 <th class="p-4">Procedimiento Relacionado</th>
                                 <th class="p-4">Entorno</th>
-                                <th class="p-4">Nombre Archivo</th>
+                                <th class="p-4">Archivo & Disponibilidad Física</th>
                                 <th class="p-4">Responsable</th>
-                                <th class="p-4">Hash SHA-256 (Cadena de Custodia)</th>
-                                <th class="p-4">Estado</th>
+                                <th class="p-4">Hash SHA-256 (Custodia Histórica)</th>
+                                <th class="p-4">Estado Metodológico</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-100 text-slate-700">
@@ -1042,38 +1042,61 @@
                                         {{ e.entorno }}
                                     </span>
                                 </td>
-                                <td class="p-4 font-mono text-[11px]">
-                                    {% if e.archivo_existe %}
-                                    <span class="text-emerald-700 font-bold" title="Archivo físico presente en disco">{{ e.nombre_archivo }}</span>
-                                    {% else %}
-                                    <span class="text-amber-700" title="Archivo físico no encontrado en disco">{{ e.nombre_archivo }}</span>
-                                    <span class="text-[9px] bg-amber-100 text-amber-800 px-1 py-0.5 rounded font-sans font-bold ml-1">No en disco</span>
-                                    {% endif %}
-                                </td>
-                                <td class="p-4 text-slate-600">{{ e.responsable }}</td>
                                 <td class="p-4">
-                                    <div class="flex items-center gap-2">
-                                        <div class="flex items-center gap-1.5 font-mono text-[10px] text-slate-700 bg-slate-50 px-2 py-1 rounded border border-slate-200" title="{{ e.sha256_hash }}">
-                                            <i class="ph ph-hash text-slate-400"></i>
-                                            {% if e.sha256_hash and e.sha256_hash|length == 64 %}
-                                            <span class="font-semibold">{{ e.sha256_hash[:8] }}...{{ e.sha256_hash[-5:] }}</span>
+                                    <span class="font-mono text-[11px] font-bold text-slate-800 block">{{ e.nombre_archivo }}</span>
+                                    <div class="mt-1">
+                                        {% if e.archivo_existe %}
+                                            {% if e.estado == 'Alterado' %}
+                                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200" title="Archivo presente pero difiere del hash en custodia">
+                                                <i class="ph ph-warning-circle text-xs"></i> Disponible en este entorno (Hash discrepante)
+                                            </span>
                                             {% else %}
-                                            <span>{{ e.sha256_hash }}</span>
+                                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200" title="Integridad comprobada en este entorno">
+                                                <i class="ph ph-check-circle text-xs"></i> Disponible en este entorno
+                                            </span>
                                             {% endif %}
-                                        </div>
-                                        {% if e.sha256_hash and e.sha256_hash != 'PENDIENTE' and e.sha256_hash != 'Pendiente de prueba' %}
-                                        <button type="button" 
-                                                onclick="copiarHashPortapapeles('{{ e.sha256_hash }}', this)" 
-                                                class="inline-flex items-center gap-1 px-2 py-1 rounded bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-600 border border-slate-200 text-[10px] font-bold transition-all shrink-0 cursor-pointer"
-                                                title="Copiar hash completo al portapapeles">
-                                            <i class="ph ph-copy"></i>
-                                            <span>Copiar hash</span>
-                                        </button>
+                                        {% else %}
+                                            {% if e.estado in ('Válido', 'Verificado') %}
+                                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-sky-50 text-sky-700 border border-sky-200" title="Evidencia verificada en laboratorio y registrada mediante hash SHA-256. El archivo físico no se almacena en este entorno cloud.">
+                                                <i class="ph ph-cloud text-xs"></i> Custodiado externamente / no almacenado en este entorno cloud
+                                            </span>
+                                            {% else %}
+                                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                                                <i class="ph ph-clock text-xs"></i> Pendiente de generación
+                                            </span>
+                                            {% endif %}
                                         {% endif %}
                                     </div>
                                 </td>
+                                <td class="p-4 text-slate-600">{{ e.responsable }}</td>
                                 <td class="p-4">
-                                    <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase
+                                    <div class="space-y-1">
+                                        <div class="flex items-center gap-2">
+                                            <div class="flex items-center gap-1.5 font-mono text-[10px] text-slate-700 bg-slate-50 px-2 py-0.5 rounded border border-slate-200" title="{{ e.sha256_hash }}">
+                                                <i class="ph ph-fingerprint text-slate-400"></i>
+                                                {% if e.sha256_hash and e.sha256_hash|length == 64 %}
+                                                <span class="font-semibold">{{ e.sha256_hash[:8] }}...{{ e.sha256_hash[-5:] }}</span>
+                                                {% else %}
+                                                <span>{{ e.sha256_hash }}</span>
+                                                {% endif %}
+                                            </div>
+                                            {% if e.sha256_hash and e.sha256_hash != 'PENDIENTE' and e.sha256_hash != 'Pendiente de prueba' %}
+                                            <button type="button" 
+                                                    onclick="copiarHashPortapapeles('{{ e.sha256_hash }}', this)" 
+                                                    class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-600 border border-slate-200 text-[10px] font-bold transition-all shrink-0 cursor-pointer"
+                                                    title="Copiar hash completo al portapapeles">
+                                                <i class="ph ph-copy"></i>
+                                                <span>Copiar</span>
+                                            </button>
+                                            {% endif %}
+                                        </div>
+                                        <p class="text-[10px] text-slate-500 italic leading-tight">
+                                            {{ e.detalle_verificacion }}
+                                        </p>
+                                    </div>
+                                </td>
+                                <td class="p-4">
+                                    <span class="px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider
                                           {% if e.estado in ('Válido', 'Verificado') %}bg-emerald-50 text-emerald-700 border border-emerald-200
                                           {% elif e.estado == 'Pendiente' %}bg-amber-50 text-amber-700 border border-amber-200
                                           {% elif e.estado == 'Alterado' %}bg-rose-100 text-rose-800 border border-rose-300 font-black

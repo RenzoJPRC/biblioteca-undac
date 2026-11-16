@@ -674,12 +674,17 @@ def obtener_trazabilidad_ddl() -> Dict[str, Any]:
 
 def obtener_evidencias_auditoria() -> List[Dict[str, Any]]:
     """
-    Obtiene el registro de evidencias de auditoría y valida dinámicamente su integridad
-    física en disco leyendo los bytes del archivo y calculando su huella SHA-256.
-    Estados resultantes:
-    - 'Válido' / 'Verificado': Archivo existe físicamente y su hash coincide con el registrado.
-    - 'Alterado': Archivo existe físicamente pero el hash difiere (violación de integridad).
-    - 'Pendiente': Archivo físico no existe en disco o está pendiente de generación.
+    Obtiene el registro de evidencias de auditoría separando:
+    1. ESTADO DE INTEGRIDAD / VALIDACIÓN HISTÓRICA:
+       - PT-01 a PT-03: 'Válido'
+       - PT-04 a PT-06: 'Verificado'
+       Si la base de datos conserva un hash SHA-256 de 64 caracteres válido y estado histórico válido,
+       NO se degrada a 'Pendiente' por la ausencia física del archivo en entornos efímeros (como Render cloud).
+    2. DISPONIBILIDAD FÍSICA EN EL ENTORNO ACTUAL:
+       - 'Disponible en este entorno' (si el archivo existe en disco y su hash coincide)
+       - 'Custodiado externamente / no almacenado en este entorno cloud' (si el archivo no reside localmente pero consta en custodia con hash válido)
+       - 'Disponible en este entorno (Hash discrepante)' -> Estado 'Alterado'
+       - 'No disponible en este entorno ni registrado' -> Estado 'Pendiente'
     """
     conn = get_db_connection()
     if not conn:
@@ -713,43 +718,75 @@ def obtener_evidencias_auditoria() -> List[Dict[str, Any]]:
         resultado = []
         for r in rows:
             eid, cod, proc, desc, ent, fuente, archivo, ffmt, resp, sha_reg, obs, est_db = r
-            ruta_archivo = os.path.join(ruta_base_evidencias, archivo)
-            existe_en_disco = os.path.isfile(ruta_archivo)
+            archivo_str = (archivo or '').strip()
+            ruta_archivo = os.path.join(ruta_base_evidencias, archivo_str) if archivo_str else ""
+            existe_en_disco = bool(ruta_archivo and os.path.isfile(ruta_archivo))
 
-            if not existe_en_disco:
-                estado_actual = 'Pendiente'
-                sha_calculado = 'Pendiente de generación en disco'
-                integridad_ok = False
-            elif sha_reg in ('PENDIENTE_GENERACION_LOG_FISICO', 'PENDIENTE', 'Pendiente') or not sha_reg:
+            sha_reg_limpio = (sha_reg or '').strip().lower()
+            es_hash_valido = len(sha_reg_limpio) == 64 and all(c in '0123456789abcdef' for c in sha_reg_limpio)
+            es_estado_historico_valido = est_db in ('Válido', 'Valido', 'Verificado')
+
+            if existe_en_disco:
                 sha_calculado = calcular_sha256_archivo(ruta_archivo)
-                if sha_calculado:
-                    # El archivo físico fue generado o adjuntado: sincronizar automáticamente con AuditEvidence
+                if not es_hash_valido:
+                    # El archivo físico fue generado en disco pero en BD no tenía hash previo
+                    nuevo_est = 'Verificado' if cod in ('PT-04', 'PT-05', 'PT-06') else 'Válido'
                     try:
                         cursor.execute("""
                             UPDATE dbo.AuditEvidence
-                            SET Sha256Hash = ?, Estado = 'Verificado',
-                                Observacion = 'Ensayo de restauración con verificación de integridad de backup .bak ejecutado en laboratorio. Integridad física confirmada mediante DBCC CHECKDB y RESTORE VERIFYONLY.'
+                            SET Sha256Hash = ?, Estado = ?,
+                                Observacion = 'Evidencia técnica de laboratorio verificada en este entorno.'
                             WHERE EvidenceID = ?
-                        """, (sha_calculado, eid))
+                        """, (sha_calculado, nuevo_est, eid))
                         conn.commit()
                         invalidar_cache_kpis()
                     except Exception as err_up:
                         print(f"Error sincronizando hash de evidencia {cod}: {err_up}")
                     sha_reg = sha_calculado
-                    estado_actual = 'Verificado'
+                    estado_actual = nuevo_est
                     integridad_ok = True
+                    disponibilidad = 'Disponible en este entorno'
+                    detalle_verificacion = 'Integridad comprobada en este entorno'
                 else:
-                    estado_actual = 'Pendiente'
-                    sha_calculado = 'Error de lectura de archivo en disco'
-                    integridad_ok = False
+                    # El archivo existe y ya constaba un hash registrado en BD: comparar integridad
+                    if sha_calculado and sha_calculado.lower() == sha_reg_limpio:
+                        if cod in ('PT-01', 'PT-02', 'PT-03'):
+                            estado_actual = 'Válido'
+                        elif cod in ('PT-04', 'PT-05', 'PT-06'):
+                            estado_actual = 'Verificado'
+                        else:
+                            estado_actual = 'Válido' if est_db in ('Válido', 'Valido') else est_db
+                        integridad_ok = True
+                        disponibilidad = 'Disponible en este entorno'
+                        detalle_verificacion = 'Integridad comprobada en este entorno'
+                    else:
+                        # Archivo modificado con posterioridad a la extracción: violación de integridad
+                        # Regla: NO sobrescribir automáticamente el hash histórico registrado en BD
+                        estado_actual = 'Alterado'
+                        integridad_ok = False
+                        disponibilidad = 'Disponible en este entorno (Hash discrepante)'
+                        detalle_verificacion = 'Discrepancia detectada: el archivo físico difiere del hash histórico registrado en custodia'
             else:
-                sha_calculado = calcular_sha256_archivo(ruta_archivo)
-                if sha_calculado.lower() == sha_reg.lower():
-                    estado_actual = est_db if est_db in ('Válido', 'Verificado') else 'Válido'
+                # El archivo NO reside físicamente en este entorno (caso Render cloud / contenedor efímero)
+                sha_calculado = None
+                if es_hash_valido and es_estado_historico_valido:
+                    # Conservar estado metodológico de integridad histórica registrada
+                    if cod in ('PT-01', 'PT-02', 'PT-03'):
+                        estado_actual = 'Válido'
+                    elif cod in ('PT-04', 'PT-05', 'PT-06'):
+                        estado_actual = 'Verificado'
+                    else:
+                        estado_actual = 'Válido' if est_db in ('Válido', 'Valido') else est_db
+
                     integridad_ok = True
+                    disponibilidad = 'Custodiado externamente / no almacenado en este entorno cloud'
+                    detalle_verificacion = 'Evidencia verificada en laboratorio y registrada mediante hash SHA-256. El archivo físico no se almacena en este entorno cloud.'
                 else:
-                    estado_actual = 'Alterado'
+                    # Sin archivo físico y sin registro histórico válido en BD
+                    estado_actual = 'Pendiente'
                     integridad_ok = False
+                    disponibilidad = 'No disponible en este entorno ni registrado'
+                    detalle_verificacion = 'Pendiente de generación de archivo físico y cálculo de huella SHA-256'
 
             resultado.append({
                 'id': eid,
@@ -764,6 +801,9 @@ def obtener_evidencias_auditoria() -> List[Dict[str, Any]]:
                 'sha256_hash': sha_reg,
                 'sha256_calculado': sha_calculado,
                 'archivo_existe': existe_en_disco,
+                'disponibilidad': disponibilidad,
+                'disponibilidad_fisica': disponibilidad,
+                'detalle_verificacion': detalle_verificacion,
                 'integridad_ok': integridad_ok,
                 'observacion': obs or '',
                 'estado': estado_actual
@@ -1273,7 +1313,7 @@ def guardar_restauracion_verificada(datos: Dict[str, Any]) -> Tuple[bool, str]:
 # 8. PESTAÑA 9: CRITERIOS DE AUDITORÍA Y MATRIZ CIS / COBIT
 # =====================================================================
 
-def obtener_matriz_criterios_auditoria() -> List[Dict[str, Any]]:
+def obtener_matriz_criterios_auditoria(estado_pt06: Optional[str] = None) -> List[Dict[str, Any]]:
     """
     Retorna la matriz estructurada Criterio - Procedimiento - Evidencia - Resultado.
     Resultados permitidos:
@@ -1287,7 +1327,39 @@ def obtener_matriz_criterios_auditoria() -> List[Dict[str, Any]]:
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
         'exportaciones', 'evidencias'
     )
-    pt06_existe = os.path.isfile(os.path.join(ruta_base_evidencias, 'PT-06_restauracion_verificada.log'))
+    pt06_archivo_local = os.path.isfile(os.path.join(ruta_base_evidencias, 'PT-06_restauracion_verificada.log'))
+
+    # Comprobación de evidencia histórica de PT-06 en BD (soporte para entornos cloud como Render)
+    pt06_verificado_en_bd = False
+    conn = get_db_connection()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT Sha256Hash, Estado 
+                FROM dbo.AuditEvidence 
+                WHERE Codigo = 'PT-06'
+            """)
+            row = cursor.fetchone()
+            if row:
+                sha_bd = (row[0] or '').strip().lower()
+                est_bd = (row[1] or '').strip()
+                if len(sha_bd) == 64 and est_bd in ('Verificado', 'Válido', 'Valido'):
+                    pt06_verificado_en_bd = True
+        except Exception as e:
+            print(f"Error verificando PT-06 en BD para matriz: {e}")
+        finally:
+            conn.close()
+
+    if pt06_archivo_local:
+        res_pt06 = 'Conforme'
+        obs_pt06 = 'Prueba técnica de laboratorio ejecutada en SQL Server local con DBCC CHECKDB y RESTORE VERIFYONLY. Log físico verificado con hash SHA-256 íntegro en este entorno.'
+    elif pt06_verificado_en_bd or estado_pt06 in ('Verificado', 'Conforme', 'Válido', 'Valido'):
+        res_pt06 = 'Conforme'
+        obs_pt06 = 'Prueba técnica de laboratorio ejecutada en SQL Server local con DBCC CHECKDB y RESTORE VERIFYONLY. Evidencia verificada en laboratorio y registrada mediante hash SHA-256. El archivo físico no se almacena en este entorno cloud.'
+    else:
+        res_pt06 = 'Pendiente'
+        obs_pt06 = 'Prueba de laboratorio documentada, pero el archivo físico .log está pendiente de generación en disco y no cuenta con hash verificado en base de datos.'
 
     return [
         {
@@ -1335,8 +1407,8 @@ def obtener_matriz_criterios_auditoria() -> List[Dict[str, Any]]:
             'criterio': 'COBIT 2019 DSS05.04 / Continuidad Operativa',
             'procedimiento': 'Ensayo de restauración con verificación de integridad de páginas en SQL Server.',
             'evidencia': 'PT-06_restauracion_verificada.log',
-            'resultado': 'Conforme' if pt06_existe else 'Pendiente',
-            'observacion': 'Prueba de laboratorio ejecutada en SQL Server local con DBCC CHECKDB y RESTORE VERIFYONLY. Log físico verificado con hash SHA-256 íntegro.' if pt06_existe else 'Prueba de laboratorio documentada, pero el archivo físico .log está pendiente de generación en disco.'
+            'resultado': res_pt06,
+            'observacion': obs_pt06
         },
         {
             'control': 'Auditoría de Consultas SELECT en Motor',

@@ -31,6 +31,7 @@ from utils.queries_auditoria import (
     guardar_hallazgo_auditoria,
     guardar_riesgo_auditoria,
     obtener_completitud_conciliacion,
+    obtener_evidencias_auditoria,
     obtener_matriz_criterios_auditoria,
     obtener_permisos_sql,
     obtener_principales_sql,
@@ -612,6 +613,133 @@ class TestCentroAuditoriaLogicaNegocio(unittest.TestCase):
         hash_calculado = calcular_sha256_archivo(ruta_pt06)
         self.assertEqual(len(hash_calculado), 64)
         self.assertEqual(hash_calculado, '9da3b4899b50c7bfd968a59345911eb65598f088797549f776c5a45b4fe888db')
+
+    def test_24_evidencias_entorno_local_vs_cloud_render(self):
+        """
+        Verifica la separación entre estado metodológico/integridad histórica y
+        disponibilidad física en entorno local vs entorno cloud (Render).
+        - En local (archivos presentes): PT-01..PT-03 Válido, PT-04..PT-06 Verificado,
+          disponibilidad 'Disponible en este entorno'.
+        - En cloud (sin archivos físicos pero con hash válido en BD):
+          PT-01..PT-03 conservan 'Válido' y PT-04..PT-06 conservan 'Verificado',
+          disponibilidad 'Custodiado externamente / no almacenado en este entorno cloud',
+          sin degradar erróneamente a 'Pendiente'.
+        - Con archivo modificado (hash discrepante): 'Alterado' sin sobrescribir BD.
+        """
+        filas_simuladas = [
+            (1, 'PT-01', 'Censo SQL', 'sys.database_principals', 'Producción', 'sys.database_principals', 'PT-01_principales_sql.csv', '2026-11-15 02:00:00', 'Auditor', 'c685ef7b13a090d4dca7a6f6cd2252ab4b0a33dbb048a052eec9c4b501b76011', '', 'Válido'),
+            (2, 'PT-02', 'Roles DB', 'sys.database_role_members', 'Producción', 'sys.database_role_members', 'PT-02_roles_db.csv', '2026-11-15 02:00:00', 'Auditor', 'e7544777070bdd68bb502452b4b7146c42d83fa78e654085bccf21367c16cffa', '', 'Válido'),
+            (3, 'PT-03', 'Permisos', 'sys.database_permissions', 'Producción', 'sys.database_permissions', 'PT-03_permisos_explicitos.csv', '2026-11-15 02:00:00', 'Auditor', 'd1c37989421f7339044053e78a6005ecdb8893a6259c8f5081fc2b66dd39b7ea', '', 'Válido'),
+            (4, 'PT-04', 'DML Lab', 'dbo.Salas', 'Laboratorio', 'dbo.AuditDmlLog', 'PT-04_trazabilidad_dml_lab.csv', '2026-11-15 02:00:00', 'Auditor', 'd6188f18febedf444ee672f6aad65c25f6d46b24d99fabfcb1a5c6d33b8727f2', '', 'Verificado'),
+            (5, 'PT-05', 'DDL Lab', 'dbo.AuditoriaDDL_Prueba', 'Laboratorio', 'dbo.AuditDdlLog', 'PT-05_trazabilidad_ddl_lab.csv', '2026-11-15 02:00:00', 'Auditor', '78425d8b2fec6acd0f9155bf1d435431e36f09cee62213283d9d88b932327fca', '', 'Verificado'),
+            (6, 'PT-06', 'Restore Lab', 'AuditRecoveryTests', 'Laboratorio', 'SQL Server Local', 'PT-06_restauracion_verificada.log', '2026-11-15 22:20:06', 'DBA Auditor', '9da3b4899b50c7bfd968a59345911eb65598f088797549f776c5a45b4fe888db', '', 'Verificado')
+        ]
+
+        # Caso 1: Simulación entorno Cloud/Render (sin archivos en disco)
+        with patch('utils.queries_auditoria.get_db_connection') as mock_conn:
+            cursor_mock = MagicMock()
+            mock_conn.return_value.cursor.return_value = cursor_mock
+            cursor_mock.fetchall.return_value = filas_simuladas
+
+            with patch('os.path.isfile', return_value=False):
+                evidencias_cloud = obtener_evidencias_auditoria()
+                self.assertEqual(len(evidencias_cloud), 6)
+
+                mapa_cloud = {e['codigo']: e for e in evidencias_cloud}
+
+                # PT-01 a PT-03 deben ser Válido
+                for cod in ['PT-01', 'PT-02', 'PT-03']:
+                    e = mapa_cloud[cod]
+                    self.assertEqual(e['estado'], 'Válido', f"{cod} debe conservar estado Válido en cloud")
+                    self.assertFalse(e['archivo_existe'])
+                    self.assertIn('Custodiado externamente', e['disponibilidad'])
+                    self.assertIn('no se almacena en este entorno cloud', e['detalle_verificacion'])
+
+                # PT-04 a PT-06 deben ser Verificado
+                for cod in ['PT-04', 'PT-05', 'PT-06']:
+                    e = mapa_cloud[cod]
+                    self.assertEqual(e['estado'], 'Verificado', f"{cod} debe conservar estado Verificado en cloud")
+                    self.assertFalse(e['archivo_existe'])
+                    self.assertIn('Custodiado externamente', e['disponibilidad'])
+                    self.assertIn('no se almacena en este entorno cloud', e['detalle_verificacion'])
+
+        # Caso 2: Simulación entorno Local (archivos existen e integridad coincide)
+        with patch('utils.queries_auditoria.get_db_connection') as mock_conn:
+            cursor_mock = MagicMock()
+            mock_conn.return_value.cursor.return_value = cursor_mock
+            cursor_mock.fetchall.return_value = filas_simuladas
+
+            with patch('os.path.isfile', return_value=True):
+                with patch('utils.queries_auditoria.calcular_sha256_archivo') as mock_hash:
+                    mock_hash.side_effect = lambda path: next(f[9] for f in filas_simuladas if f[6] in path)
+                    evidencias_local = obtener_evidencias_auditoria()
+                    mapa_local = {e['codigo']: e for e in evidencias_local}
+
+                    for cod in ['PT-01', 'PT-02', 'PT-03']:
+                        e = mapa_local[cod]
+                        self.assertEqual(e['estado'], 'Válido')
+                        self.assertTrue(e['archivo_existe'])
+                        self.assertEqual(e['disponibilidad'], 'Disponible en este entorno')
+                        self.assertEqual(e['detalle_verificacion'], 'Integridad comprobada en este entorno')
+
+                    for cod in ['PT-04', 'PT-05', 'PT-06']:
+                        e = mapa_local[cod]
+                        self.assertEqual(e['estado'], 'Verificado')
+                        self.assertTrue(e['archivo_existe'])
+                        self.assertEqual(e['disponibilidad'], 'Disponible en este entorno')
+                        self.assertEqual(e['detalle_verificacion'], 'Integridad comprobada en este entorno')
+
+        # Caso 3: Archivo alterado (hash discrepante)
+        with patch('utils.queries_auditoria.get_db_connection') as mock_conn:
+            cursor_mock = MagicMock()
+            mock_conn.return_value.cursor.return_value = cursor_mock
+            cursor_mock.fetchall.return_value = [filas_simuladas[0]]
+
+            with patch('os.path.isfile', return_value=True):
+                with patch('utils.queries_auditoria.calcular_sha256_archivo', return_value='0'*64):
+                    evid_alt = obtener_evidencias_auditoria()
+                    self.assertEqual(evid_alt[0]['estado'], 'Alterado')
+                    self.assertIn('Hash discrepante', evid_alt[0]['disponibilidad'])
+                    cursor_mock.execute.assert_called_once()  # Solo el SELECT inicial
+
+    def test_25_matriz_criterios_pt06_local_y_cloud(self):
+        """
+        Verifica que en la matriz CIS/COBIT el control de integridad de respaldos (PT-06)
+        permanezca 'Conforme' tanto en entorno local como en cloud/Render cuando consta en BD.
+        """
+        # Escenario 1: Local con archivo físico presente
+        with patch('os.path.isfile', return_value=True):
+            with patch('utils.queries_auditoria.get_db_connection') as mock_conn:
+                cursor_mock = MagicMock()
+                mock_conn.return_value.cursor.return_value = cursor_mock
+                cursor_mock.fetchone.return_value = ('9da3b4899b50c7bfd968a59345911eb65598f088797549f776c5a45b4fe888db', 'Verificado')
+                matriz_local = obtener_matriz_criterios_auditoria()
+                pt06_local = next(m for m in matriz_local if m['evidencia'] == 'PT-06_restauracion_verificada.log')
+                self.assertEqual(pt06_local['resultado'], 'Conforme')
+                self.assertIn('íntegro en este entorno', pt06_local['observacion'])
+
+        # Escenario 2: Cloud / Render (sin archivo físico pero verificado en BD)
+        with patch('os.path.isfile', return_value=False):
+            with patch('utils.queries_auditoria.get_db_connection') as mock_conn:
+                cursor_mock = MagicMock()
+                mock_conn.return_value.cursor.return_value = cursor_mock
+                cursor_mock.fetchone.return_value = ('9da3b4899b50c7bfd968a59345911eb65598f088797549f776c5a45b4fe888db', 'Verificado')
+
+                matriz_cloud = obtener_matriz_criterios_auditoria()
+                pt06_cloud = next(m for m in matriz_cloud if m['evidencia'] == 'PT-06_restauracion_verificada.log')
+                self.assertEqual(pt06_cloud['resultado'], 'Conforme')
+                self.assertIn('no se almacena en este entorno cloud', pt06_cloud['observacion'])
+
+        # Escenario 3: Sin archivo y sin registro verificado en BD -> Pendiente
+        with patch('os.path.isfile', return_value=False):
+            with patch('utils.queries_auditoria.get_db_connection') as mock_conn:
+                cursor_mock = MagicMock()
+                mock_conn.return_value.cursor.return_value = cursor_mock
+                cursor_mock.fetchone.return_value = (None, 'Pendiente')
+
+                matriz_pend = obtener_matriz_criterios_auditoria()
+                pt06_pend = next(m for m in matriz_pend if m['evidencia'] == 'PT-06_restauracion_verificada.log')
+                self.assertEqual(pt06_pend['resultado'], 'Pendiente')
 
 
 if __name__ == '__main__':
