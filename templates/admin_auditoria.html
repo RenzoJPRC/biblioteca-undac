@@ -79,8 +79,8 @@
 
             <!-- Indicador responsivo para pantallas medianas/pequeñas -->
             <div class="flex items-center justify-between text-[11px] text-slate-400 px-2 pb-1.5 sm:hidden border-b border-slate-100 mb-1">
-                <span class="flex items-center gap-1 font-medium"><i class="ph ph-arrows-horizontal text-indigo-500"></i> Desliza para explorar las 9 pestañas</span>
-                <span class="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">9 Pestañas</span>
+                <span class="flex items-center gap-1 font-medium"><i class="ph ph-arrows-horizontal text-indigo-500"></i> Desliza para explorar las 10 pestañas</span>
+                <span class="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">10 Pestañas</span>
             </div>
 
             <nav class="flex space-x-1.5 overflow-x-auto pb-1 scroll-smooth" aria-label="Pestañas de Auditoría" id="audit-tabs-nav">
@@ -137,6 +137,12 @@
                    title="Matriz de cumplimiento normativo CIS y COBIT">
                     <span class="flex items-center gap-1.5 whitespace-nowrap"><i class="ph ph-matrix-logo text-base"></i> 9. Criterios CIS/COBIT</span>
                     <span class="text-[9px] font-normal whitespace-nowrap {% if tab_activa == 'criterios' %}text-indigo-200{% else %}text-slate-400{% endif %}">Matriz de cumplimiento</span>
+                </a>
+                <a href="{{ url_for('admin_auditoria.index', tab='consultas') }}" data-tab="consultas"
+                   class="audit-tab-btn flex flex-col items-start px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 whitespace-nowrap {% if tab_activa == 'consultas' %}bg-indigo-600 text-white shadow-md shadow-indigo-600/20 active-tab{% else %}text-slate-600 hover:bg-slate-100{% endif %}"
+                   title="Consultas SQL y procedimientos de auditoría utilizados para generar PT-01 a PT-06">
+                    <span class="flex items-center gap-1.5 whitespace-nowrap"><i class="ph ph-code text-base"></i> 10. Consultas de Auditoría</span>
+                    <span class="text-[9px] font-normal whitespace-nowrap {% if tab_activa == 'consultas' %}text-indigo-200{% else %}text-slate-400{% endif %}">SQL y procedimientos PT</span>
                 </a>
             </nav>
         </div>
@@ -1613,6 +1619,138 @@
 
         </div>
         {% endif %}
+
+        <!-- ============================================================== -->
+        <!-- PESTAÑA 10: CONSULTAS Y PROCEDIMIENTOS DE AUDITORÍA (SOLO LECTURA) -->
+        <!-- ============================================================== -->
+        {% if tab_activa == 'consultas' %}
+        <div class="space-y-6">
+
+            <!-- ENCABEZADO Y NOTA METODOLÓGICA OBLIGATORIA -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+                <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                    <div class="space-y-1">
+                        <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                            <i class="ph ph-terminal-window text-indigo-600 text-base"></i> Procedimientos Técnicos y Consultas SQL de Auditoría
+                        </h3>
+                        <p class="text-xs text-slate-600 font-medium">
+                            <strong>Nota metodológica:</strong> Las consultas mostradas corresponden a los procedimientos de auditoría utilizados para generar las evidencias. Su inclusión permite reproducibilidad y trazabilidad del trabajo.
+                        </p>
+                    </div>
+                    <div class="flex items-center gap-2 shrink-0">
+                        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <i class="ph ph-eye text-sm"></i> Solo Lectura / Informativo
+                        </span>
+                        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                            <i class="ph ph-prohibit text-sm text-slate-500"></i> Ejecución no permitida
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TARJETAS DE PROCEDIMIENTOS POR EVIDENCIA PT-01 A PT-06 -->
+            <div class="space-y-6">
+                {% for item in consultas %}
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                    <!-- ENCABEZADO DE TARJETA -->
+                    <div class="p-5 border-b border-slate-100 bg-slate-50/80 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                        <div class="flex items-center gap-3">
+                            <span class="font-mono font-black text-sm px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                {{ item.codigo }}
+                            </span>
+                            <div>
+                                <h4 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+                                    {{ item.titulo }}
+                                </h4>
+                                <p class="text-xs text-slate-500 mt-0.5">{{ item.explicacion }}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="px-2.5 py-0.5 rounded text-[10px] font-bold uppercase
+                                  {% if item.entorno == 'Producción' %}bg-emerald-50 text-emerald-700 border border-emerald-200
+                                  {% else %}bg-amber-50 text-amber-700 border border-amber-200{% endif %}">
+                                {{ item.entorno }}
+                            </span>
+                            <span class="font-mono text-[11px] text-indigo-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 font-semibold" title="Evidencia generada">
+                                {{ item.evidencia_generada }}
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- CUERPO DE TARJETA: SQL Y DETALLES -->
+                    <div class="p-5 space-y-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                            <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+                                <span class="font-bold text-slate-700 block mb-1">
+                                    <i class="ph ph-target text-indigo-600"></i> Objetivo:
+                                </span>
+                                <p class="text-slate-600 leading-relaxed">{{ item.objetivo }}</p>
+                            </div>
+                            <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+                                <span class="font-bold text-slate-700 block mb-1">
+                                    <i class="ph ph-check-circle text-emerald-600"></i> Resultado resumido:
+                                </span>
+                                <p class="text-slate-600 leading-relaxed">{{ item.resultado_resumido }}</p>
+                            </div>
+                        </div>
+
+                        <!-- DISTINCIÓN METODOLÓGICA: OBJETO ORIGINAL VS REPOSITORIO DE METADATA -->
+                        {% if item.objeto_original or item.repositorio_metadata %}
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs bg-slate-50/70 p-3.5 rounded-xl border border-slate-200/80">
+                            {% if item.objeto_original %}
+                            <div>
+                                <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                                    <i class="ph ph-flask text-amber-600 text-xs"></i> Objeto utilizado en la prueba original:
+                                </span>
+                                <span class="text-xs font-mono font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200 inline-block leading-tight">
+                                    {{ item.objeto_original }}
+                                </span>
+                            </div>
+                            {% endif %}
+                            {% if item.repositorio_metadata %}
+                            <div>
+                                <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                                    <i class="ph ph-database text-indigo-600 text-xs"></i> Repositorio actual de metadata del Centro de Auditoría:
+                                </span>
+                                <span class="text-xs font-mono font-bold text-indigo-700 bg-indigo-50/60 px-2 py-0.5 rounded border border-indigo-200 inline-block leading-tight">
+                                    {{ item.repositorio_metadata }}
+                                </span>
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+
+                        <!-- BLOQUE DE CÓDIGO SQL CON BOTÓN DE COPIAR -->
+                        <div class="relative group">
+                            <div class="flex items-center justify-between bg-slate-900 text-slate-300 px-4 py-2 rounded-t-xl text-[11px] font-mono border-b border-slate-800">
+                                <span class="flex items-center gap-1.5 text-slate-400">
+                                    <i class="ph ph-code"></i> Consulta / Script T-SQL
+                                </span>
+                                <button type="button" 
+                                        onclick="copiarConsultaSQL(this)"
+                                        class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-800 hover:bg-indigo-600 text-white text-[10px] font-bold transition-all cursor-pointer shadow-sm border border-slate-700"
+                                        title="Copiar consulta SQL al portapapeles">
+                                    <i class="ph ph-copy text-xs"></i>
+                                    <span>Copiar consulta</span>
+                                </button>
+                            </div>
+                            <pre class="bg-slate-950 text-slate-100 p-4 rounded-b-xl overflow-x-auto text-[11px] font-mono leading-relaxed border border-t-0 border-slate-800 select-all"><code>{{ item.consulta_sql }}</code></pre>
+                        </div>
+
+                        <!-- LIMITACIÓN TÉCNICA -->
+                        <div class="text-[11px] text-slate-500 bg-amber-50/60 p-3 rounded-xl border border-amber-200/60 flex items-start gap-2">
+                            <i class="ph ph-warning-circle text-amber-600 text-sm mt-0.5 shrink-0"></i>
+                            <div>
+                                <strong class="text-amber-800 font-semibold">Limitación técnica documentada:</strong>
+                                <span class="text-slate-700 ml-1">{{ item.limitacion }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
         </div> <!-- /tab-content-area -->
 
     </div>
@@ -2138,6 +2276,25 @@ function copiarHashPortapapeles(hash, btn) {
         });
     } else {
         copiarFallback(hash, btn);
+    }
+}
+
+// Copiar Consulta SQL al portapapeles desde tarjeta de auditoría (Pestaña 10)
+function copiarConsultaSQL(btn) {
+    if (!btn) return;
+    const contenedor = btn.closest('.group');
+    if (!contenedor) return;
+    const codigoElemento = contenedor.querySelector('pre code');
+    if (!codigoElemento) return;
+    const texto = codigoElemento.innerText || codigoElemento.textContent;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(texto).then(function() {
+            mostrarFeedbackCopiado(btn);
+        }).catch(function() {
+            copiarFallback(texto, btn);
+        });
+    } else {
+        copiarFallback(texto, btn);
     }
 }
 

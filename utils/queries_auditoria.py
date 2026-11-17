@@ -1660,3 +1660,275 @@ def generar_informe_consolidado_markdown() -> str:
     md.append("3. **Restricciones del Proveedor:** Consultas a nivel servidor (`sys.server_principals`, `SQL Server Audit Specification`) no son evaluables debido a restricciones de arquitectura del hosting compartido (SmarterASP.NET).")
 
     return "\n".join(md)
+
+
+# =====================================================================
+# 11. PESTAÑA 10: CONSULTAS Y PROCEDIMIENTOS DE AUDITORÍA (SOLO LECTURA)
+# =====================================================================
+
+def obtener_consultas_auditoria() -> List[Dict[str, Any]]:
+    """
+    Retorna el catálogo técnico reproducible de consultas y scripts SQL
+    utilizados para generar las evidencias PT-01 a PT-06.
+    Módulo de estricta solo lectura: no ejecuta consultas ni permite ejecución arbitraria.
+    """
+    return [
+        {
+            'codigo': 'PT-01',
+            'titulo': 'PT-01 – Censo de principales de base de datos',
+            'objetivo': 'Identificar y censar de forma exhaustiva los usuarios y cuentas técnicas reconocidas en el catálogo de seguridad de la base de datos (sys.database_principals).',
+            'entorno': 'Producción',
+            'objeto_original': 'sys.database_principals (Vista de catálogo de base de datos)',
+            'repositorio_metadata': 'dbo.AuditEvidence (Registro PT-01)',
+            'explicacion': 'Permite identificar los principales visibles a nivel de base de datos.',
+            'consulta_sql': """-- =====================================================================
+-- PT-01: Censo de principales en catálogo de base de datos (Producción)
+-- Procedimiento de solo lectura ejecutado para generar la evidencia PT-01_principales_sql.csv
+-- =====================================================================
+SELECT 
+    name, 
+    type_desc, 
+    authentication_type_desc, 
+    CONVERT(varchar(19), create_date, 120) AS create_date,
+    CONVERT(varchar(19), modify_date, 120) AS modify_date
+FROM sys.database_principals
+WHERE type NOT IN ('A', 'R') -- Excluye Application Roles ('A') y Database Roles ('R')
+ORDER BY name ASC;""",
+            'resultado_resumido': '5 principales visibles catalogados (dbo, guest, INFORMATION_SCHEMA, portal_4997910989b62d8cf6d5, sys).',
+            'evidencia_generada': 'PT-01_principales_sql.csv',
+            'limitacion': 'Visibilidad acotada a la base asignada en hosting compartido (SmarterASP.NET); sys.server_principals no es accesible con permisos de usuario delegado.'
+        },
+        {
+            'codigo': 'PT-02',
+            'titulo': 'PT-02 – Membresías de roles de base de datos',
+            'objetivo': 'Auditar las membresías en roles fijos de base de datos con especial énfasis en asignaciones con privilegios de control total (db_owner).',
+            'entorno': 'Producción',
+            'objeto_original': 'sys.database_role_members (Vista de catálogo de membresías)',
+            'repositorio_metadata': 'dbo.AuditEvidence (Registro PT-02)',
+            'explicacion': 'Permite identificar los miembros de roles de base de datos, incluyendo db_owner.',
+            'consulta_sql': """-- =====================================================================
+-- PT-02: Membresías en roles de base de datos (Producción)
+-- Procedimiento de solo lectura ejecutado para generar la evidencia PT-02_roles_db.csv
+-- =====================================================================
+SELECT 
+    rol.name AS [Rol de Base de Datos],
+    miembro.name AS [Miembro / Usuario]
+FROM sys.database_role_members rm
+INNER JOIN sys.database_principals rol 
+    ON rm.role_principal_id = rol.principal_id
+INNER JOIN sys.database_principals miembro 
+    ON rm.member_principal_id = miembro.principal_id
+ORDER BY rol.name ASC, miembro.name ASC;""",
+            'resultado_resumido': '2 membresías db_owner detectadas (dbo y cuenta de infraestructura de hosting portal_4997910989b62d8cf6d5).',
+            'evidencia_generada': 'PT-02_roles_db.csv',
+            'limitacion': 'Muestra asignaciones a nivel de base de datos. Los roles fijos de servidor (sysadmin) no son consultables en entorno compartido.'
+        },
+        {
+            'codigo': 'PT-03',
+            'titulo': 'PT-03 – Permisos explícitos visibles',
+            'objetivo': 'Catalogar la totalidad de permisos granulares GRANT y DENY otorgados explícitamente sobre tablas, vistas y esquemas (sys.database_permissions).',
+            'entorno': 'Producción',
+            'objeto_original': 'sys.database_permissions (Vista de catálogo de permisos)',
+            'repositorio_metadata': 'dbo.AuditEvidence (Registro PT-03)',
+            'explicacion': 'Permite catalogar permisos explícitos GRANT/DENY visibles en la base de datos.',
+            'consulta_sql': """-- =====================================================================
+-- PT-03: Censo de permisos explícitos sobre objetos y esquemas (Producción)
+-- Procedimiento de solo lectura ejecutado para generar la evidencia PT-03_permisos_explicitos.csv
+-- =====================================================================
+SELECT 
+    grantee.name AS [Receptor (Grantee)],
+    perm.permission_name AS [Permiso],
+    perm.state_desc AS [Estado],
+    perm.class_desc AS [Clase],
+    OBJECT_NAME(perm.major_id) AS [Objeto]
+FROM sys.database_permissions perm
+INNER JOIN sys.database_principals grantee 
+    ON perm.grantee_principal_id = grantee.principal_id
+ORDER BY grantee.name ASC, perm.permission_name ASC;""",
+            'resultado_resumido': '228 permisos explícitos catalogados sobre esquemas y entidades de base de datos.',
+            'evidencia_generada': 'PT-03_permisos_explicitos.csv',
+            'limitacion': 'Permisos implícitos heredados por membresía en db_owner o permisos a nivel de instancia no figuran como filas individuales en sys.database_permissions.'
+        },
+        {
+            'codigo': 'PT-04',
+            'titulo': 'PT-04 – Trazabilidad DML (demostración controlada)',
+            'objetivo': 'Demostración técnica en laboratorio de captura forense y trazabilidad ante operaciones INSERT, UPDATE y DELETE sobre dbo.Salas.',
+            'entorno': 'Laboratorio',
+            'objeto_original': 'dbo.trg_Salas_Auditoria_DML y bitácora de auditoría sobre dbo.Salas (Base local BibliotecaUNDAC_Auditoria)',
+            'repositorio_metadata': 'dbo.AuditDmlLog (Registro consolidado de los 4 eventos en el Centro de Auditoría)',
+            'explicacion': 'Script de creación del trigger de auditoría DML (dbo.trg_Salas_Auditoria_DML), secuencia de ensayo (2 INSERT, 1 UPDATE, 1 DELETE) sobre dbo.Salas y consultas de verificación.',
+            'consulta_sql': """-- =====================================================================
+-- 1. OBJETO UTILIZADO EN LA PRUEBA ORIGINAL (Laboratorio - Base local BibliotecaUNDAC_Auditoria)
+-- Trigger DML real implementado sobre dbo.Salas para capturar valores antes/después
+-- =====================================================================
+CREATE TRIGGER dbo.trg_Salas_Auditoria_DML
+ON dbo.Salas
+AFTER INSERT, UPDATE, DELETE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @Operacion VARCHAR(10) = 
+        CASE 
+            WHEN EXISTS(SELECT 1 FROM inserted) AND EXISTS(SELECT 1 FROM deleted) THEN 'UPDATE'
+            WHEN EXISTS(SELECT 1 FROM inserted) THEN 'INSERT'
+            WHEN EXISTS(SELECT 1 FROM deleted) THEN 'DELETE'
+        END;
+
+    INSERT INTO dbo.Bitacora_Salas_DML (
+        FechaHora, Operacion, Tabla, ClaveRegistro, UsuarioSQL,
+        NombreSalaAntes, NombreSalaDespues, PisoAntes, PisoDespues,
+        SedeAntes, SedeDespues, ActivoAntes, ActivoDespues
+    )
+    SELECT 
+        GETDATE(),
+        @Operacion,
+        'dbo.Salas',
+        COALESCE(i.SalaID, d.SalaID),
+        SYSTEM_USER,
+        d.NombreSala, i.NombreSala,
+        d.Piso, i.Piso,
+        d.Sede, i.Sede,
+        d.Activo, i.Activo
+    FROM inserted i
+    FULL OUTER JOIN deleted d ON i.SalaID = d.SalaID;
+END;
+
+-- =====================================================================
+-- 2. SECUENCIA REAL DE ENSAYO EJECUTADA (4 operaciones: 2 INSERT, 1 UPDATE, 1 DELETE)
+-- =====================================================================
+-- Operación 1: INSERT Sala 101
+INSERT INTO dbo.Salas (SalaID, NombreSala, Piso, Sede, Activo)
+VALUES (101, 'Sala de Estudio Especializado', 2, 'Central', 1);
+
+-- Operación 2: INSERT Sala 102
+INSERT INTO dbo.Salas (SalaID, NombreSala, Piso, Sede, Activo)
+VALUES (102, 'Sala de Investigacion Posgrado', 3, 'Central', 1);
+
+-- Operación 3: UPDATE Sala 101
+UPDATE dbo.Salas
+SET NombreSala = 'Sala de Estudio Especializado y Hemeroteca'
+WHERE SalaID = 101;
+
+-- Operación 4: DELETE Sala 102
+DELETE FROM dbo.Salas
+WHERE SalaID = 102;
+
+-- =====================================================================
+-- 3. CONSULTA UTILIZADA PARA REVISAR LA EVIDENCIA ORIGINAL (PT-04_trazabilidad_dml_lab.csv)
+-- =====================================================================
+SELECT 
+    FechaHora, Operacion, Tabla, ClaveRegistro, UsuarioSQL,
+    NombreSalaAntes, NombreSalaDespues, PisoAntes, PisoDespues,
+    SedeAntes, SedeDespues, ActivoAntes, ActivoDespues
+FROM dbo.Bitacora_Salas_DML
+ORDER BY FechaHora ASC;
+
+-- =====================================================================
+-- 4. REPOSITORIO ACTUAL DE METADATA DEL CENTRO DE AUDITORÍA (dbo.AuditDmlLog)
+-- Tabla interna donde se importaron y consolidaron los 4 eventos para visualización en el dashboard
+-- =====================================================================
+SELECT 
+    DmlID, FechaHora, Operacion, Tabla, Identificador, 
+    UsuarioTecnico, ValoresAntes, ValoresDespues, EsLaboratorio
+FROM dbo.AuditDmlLog
+ORDER BY DmlID ASC;""",
+            'resultado_resumido': '4 eventos observados de 4 esperados (100% de cobertura en el caso controlado de laboratorio: 2 INSERT, 1 UPDATE, 1 DELETE).',
+            'evidencia_generada': 'PT-04_trazabilidad_dml_lab.csv',
+            'limitacion': 'Prueba efectuada en laboratorio sobre entidad dbo.Salas para no generar sobrecarga ni bloqueos transaccionales en producción.'
+        },
+        {
+            'codigo': 'PT-05',
+            'titulo': 'PT-05 – Trazabilidad DDL (demostración controlada)',
+            'objetivo': 'Demostración técnica en laboratorio de captura y auditoría de eventos CREATE, ALTER y DROP TABLE.',
+            'entorno': 'Laboratorio',
+            'objeto_original': 'dbo.trg_Auditoria_DDL_Database y tabla de prueba dbo.AuditoriaDDL_Prueba (Base local BibliotecaUNDAC_Auditoria)',
+            'repositorio_metadata': 'dbo.AuditDdlLog (Registro consolidado de los 3 eventos en el Centro de Auditoría)',
+            'explicacion': 'Trigger DDL de base de datos (dbo.trg_Auditoria_DDL_Database), eventos CREATE_TABLE, ALTER_TABLE y DROP_TABLE sobre dbo.AuditoriaDDL_Prueba, y consultas de verificación.',
+            'consulta_sql': """-- =====================================================================
+-- 1. OBJETO UTILIZADO EN LA PRUEBA ORIGINAL (Laboratorio - Base local BibliotecaUNDAC_Auditoria)
+-- Trigger DDL real a nivel de base de datos para capturar EVENTDATA()
+-- =====================================================================
+CREATE TRIGGER dbo.trg_Auditoria_DDL_Database
+ON DATABASE
+FOR CREATE_TABLE, ALTER_TABLE, DROP_TABLE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @EventData XML = EVENTDATA();
+    INSERT INTO dbo.Bitacora_DDL_Laboratorio (
+        FechaHora, Evento, Esquema, Objeto, TipoObjeto, UsuarioSQL, Comando
+    )
+    VALUES (
+        GETDATE(),
+        @EventData.value('(/EVENT_INSTANCE/EventType)[1]', 'VARCHAR(64)'),
+        @EventData.value('(/EVENT_INSTANCE/SchemaName)[1]', 'VARCHAR(64)'),
+        @EventData.value('(/EVENT_INSTANCE/ObjectName)[1]', 'VARCHAR(128)'),
+        @EventData.value('(/EVENT_INSTANCE/ObjectType)[1]', 'VARCHAR(64)'),
+        SYSTEM_USER,
+        @EventData.value('(/EVENT_INSTANCE/TSQLCommand/CommandText)[1]', 'NVARCHAR(MAX)')
+    );
+END;
+
+-- =====================================================================
+-- 2. SECUENCIA REAL DE ENSAYO EJECUTADA (Objeto: dbo.AuditoriaDDL_Prueba)
+-- =====================================================================
+-- Evento 1: CREATE TABLE
+CREATE TABLE dbo.AuditoriaDDL_Prueba (ID int PRIMARY KEY, Descripcion varchar(100));
+
+-- Evento 2: ALTER TABLE
+ALTER TABLE dbo.AuditoriaDDL_Prueba ADD CreadoEn datetime DEFAULT GETDATE();
+
+-- Evento 3: DROP TABLE
+DROP TABLE dbo.AuditoriaDDL_Prueba;
+
+-- =====================================================================
+-- 3. CONSULTA UTILIZADA PARA REVISAR LA EVIDENCIA ORIGINAL (PT-05_trazabilidad_ddl_lab.csv)
+-- =====================================================================
+SELECT 
+    FechaHora, Evento, Esquema, Objeto, TipoObjeto, UsuarioSQL, Comando
+FROM dbo.Bitacora_DDL_Laboratorio
+ORDER BY FechaHora ASC;
+
+-- =====================================================================
+-- 4. REPOSITORIO ACTUAL DE METADATA DEL CENTRO DE AUDITORÍA (dbo.AuditDdlLog)
+-- Tabla interna donde se importaron y consolidaron los 3 eventos para visualización en el dashboard
+-- =====================================================================
+SELECT 
+    DdlID, FechaHora, Evento, Esquema, Objeto, 
+    TipoObjeto, UsuarioSQL, Comando, EsLaboratorio
+FROM dbo.AuditDdlLog
+ORDER BY DdlID ASC;""",
+            'resultado_resumido': '3 eventos estructurales observados de 3 esperados (CREATE_TABLE, ALTER_TABLE, DROP_TABLE con comando SQL completo capturado).',
+            'evidencia_generada': 'PT-05_trazabilidad_ddl_lab.csv',
+            'limitacion': 'Ejecutado en laboratorio; el hosting compartido de producción restringe la creación de triggers DDL a nivel de base de datos.'
+        },
+        {
+            'codigo': 'PT-06',
+            'titulo': 'PT-06 – Verificación de Integridad y Restauración de Backup',
+            'objetivo': 'Verificar la integridad estructural de la base restaurada y comprobar que el archivo de respaldo .bak es reconocido como válido por SQL Server.',
+            'entorno': 'Laboratorio',
+            'objeto_original': 'Base de datos restaurada BibliotecaUNDAC_Auditoria y respaldo db_acdcfa_bibliotecaundac_10_29_2026_23.bak (SQL Server Local)',
+            'repositorio_metadata': 'dbo.AuditRecoveryTests (Registro en el módulo Backups & Recuperación)',
+            'explicacion': 'Comprobación de integridad mediante DBCC CHECKDB sobre la base restaurada y verificación del archivo de copia mediante RESTORE VERIFYONLY.',
+            'consulta_sql': """-- =====================================================================
+-- PRUEBA 1: VERIFICACIÓN DE INTEGRIDAD DE LA BASE RESTAURADA (Laboratorio)
+-- Entorno: SQL Server Local | Base restaurada: BibliotecaUNDAC_Auditoria
+-- =====================================================================
+DBCC CHECKDB ('BibliotecaUNDAC_Auditoria') 
+WITH NO_INFOMSGS;
+-- Resultado: "Los comandos se han completado correctamente."
+-- Interpretación: 0 errores de consistencia detectados en páginas y tablas.
+
+-- =====================================================================
+-- PRUEBA 2: VERIFICACIÓN DEL ARCHIVO DE RESPALDO (Laboratorio)
+-- Archivo de respaldo evaluado: db_acdcfa_bibliotecaundac_10_29_2026_23.bak
+-- =====================================================================
+RESTORE VERIFYONLY 
+FROM DISK = 'db_acdcfa_bibliotecaundac_10_29_2026_23.bak';
+-- Resultado: "The backup set on file 1 is valid."
+-- Interpretación: Archivo de copia reconocido por SQL Server como válido.""",
+            'resultado_resumido': 'DBCC CHECKDB sin errores reportados (0 errores de consistencia); backup reconocido por SQL Server como válido (The backup set on file 1 is valid).',
+            'evidencia_generada': 'PT-06_restauracion_verificada.log',
+            'limitacion': 'Las advertencias de rutas físicas (unidad H:\\ no existente en entorno local) corresponden a una consideración de restauración hacia una ruta distinta (requiere WITH MOVE) y no constituyen corrupción del respaldo.'
+        }
+    ]

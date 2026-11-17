@@ -4,7 +4,7 @@ Sistema Bibliotecario UNDAC.
 
 Cobertura de pruebas:
 1. Control de acceso RBAC estricto (acceso exclusivo para SuperAdmin, rechazo a otros roles).
-2. Renderizado de las 9 pestañas del módulo de auditoría.
+2. Renderizado de las 10 pestañas del módulo de auditoría.
 3. Endpoints de exportación CSV (UTF-8 con BOM) e informe consolidado Markdown.
 4. Lógica de cálculo criptográfico SHA-256 para cadena de custodia de evidencias.
 5. Clasificación semántica de eventos y sanitización (ocultamiento de credenciales/tokens).
@@ -12,6 +12,7 @@ Cobertura de pruebas:
 7. Principio de confirmación humana obligatoria para hallazgos (nunca confirmación automática).
 8. Cobertura de trazabilidad DML y presencia de la advertencia metodológica de laboratorio.
 9. Manejo de restricciones de proveedor de hosting ("No evaluable por restricción del proveedor").
+10. Procedimientos técnicos y consultas SQL de auditoría (PT-01 a PT-06) en modo informativo y de solo lectura.
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ from utils.queries_auditoria import (
     guardar_hallazgo_auditoria,
     guardar_riesgo_auditoria,
     obtener_completitud_conciliacion,
+    obtener_consultas_auditoria,
     obtener_evidencias_auditoria,
     obtener_matriz_criterios_auditoria,
     obtener_permisos_sql,
@@ -101,9 +103,13 @@ class BaseAuditoriaMockedTestCase(unittest.TestCase):
             'backups': patch('routes.admin_auditoria.obtener_historial_backups_y_restauraciones'),
             'matriz': patch('routes.admin_auditoria.obtener_matriz_criterios_auditoria'),
             'comp': patch('routes.admin_auditoria.obtener_completitud_conciliacion'),
+            'consultas': patch('routes.admin_auditoria.obtener_consultas_auditoria'),
+            'top': patch('routes.admin_auditoria.obtener_top_usuarios_actividad'),
         }
 
         self.mocks = {name: p.start() for name, p in self.patchers.items()}
+        self.mocks['consultas'].side_effect = obtener_consultas_auditoria
+        self.mocks['top'].return_value = [('admin', 15), ('operador', 8)]
 
         # Valores estándar simulados
         self.mocks['kpis'].return_value = {
@@ -441,6 +447,55 @@ class TestCentroAuditoriaVistasYTabs(BaseAuditoriaMockedTestCase):
         self.assertIn('Matriz de Evaluación', texto)
         self.assertIn('COBIT 2019 DSS05', texto)
 
+    def test_12b_render_tab_consultas_auditoria(self):
+        """Verifica la pestaña 10: Consultas y Procedimientos de Auditoría (PT-01 a PT-06)."""
+        with self.client.session_transaction() as sess:
+            sess['admin_user'] = 'superauditor'
+            sess['admin_rol'] = 'SuperAdmin'
+
+        resp = self.client.get('/admin/auditoria/?tab=consultas')
+        self.assertEqual(resp.status_code, 200)
+        texto = resp.get_data(as_text=True)
+
+        # 1. Título y nota metodológica obligatoria
+        self.assertIn('Procedimientos Técnicos y Consultas SQL de Auditoría', texto)
+        self.assertIn(
+            'Las consultas mostradas corresponden a los procedimientos de auditoría utilizados para generar las evidencias. Su inclusión permite reproducibilidad y trazabilidad del trabajo.',
+            texto
+        )
+
+        # 2. Presencia de PT-01 a PT-06
+        for cod in ['PT-01', 'PT-02', 'PT-03', 'PT-04', 'PT-05', 'PT-06']:
+            self.assertIn(cod, texto)
+
+        # 3. Consultas SQL / scripts mostrados con nombres reales y sin nombres inventados
+        self.assertIn('sys.database_principals', texto)
+        self.assertIn('sys.database_role_members', texto)
+        self.assertIn('sys.database_permissions', texto)
+        self.assertIn('dbo.trg_Salas_Auditoria_DML', texto)
+        self.assertIn('dbo.trg_Auditoria_DDL_Database', texto)
+        self.assertNotIn('trg_Audit_Salas_DML', texto)
+        self.assertNotIn('trg_Audit_DDL_Database', texto)
+        self.assertIn('dbo.Salas', texto)
+        self.assertIn('dbo.AuditoriaDDL_Prueba', texto)
+        self.assertIn('DBCC CHECKDB', texto)
+        self.assertIn('RESTORE VERIFYONLY', texto)
+        self.assertIn('BibliotecaUNDAC_Auditoria', texto)
+        self.assertIn('db_acdcfa_bibliotecaundac_10_29_2026_23.bak', texto)
+        self.assertNotIn('E:\\aqui', texto)
+
+        # 4. Separación de entornos y distinción metodológica
+        self.assertIn('Producción', texto)
+        self.assertIn('Laboratorio', texto)
+        self.assertIn('Objeto utilizado en la prueba original', texto)
+        self.assertIn('Repositorio actual de metadata del Centro de Auditoría', texto)
+
+        # 5. Botón de copiado y badges solo lectura
+        self.assertIn('Copiar consulta', texto)
+        self.assertIn('copiarConsultaSQL(this)', texto)
+        self.assertIn('Solo Lectura / Informativo', texto)
+        self.assertIn('Ejecución no permitida', texto)
+
 
 class TestCentroAuditoriaExportaciones(BaseAuditoriaMockedTestCase):
     """Pruebas para las exportaciones CSV (UTF-8 con BOM) e informe consolidado."""
@@ -740,6 +795,149 @@ class TestCentroAuditoriaLogicaNegocio(unittest.TestCase):
                 matriz_pend = obtener_matriz_criterios_auditoria()
                 pt06_pend = next(m for m in matriz_pend if m['evidencia'] == 'PT-06_restauracion_verificada.log')
                 self.assertEqual(pt06_pend['resultado'], 'Pendiente')
+
+
+class TestCentroAuditoriaConsultasProcedimientos(BaseAuditoriaMockedTestCase):
+    """Pruebas técnicas para la Pestaña 10: Consultas de Auditoría (PT-01 a PT-06)."""
+
+    def test_26_consultas_auditoria_estructura_y_seguridad(self):
+        """
+        Verifica la estructura técnica y veracidad de obtener_consultas_auditoria():
+        - Nombres reales de triggers y tablas sin inventar objetos.
+        - Coincidencia con las evidencias físicas y resultados reales (5, 2, 228, 4/4, 3/3).
+        - No exposición de rutas locales sensibles ni credenciales.
+        - Clara distinción entre objeto de prueba original y repositorio de metadata.
+        """
+        consultas = obtener_consultas_auditoria()
+        self.assertEqual(len(consultas), 6)
+        codigos = [c['codigo'] for c in consultas]
+        self.assertEqual(codigos, ['PT-01', 'PT-02', 'PT-03', 'PT-04', 'PT-05', 'PT-06'])
+
+        for c in consultas:
+            self.assertIn('codigo', c)
+            self.assertIn('titulo', c)
+            self.assertIn('objetivo', c)
+            self.assertIn('entorno', c)
+            self.assertIn('objeto_original', c)
+            self.assertIn('repositorio_metadata', c)
+            self.assertIn('explicacion', c)
+            self.assertIn('consulta_sql', c)
+            self.assertIn('resultado_resumido', c)
+            self.assertIn('evidencia_generada', c)
+            self.assertIn('limitacion', c)
+            # No exponer contraseñas ni rutas completas del host de producción o lab
+            self.assertNotIn('E:\\aqui', c['consulta_sql'])
+            self.assertNotIn('password', c['consulta_sql'].lower())
+            self.assertNotIn('secret', c['consulta_sql'].lower())
+
+        # 1. PT-01: Censo de principales SQL
+        pt01 = next(c for c in consultas if c['codigo'] == 'PT-01')
+        self.assertEqual(pt01['entorno'], 'Producción')
+        self.assertEqual(pt01['evidencia_generada'], 'PT-01_principales_sql.csv')
+        self.assertIn('5 principales visibles catalogados', pt01['resultado_resumido'])
+        self.assertIn('portal_4997910989b62d8cf6d5', pt01['resultado_resumido'])
+        self.assertNotIn('sa, dbo', pt01['resultado_resumido'])
+        self.assertIn('sys.database_principals', pt01['consulta_sql'])
+
+        # 2. PT-02: Membresías de roles
+        pt02 = next(c for c in consultas if c['codigo'] == 'PT-02')
+        self.assertEqual(pt02['entorno'], 'Producción')
+        self.assertEqual(pt02['evidencia_generada'], 'PT-02_roles_db.csv')
+        self.assertIn('2 membresías db_owner', pt02['resultado_resumido'])
+        self.assertIn('sys.database_role_members', pt02['consulta_sql'])
+
+        # 3. PT-03: Permisos explícitos
+        pt03 = next(c for c in consultas if c['codigo'] == 'PT-03')
+        self.assertEqual(pt03['entorno'], 'Producción')
+        self.assertEqual(pt03['evidencia_generada'], 'PT-03_permisos_explicitos.csv')
+        self.assertIn('228 permisos explícitos', pt03['resultado_resumido'])
+        self.assertIn('sys.database_permissions', pt03['consulta_sql'])
+
+        # 4. PT-04: Trazabilidad DML (demostración sobre dbo.Salas)
+        pt04 = next(c for c in consultas if c['codigo'] == 'PT-04')
+        self.assertEqual(pt04['entorno'], 'Laboratorio')
+        self.assertEqual(pt04['evidencia_generada'], 'PT-04_trazabilidad_dml_lab.csv')
+        self.assertIn('dbo.trg_Salas_Auditoria_DML', pt04['consulta_sql'])
+        self.assertNotIn('trg_Audit_Salas_DML', pt04['consulta_sql'])
+        self.assertIn('dbo.Salas', pt04['consulta_sql'])
+        self.assertIn('Sala de Estudio Especializado', pt04['consulta_sql'])
+        self.assertIn('Sala de Investigacion Posgrado', pt04['consulta_sql'])
+        self.assertIn('Sala de Estudio Especializado y Hemeroteca', pt04['consulta_sql'])
+        self.assertNotIn('capacidad', pt04['consulta_sql'])
+        self.assertIn('4 eventos observados de 4 esperados', pt04['resultado_resumido'])
+        self.assertIn('100%', pt04['resultado_resumido'])
+        self.assertIn('dbo.trg_Salas_Auditoria_DML', pt04['objeto_original'])
+        self.assertIn('dbo.AuditDmlLog', pt04['repositorio_metadata'])
+
+        # 5. PT-05: Trazabilidad DDL (demostración sobre dbo.AuditoriaDDL_Prueba)
+        pt05 = next(c for c in consultas if c['codigo'] == 'PT-05')
+        self.assertEqual(pt05['entorno'], 'Laboratorio')
+        self.assertEqual(pt05['evidencia_generada'], 'PT-05_trazabilidad_ddl_lab.csv')
+        self.assertIn('dbo.trg_Auditoria_DDL_Database', pt05['consulta_sql'])
+        self.assertNotIn('trg_Audit_DDL_Database', pt05['consulta_sql'])
+        self.assertIn('dbo.AuditoriaDDL_Prueba', pt05['consulta_sql'])
+        self.assertIn('CREATE TABLE dbo.AuditoriaDDL_Prueba', pt05['consulta_sql'])
+        self.assertIn('CreadoEn', pt05['consulta_sql'])
+        self.assertNotIn('FechaCreacion', pt05['consulta_sql'])
+        self.assertIn('DROP TABLE dbo.AuditoriaDDL_Prueba', pt05['consulta_sql'])
+        self.assertIn('3 eventos estructurales observados de 3 esperados', pt05['resultado_resumido'])
+        self.assertIn('dbo.trg_Auditoria_DDL_Database', pt05['objeto_original'])
+        self.assertIn('dbo.AuditDdlLog', pt05['repositorio_metadata'])
+
+        # 6. PT-06: Verificación de restauración y DBCC CHECKDB
+        pt06 = next(c for c in consultas if c['codigo'] == 'PT-06')
+        self.assertEqual(pt06['entorno'], 'Laboratorio')
+        self.assertEqual(pt06['evidencia_generada'], 'PT-06_restauracion_verificada.log')
+        self.assertIn("DBCC CHECKDB ('BibliotecaUNDAC_Auditoria')", pt06['consulta_sql'])
+        self.assertIn('RESTORE VERIFYONLY', pt06['consulta_sql'])
+        self.assertIn('db_acdcfa_bibliotecaundac_10_29_2026_23.bak', pt06['consulta_sql'])
+        self.assertNotIn('E:\\aqui', pt06['consulta_sql'])
+        self.assertIn('sin errores reportados', pt06['resultado_resumido'])
+        self.assertIn('válido', pt06['resultado_resumido'])
+
+    def test_27_seguridad_interfaz_solo_lectura_sin_ejecucion_arbitraria(self):
+        """
+        Verifica que la pestaña de consultas sea estrictamente informativa y de solo lectura:
+        - No existen formularios de entrada de SQL arbitrario (<textarea>, <input name='query'>).
+        - No existen botones ni endpoints para ejecutar SQL desde el navegador.
+        - Peticiones a endpoints hipotéticos de ejecución retornan 403 o 404 (no autorizados / inexistentes).
+        """
+        with self.client.session_transaction() as sess:
+            sess['admin_user'] = 'superauditor'
+            sess['admin_rol'] = 'SuperAdmin'
+            sess['csrf_token'] = 'token-prueba'
+
+        resp = self.client.get('/admin/auditoria/?tab=consultas')
+        self.assertEqual(resp.status_code, 200)
+        texto = resp.get_data(as_text=True)
+
+        # No hay textareas ni inputs para escribir o alterar SQL
+        self.assertNotIn('<textarea name="consulta"', texto)
+        self.assertNotIn('<textarea name="query"', texto)
+        self.assertNotIn('<input name="consulta"', texto)
+        self.assertNotIn('<input name="query"', texto)
+
+        # No hay botones de ejecución arbitraria
+        self.assertNotIn('Ejecutar SQL', texto)
+        self.assertNotIn('Ejecutar consulta', texto)
+        self.assertNotIn('Run Query', texto)
+
+        # Las consultas están encerradas en <pre><code>
+        self.assertIn('<pre class="bg-slate-950 text-slate-100 p-4 rounded-b-xl overflow-x-auto text-[11px] font-mono leading-relaxed border border-t-0 border-slate-800 select-all"><code>', texto)
+
+        # Verificar que no existen rutas de ejecución SQL (GET y POST retornan 404)
+        resp_get = self.client.get('/admin/auditoria/ejecutar-sql')
+        self.assertEqual(resp_get.status_code, 404)
+
+        resp_post = self.client.post('/admin/auditoria/ejecutar-sql', 
+                                     data={'csrf_token': 'token-prueba', 'sql': 'SELECT 1'},
+                                     headers={'X-CSRFToken': 'token-prueba'})
+        self.assertEqual(resp_post.status_code, 404)
+
+        resp_query = self.client.post('/admin/auditoria/query', 
+                                      data={'csrf_token': 'token-prueba', 'sql': 'SELECT 1'},
+                                      headers={'X-CSRFToken': 'token-prueba'})
+        self.assertEqual(resp_query.status_code, 404)
 
 
 if __name__ == '__main__':

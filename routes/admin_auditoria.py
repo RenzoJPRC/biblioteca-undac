@@ -48,6 +48,7 @@ from utils.queries_auditoria import (
     invalidar_cache_kpis,
     obtener_auditoria_dashboard,
     obtener_completitud_conciliacion,
+    obtener_consultas_auditoria,
     obtener_evidencias_auditoria,
     obtener_hallazgos_auditoria,
     obtener_historial_backups_y_restauraciones,
@@ -94,6 +95,8 @@ def _verificar_csrf() -> bool:
 
 @admin_auditoria_bp.route('/', methods=['GET'])
 def index():
+    if 'admin_user' not in session:
+        return redirect(url_for('admin_auth.login'))
     if not _verificar_superadmin():
         flash('Acceso denegado: El Centro de Auditoría de Base de Datos es exclusivo para SuperAdmin.', 'error')
         return redirect(url_for('admin_dashboard.admin_dashboard'))
@@ -101,7 +104,7 @@ def index():
     tab_activa = request.args.get('tab', 'resumen').strip().lower()
     tabs_validas = {
         'resumen', 'eventos', 'sql', 'trazabilidad', 
-        'evidencias', 'riesgos', 'hallazgos', 'backups', 'criterios'
+        'evidencias', 'riesgos', 'hallazgos', 'backups', 'criterios', 'consultas'
     }
     if tab_activa not in tabs_validas:
         tab_activa = 'resumen'
@@ -141,6 +144,7 @@ def index():
     riesgos = []
     hallazgos = []
     backups_res = {'ultimo_backup': None, 'restauraciones': []}
+    consultas_pt = []
 
     # CARGA PEREZOSA (LAZY-LOADING): Solo ejecuta consultas para la pestaña activa
     if tab_activa == 'resumen':
@@ -172,6 +176,8 @@ def index():
         backups_res = obtener_historial_backups_y_restauraciones()
     elif tab_activa == 'criterios':
         matriz_criterios = obtener_matriz_criterios_auditoria()
+    elif tab_activa == 'consultas':
+        consultas_pt = obtener_consultas_auditoria()
 
     return render_template(
         'admin_auditoria.html',
@@ -203,6 +209,8 @@ def index():
         backups=backups_res,
         # Pestaña 9: Criterios y Matriz
         matriz=matriz_criterios,
+        # Pestaña 10: Consultas de Auditoría (Solo Lectura)
+        consultas=consultas_pt,
         # Metadata de ambiente
         entorno_produccion="Producción (SmarterASP.NET SQL Server 2022)",
         entorno_laboratorio="Laboratorio (SQL Server Local - Caso Controlado)"
